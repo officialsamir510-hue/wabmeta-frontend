@@ -4,6 +4,7 @@ import { Lock } from 'lucide-react';
 import ErrorBoundary from './components/common/ErrorBoundary';
 import LoadingScreen from './components/common/LoadingScreen';
 import { usePlanAccess } from './hooks/usePlanAccess'; // Ensure this hook is imported
+import MetaCallback from './pages/MetaCallback';
 
 // Lazy Load Pages
 const Landing = React.lazy(() => import('./pages/Landing'));
@@ -104,6 +105,7 @@ function App() {
             {/* ===== Dashboard Routes ===== */}
             <Route path="/dashboard" element={<DashboardLayout />}>
               <Route index element={<Dashboard />} />
+              <Route path="meta-callback" element={<MetaCallback />} />
               
               {/* Inbox */}
               <Route path="inbox" element={<Inbox />} />
