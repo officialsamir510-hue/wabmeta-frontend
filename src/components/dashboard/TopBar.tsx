@@ -129,9 +129,10 @@ const TopBar: React.FC<TopBarProps> = ({ onMenuClick, sidebarCollapsed }) => {
     }
   };
 
+  // ✅ Updated function as requested
   const handleOpenConnectModal = () => {
-    setShowConnectionMenu(false);
-    setShowConnectModal(true);
+    // Direct redirect to success page
+    window.location.href = "/meta-callback?code=video_demo";
   };
 
   const handleCloseConnectModal = () => {
@@ -147,9 +148,6 @@ const TopBar: React.FC<TopBarProps> = ({ onMenuClick, sidebarCollapsed }) => {
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      // if (notificationRef.current && !notificationRef.current.contains(event.target as Node)) {
-      //   setShowNotifications(false);
-      // }
       if (profileRef.current && !profileRef.current.contains(event.target as Node)) {
         setShowProfile(false);
       }
@@ -250,10 +248,9 @@ const TopBar: React.FC<TopBarProps> = ({ onMenuClick, sidebarCollapsed }) => {
                 )}
               </button>
 
-              {/* Connection Dropdown (Same as before) */}
+              {/* Connection Dropdown */}
               {showConnectionMenu && (
                 <div className="absolute right-0 mt-2 w-80 bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden animate-fade-in z-50">
-                  {/* ... same connection dropdown content ... */}
                   {connection.isConnected ? (
                     <div className="p-4 border-b border-gray-100">
                       <div className="flex items-center space-x-3">
