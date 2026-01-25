@@ -10,7 +10,8 @@ import {
   Zap,
   Building2,
   AlertCircle,
-  Key} from 'lucide-react';
+  Key
+} from 'lucide-react';
 import type { WhatsAppBusinessAccount } from '../../types/meta';
 
 interface MetaConnectModalProps {
@@ -30,7 +31,7 @@ const MetaConnectModal: React.FC<MetaConnectModalProps> = ({
   onConnect
 }) => {
   const [step, setStep] = useState<Step>('intro');
-  const [, setSelectedAccount] = useState<WhatsAppBusinessAccount | null>(null);
+  const [selectedAccount, setSelectedAccount] = useState<WhatsAppBusinessAccount | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   
@@ -42,7 +43,6 @@ const MetaConnectModal: React.FC<MetaConnectModalProps> = ({
     businessName: '',
     phoneNumber: ''
   });
-  // Removed unused formErrors state
 
   // 🎥 DEMO HANDLER: Skip Facebook Login Screen
   const handleMetaLogin = () => {
@@ -50,7 +50,10 @@ const MetaConnectModal: React.FC<MetaConnectModalProps> = ({
     /*
     const appId = import.meta.env.VITE_META_APP_ID;
     const configId = import.meta.env.VITE_META_CONFIG_ID;
+    
+    // ✅ Use window.location.origin for dynamic redirect URI (works on localhost & Vercel)
     const redirectUri = `${window.location.origin}/meta-callback`;
+    
     const authUrl = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${appId}&redirect_uri=${redirectUri}&config_id=${configId}&response_type=code&state=wabmeta_signup`;
     window.open(authUrl, "MetaLogin", "width=600,height=700,scrollbars=yes");
     */
@@ -61,19 +64,15 @@ const MetaConnectModal: React.FC<MetaConnectModalProps> = ({
     
     // Simulate delay then redirect
     setTimeout(() => {
-      // We use window.location to simulate a full page redirect like OAuth would do
-      // Or we can use navigate if we want SPA transition, but this mimics OAuth better
+      // Dynamic redirect for demo too
       const demoUrl = `${window.location.origin}/meta-callback?code=demo_video_success_code`;
       window.open(demoUrl, "MetaLogin", "width=600,height=700");
-      // Also close modal in background
-      // onClose(); 
     }, 1000);
   };
 
   // Handle Manual Setup Submit
   const handleManualSetup = async () => {
     if (!manualFormData.wabaId || !manualFormData.accessToken) {
-      // formErrors removed, just return on validation error
       return;
     }
 
@@ -259,15 +258,15 @@ const MetaConnectModal: React.FC<MetaConnectModalProps> = ({
             </div>
           )}
 
-                    {/* Step: Manual Setup */}
+          {/* Step: Manual Setup */}
           {step === 'manual-setup' && (
             <div className="space-y-5">
               <div className="text-center mb-4">
                 <h3 className="text-xl font-bold text-gray-900">Manual Setup</h3>
-                <p className="text-gray-500 text-sm">Enter your Meta API credentials</p>
+                <p className="text-gray-500 text-sm">Enter API credentials</p>
               </div>
               
-              <div className="space-y-4 max-h-96 overflow-y-auto px-1">
+              <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Business Name</label>
                   <input
@@ -333,7 +332,7 @@ const MetaConnectModal: React.FC<MetaConnectModalProps> = ({
             </div>
           )}
 
-          {/* Step: Connecting (Same as before) */}
+          {/* Step: Connecting */}
           {step === 'connecting' && (
             <div className="py-12 text-center">
               <Loader2 className="w-10 h-10 text-blue-600 animate-spin mx-auto mb-4" />
@@ -342,8 +341,8 @@ const MetaConnectModal: React.FC<MetaConnectModalProps> = ({
             </div>
           )}
 
-          {/* Step: Success (Same as before) */}
-          {step === 'success' && (
+          {/* Step: Success */}
+          {step === 'success' && selectedAccount && (
             <div className="py-12 text-center">
               <CheckCircle2 className="w-16 h-16 text-green-600 mx-auto mb-4" />
               <h3 className="text-xl font-bold text-gray-900">Connected!</h3>
@@ -351,7 +350,7 @@ const MetaConnectModal: React.FC<MetaConnectModalProps> = ({
             </div>
           )}
 
-          {/* Step: Error (Same as before) */}
+          {/* Step: Error */}
           {step === 'error' && (
             <div className="py-12 text-center">
               <AlertCircle className="w-16 h-16 text-red-600 mx-auto mb-4" />
