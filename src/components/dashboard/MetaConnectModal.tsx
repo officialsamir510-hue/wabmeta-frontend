@@ -10,8 +10,7 @@ import {
   Zap,
   Building2,
   AlertCircle,
-  Key
-} from 'lucide-react';
+  Key} from 'lucide-react';
 import type { WhatsAppBusinessAccount } from '../../types/meta';
 
 interface MetaConnectModalProps {
@@ -31,7 +30,7 @@ const MetaConnectModal: React.FC<MetaConnectModalProps> = ({
   onConnect
 }) => {
   const [step, setStep] = useState<Step>('intro');
-  // Removed unused selectedAccount state
+  const [, setSelectedAccount] = useState<WhatsAppBusinessAccount | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   
@@ -45,57 +44,36 @@ const MetaConnectModal: React.FC<MetaConnectModalProps> = ({
   });
   // Removed unused formErrors state
 
-  // Sample business accounts for Manual Flow Simulation (if needed)
-  // (Removed unused businessAccounts variable)
-
-  // Removed unused permissions variable
-
-  // (Removed unused getQualityRatingStyle function)
-
-  // ✅ Handle Meta Embedded Signup Login
+  // 🎥 DEMO HANDLER: Skip Facebook Login Screen
   const handleMetaLogin = () => {
-    setStep('connecting');
-    setError(null);
-
+    // ❌ REAL CODE (Commented for demo)
+    /*
     const appId = import.meta.env.VITE_META_APP_ID;
-    const configId = import.meta.env.VITE_META_CONFIG_ID; // Must be set in .env
-    const redirectUri = `${window.location.origin}/meta-callback`; // e.g. http://localhost:5173/meta-callback
-
-    if (!appId || !configId) {
-      setError("Configuration Missing: APP_ID or CONFIG_ID is not set in environment variables.");
-      setStep('error');
-      return;
-    }
-
-    // Generate OAuth URL for Embedded Signup
+    const configId = import.meta.env.VITE_META_CONFIG_ID;
+    const redirectUri = `${window.location.origin}/meta-callback`;
     const authUrl = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${appId}&redirect_uri=${redirectUri}&config_id=${configId}&response_type=code&state=wabmeta_signup`;
+    window.open(authUrl, "MetaLogin", "width=600,height=700,scrollbars=yes");
+    */
 
-    console.log("Opening Meta Login:", authUrl);
-
-    // Open Popup
-    const popup = window.open(authUrl, "MetaLogin", "width=600,height=700,scrollbars=yes");
-
-    // Listen for Popup Close
-    const checkPopup = setInterval(() => {
-      if (!popup || popup.closed) {
-        clearInterval(checkPopup);
-        // If popup closed without success message, reset (handled by message listener below)
-        if (step === 'connecting') {
-          // Ideally we wait for message, but if user closed it manually:
-          setStep('intro');
-        }
-      }
+    // ✅ DEMO CODE: Direct Redirect to Callback
+    console.log("🎥 DEMO MODE: Redirecting to callback directly...");
+    setStep('connecting');
+    
+    // Simulate delay then redirect
+    setTimeout(() => {
+      // We use window.location to simulate a full page redirect like OAuth would do
+      // Or we can use navigate if we want SPA transition, but this mimics OAuth better
+      const demoUrl = `${window.location.origin}/meta-callback?code=demo_video_success_code`;
+      window.open(demoUrl, "MetaLogin", "width=600,height=700");
+      // Also close modal in background
+      // onClose(); 
     }, 1000);
-
-    // Message Listener Logic is handled in TopBar or global listener,
-    // OR we can listen here if the callback page sends message to opener.
-    // For now, we assume the callback page handles the heavy lifting or redirects.
   };
 
   // Handle Manual Setup Submit
   const handleManualSetup = async () => {
     if (!manualFormData.wabaId || !manualFormData.accessToken) {
-      // Form errors would be set here if used
+      // formErrors removed, just return on validation error
       return;
     }
 
@@ -134,7 +112,7 @@ const MetaConnectModal: React.FC<MetaConnectModalProps> = ({
           messagingLimit: '1K/day'
         };
 
-        // setSelectedAccount(accountData); // No longer needed
+        setSelectedAccount(accountData);
         setStep('success');
 
         setTimeout(() => {
@@ -164,7 +142,7 @@ const MetaConnectModal: React.FC<MetaConnectModalProps> = ({
 
   const resetModal = () => {
     setStep('intro');
-    // setSelectedAccount(null); // No longer needed
+    setSelectedAccount(null);
     setError(null);
     setManualFormData({
       wabaId: '',
@@ -184,6 +162,7 @@ const MetaConnectModal: React.FC<MetaConnectModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      {/* Backdrop */}
       <div 
         className="absolute inset-0 bg-black/50 backdrop-blur-sm"
         onClick={handleClose}
@@ -280,7 +259,7 @@ const MetaConnectModal: React.FC<MetaConnectModalProps> = ({
             </div>
           )}
 
-          {/* Step: Manual Setup (Same as before) */}
+          {/* Step: Manual Setup */}
           {step === 'manual-setup' && (
             <div className="space-y-5">
               <div className="text-center mb-4">
