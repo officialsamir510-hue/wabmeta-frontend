@@ -1,17 +1,16 @@
 import axios from 'axios';
 
-// ✅ ROBUST URL LOGIC (Solves double slash issue)
+// ✅ Clean URL Logic
 const rawUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
-const API_URL = `${rawUrl.replace(/\/$/, "")}/api`; // Removes trailing slash then adds /api
+const API_URL = `${rawUrl.replace(/\/$/, "")}/api`;
 
-console.log("🔗 API Connected:", API_URL);
+console.log("🔗 Connecting to API:", API_URL);
 
 const api = axios.create({
   baseURL: API_URL,
   headers: { 'Content-Type': 'application/json' }
 });
 
-// Request Interceptor
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('token');
@@ -23,9 +22,9 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-// API Methods
 export const auth = {
-  login: (data: any) => api.post('/auth/login', data, { headers: { 'x-platform': 'Web' } }),
+  // Fix: Login expects 2 args now (data + config)
+  login: (data: any, config?: any) => api.post('/auth/login', data, config),
   signup: (data: any) => api.post('/auth/signup', data),
   verifyEmail: (data: any) => api.post('/auth/verify-email', data),
   resendOTP: (data: any) => api.post('/auth/resend-otp', data),
@@ -39,6 +38,7 @@ export const contacts = {
   delete: (id: string) => api.delete(`/contacts/${id}`),
   update: (id: string, data: any) => api.put(`/contacts/${id}`, data),
   getById: (id: string) => api.get(`/contacts/${id}`),
+  bulkCreate: (data: any[]) => api.post('/contacts/bulk', data),
 };
 
 export const campaigns = {
@@ -46,16 +46,22 @@ export const campaigns = {
   create: (data: any) => api.post('/campaigns', data),
   getById: (id: string) => api.get(`/campaigns/${id}`),
   delete: (id: string) => api.delete(`/campaigns/${id}`),
+  // ✅ Added Missing Methods
+  pause: (id: string) => api.post(`/campaigns/${id}/pause`),
+  start: (id: string) => api.post(`/campaigns/${id}/start`),
 };
 
 export const templates = {
   getAll: () => api.get('/templates'),
   create: (data: any) => api.post('/templates', data),
   delete: (id: string) => api.delete(`/templates/${id}`),
+  // ✅ Added Missing Method
+  sync: () => api.post('/templates/sync'),
 };
 
 export const meta = {
   connect: (data: any) => api.post('/meta/connect', data),
+  sendTest: (data: any) => api.post('/meta/send-test', data),
 };
 
 export const dashboard = {
@@ -63,9 +69,12 @@ export const dashboard = {
 };
 
 export const admin = {
-  getStats: () => api.get('/admin/stats'),
-  getUsers: () => api.get('/admin/users'),
+  // Fix: Allow optional params
+  getStats: (params?: any) => api.get('/admin/stats', { params }),
+  getUsers: (params?: any) => api.get('/admin/users', { params }),
   updateUserStatus: (id: string, status: string) => api.put(`/admin/users/${id}/status`, { status }),
+  // ✅ Added Missing Method
+  deleteUser: (id: string) => api.delete(`/admin/users/${id}`),
 };
 
 export default api;
