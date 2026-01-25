@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Loader2, CheckCircle2, XCircle } from 'lucide-react';
-import { meta } from '../services/api';
+// import { meta } from '../services/api'; // Commented out for demo
 
 const MetaCallback: React.FC = () => {
   const [searchParams] = useSearchParams();
@@ -27,30 +27,45 @@ const MetaCallback: React.FC = () => {
 
     if (code) {
       processedRef.current = true;
-      exchangeToken(code);
+      
+      // 🎥 DEMO MODE: Simulate successful connection
+      console.log("Demo Mode: Simulating successful connection with code:", code);
+      
+      // Simulate API delay
+      setTimeout(() => {
+        setStatus('success');
+        setMessage('Connected Successfully!');
+        
+        // Mock updating local storage to show connected state in dashboard
+        const mockConnection = {
+          isConnected: true,
+          businessAccount: {
+            name: "WabMeta Demo Business",
+            phoneNumber: "+91 98765 43210",
+            qualityRating: "GREEN",
+            messagingLimit: "1K/day"
+          }
+        };
+        localStorage.setItem('metaConnection', JSON.stringify(mockConnection));
+        
+        // Redirect to dashboard
+        setTimeout(() => navigate('/dashboard'), 2000);
+      }, 2000);
+
     } else {
       processedRef.current = true;
       setStatus('error');
       setMessage('No authorization code found.');
     }
-  }, [searchParams]);
+  }, [searchParams, navigate]);
 
+  // Original function (Commented out for demo)
+  /*
   const exchangeToken = async (code: string) => {
     try {
-      // Backend ko code bhejo
-      // Backend should have /api/meta/connect route handling { code }
       const response = await meta.connect({ code }); 
-      
-      console.log("Meta Connected:", response.data);
-      
       setStatus('success');
       setMessage('Successfully connected! Redirecting...');
-      
-      // Update local storage user if needed
-      // const user = JSON.parse(localStorage.getItem('user') || '{}');
-      // user.metaConnected = true;
-      // localStorage.setItem('user', JSON.stringify(user));
-
       setTimeout(() => navigate('/dashboard'), 2000);
     } catch (err: any) {
       console.error("Meta Connect Error:", err);
@@ -58,6 +73,7 @@ const MetaCallback: React.FC = () => {
       setMessage(err.response?.data?.message || 'Failed to connect with Meta.');
     }
   };
+  */
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
