@@ -259,43 +259,75 @@ const MetaConnectModal: React.FC<MetaConnectModalProps> = ({
             </div>
           )}
 
-          {/* Step: Manual Setup */}
+                    {/* Step: Manual Setup */}
           {step === 'manual-setup' && (
             <div className="space-y-5">
               <div className="text-center mb-4">
                 <h3 className="text-xl font-bold text-gray-900">Manual Setup</h3>
-                <p className="text-gray-500 text-sm">Enter API credentials</p>
+                <p className="text-gray-500 text-sm">Enter your Meta API credentials</p>
               </div>
               
-              <div className="space-y-4">
-                {/* Inputs for Manual Setup */}
+              <div className="space-y-4 max-h-96 overflow-y-auto px-1">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Business Name</label>
                   <input
                     type="text"
                     value={manualFormData.businessName}
                     onChange={(e) => setManualFormData({ ...manualFormData, businessName: e.target.value })}
-                    className="w-full px-4 py-2 border rounded-xl focus:ring-2 focus:ring-primary-500"
+                    className="w-full px-4 py-2 border rounded-xl focus:ring-2 focus:ring-primary-500 outline-none"
                     placeholder="My Business"
                   />
                 </div>
-                {/* ... other inputs (WABA ID, Phone ID, Token) ... */}
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Phone Number</label>
+                  <input
+                    type="text"
+                    value={manualFormData.phoneNumber}
+                    onChange={(e) => setManualFormData({ ...manualFormData, phoneNumber: e.target.value })}
+                    className="w-full px-4 py-2 border rounded-xl focus:ring-2 focus:ring-primary-500 outline-none"
+                    placeholder="+91 98765 43210"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">WABA ID</label>
+                  <input
+                    type="text"
+                    value={manualFormData.wabaId}
+                    onChange={(e) => setManualFormData({ ...manualFormData, wabaId: e.target.value })}
+                    className="w-full px-4 py-2 border rounded-xl focus:ring-2 focus:ring-primary-500 outline-none"
+                    placeholder="10001234567890"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Phone Number ID</label>
+                  <input
+                    type="text"
+                    value={manualFormData.phoneNumberId}
+                    onChange={(e) => setManualFormData({ ...manualFormData, phoneNumberId: e.target.value })}
+                    className="w-full px-4 py-2 border rounded-xl focus:ring-2 focus:ring-primary-500 outline-none"
+                    placeholder="10009876543210"
+                  />
+                </div>
+
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Permanent Access Token</label>
                   <input
-                    type="text"
+                    type="password"
                     value={manualFormData.accessToken}
                     onChange={(e) => setManualFormData({ ...manualFormData, accessToken: e.target.value })}
-                    className="w-full px-4 py-2 border rounded-xl focus:ring-2 focus:ring-primary-500"
-                    placeholder="EAA..."
+                    className="w-full px-4 py-2 border rounded-xl focus:ring-2 focus:ring-primary-500 outline-none"
+                    placeholder="EAAG..."
                   />
                 </div>
               </div>
 
               <div className="flex space-x-3 pt-2">
-                <button onClick={() => setStep('intro')} className="flex-1 py-3 bg-gray-100 rounded-xl">Back</button>
-                <button onClick={handleManualSetup} disabled={isLoading} className="flex-1 py-3 bg-primary-500 text-white rounded-xl">
-                  {isLoading ? 'Connecting...' : 'Connect'}
+                <button onClick={() => setStep('intro')} className="flex-1 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl transition-colors">Back</button>
+                <button onClick={handleManualSetup} disabled={isLoading} className="flex-1 py-3 bg-primary-500 hover:bg-primary-600 text-white rounded-xl transition-colors disabled:opacity-70 flex justify-center">
+                  {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Connect'}
                 </button>
               </div>
             </div>
