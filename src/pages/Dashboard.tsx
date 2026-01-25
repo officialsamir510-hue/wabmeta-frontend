@@ -21,7 +21,7 @@ import { dashboard, campaigns } from '../services/api';
 
 const Dashboard: React.FC = () => {
   // Meta Connection Hook
-  const { connection, startConnection, disconnect } = useMetaConnection();
+  const { connection, disconnect } = useMetaConnection();
   
   // State for stats and campaigns
   const [statsData, setStatsData] = useState({
@@ -38,19 +38,17 @@ const Dashboard: React.FC = () => {
     const fetchDashboardData = async () => {
       setLoading(true);
       try {
-        // Fetch stats and active campaigns in parallel
         const [statsRes, campaignsRes] = await Promise.all([
           dashboard.getStats(),
-          campaigns.getAll() // Assuming this endpoint supports filtering or returns recent campaigns
+          campaigns.getAll()
         ]);
 
         setStatsData(statsRes.data);
         
-        // Filter and map active campaigns (running or scheduled)
         const allCampaigns = campaignsRes.data?.campaigns || campaignsRes.data || [];
         const active = allCampaigns
           .filter((c: any) => ['running', 'scheduled', 'completed'].includes(c.status?.toLowerCase()))
-          .slice(0, 5) // Show top 5
+          .slice(0, 5)
           .map((c: any) => ({
             id: c._id || c.id,
             name: c.name,
@@ -73,18 +71,16 @@ const Dashboard: React.FC = () => {
     fetchDashboardData();
   }, []);
 
-  // Helper to calculate progress percentage
   const calculateProgress = (total: number, sent: number) => {
     if (!total || total === 0) return 0;
     return Math.round((sent / total) * 100);
   };
 
-  // Dynamic Stats Data
   const stats = [
     {
       title: 'Messages Sent',
       value: statsData.messagesSent.toLocaleString(),
-      change: 0, // Calculate if historical data available
+      change: 0,
       icon: Send,
       iconColor: 'text-blue-600',
       iconBg: 'bg-blue-100'
@@ -115,7 +111,7 @@ const Dashboard: React.FC = () => {
     },
   ];
 
-  // Chart Data (Mock for now, replace with API data if available)
+  // Mock chart data
   const messageData = [
     { name: 'Mon', messages: 2400 },
     { name: 'Tue', messages: 1398 },
@@ -136,19 +132,21 @@ const Dashboard: React.FC = () => {
     { name: 'Sun', delivered: 97, failed: 3 },
   ];
 
-  // Handle Meta Connection
-  const handleConnectMeta = async () => {
-    try {
-      await startConnection();
-    } catch (error) {
-      console.error('Failed to connect to Meta:', error);
-    }
+  // ✅ Direct Meta Connection Handler
+  const handleDirectConnect = () => {
+    const appId = import.meta.env.VITE_META_APP_ID;
+    const configId = import.meta.env.VITE_META_CONFIG_ID;
+    const redirectUri = `${window.location.origin}/meta-callback`;
+    
+    const authUrl = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${appId}&redirect_uri=${redirectUri}&config_id=${configId}&response_type=code&state=wabmeta_connect`;
+    
+    console.log("Opening Meta Login:", authUrl);
+    window.open(authUrl, "MetaLogin", "width=600,height=700");
   };
 
-  // Handle Sync
   const handleSync = async () => {
-    // TODO: Implement sync logic or remove this handler if not needed
-    console.warn('Sync functionality is not implemented.');
+    // TODO: Implement sync logic if available in useMetaConnection
+    console.warn('Sync functionality is not available.');
   };
 
   if (loading) {
@@ -198,8 +196,10 @@ const Dashboard: React.FC = () => {
                 <p className="text-gray-600">Link your account to start sending messages and grow your business</p>
               </div>
             </div>
+            
+            {/* ✅ Updated Connect Button */}
             <button
-              onClick={handleConnectMeta}
+              onClick={handleDirectConnect}
               disabled={connection.isConnecting}
               className="flex items-center space-x-2 px-6 py-3 bg-[#1877F2] hover:bg-[#166FE5] text-white font-medium rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
