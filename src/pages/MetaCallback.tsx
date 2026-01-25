@@ -37,16 +37,30 @@ const MetaCallback: React.FC = () => {
         setMessage('Connected Successfully!');
         
         // Mock updating local storage to show connected state in dashboard
+        // Note: Structure must match what useMetaConnection hook expects
         const mockConnection = {
           isConnected: true,
-          businessAccount: {
+          isConnecting: false,
+          businessName: "WabMeta Demo Business",
+          phoneNumber: "+91 98765 43210",
+          businessId: "BIZ_123456789",
+          phoneNumberId: "PN_987654321",
+          accessToken: "mock_access_token_xyz",
+          qualityRating: "GREEN",
+          messagingLimit: "1K/day",
+          lastSync: new Date().toLocaleTimeString(),
+          error: null,
+          businessAccount: { // For compatibility with some components accessing nested object
             name: "WabMeta Demo Business",
             phoneNumber: "+91 98765 43210",
             qualityRating: "GREEN",
             messagingLimit: "1K/day"
           }
         };
+        
+        // ✅ Saving to both keys to ensure compatibility
         localStorage.setItem('metaConnection', JSON.stringify(mockConnection));
+        localStorage.setItem('wabmeta_connection', JSON.stringify(mockConnection));
         
         // Redirect to dashboard
         setTimeout(() => navigate('/dashboard'), 2000);
@@ -58,22 +72,6 @@ const MetaCallback: React.FC = () => {
       setMessage('No authorization code found.');
     }
   }, [searchParams, navigate]);
-
-  // Original function (Commented out for demo)
-  /*
-  const exchangeToken = async (code: string) => {
-    try {
-      const response = await meta.connect({ code }); 
-      setStatus('success');
-      setMessage('Successfully connected! Redirecting...');
-      setTimeout(() => navigate('/dashboard'), 2000);
-    } catch (err: any) {
-      console.error("Meta Connect Error:", err);
-      setStatus('error');
-      setMessage(err.response?.data?.message || 'Failed to connect with Meta.');
-    }
-  };
-  */
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
