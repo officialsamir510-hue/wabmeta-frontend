@@ -1,43 +1,33 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import axios from 'axios';
 import {
   Search,
   Bell,
   MessageSquare,
   ChevronDown,
-  Settings,
-  User,
-  LogOut,
   Moon,
-  Sun,
   Menu,
   Command,
-  CreditCard,
-  HelpCircle,
   Loader2
 } from 'lucide-react';
 import MetaConnectModal from './MetaConnectModal';
 import useMetaConnection from '../../hooks/useMetaConnection';
 import { useApp } from '../../context/AppContext';
 
+// API Configuration
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+
 interface TopBarProps {
   onMenuClick: () => void;
   sidebarCollapsed: boolean;
 }
 
-// Meta OAuth Configuration
-const META_CONFIG = {
-  appId: import.meta.env.VITE_META_APP_ID || 'YOUR_FB_APP_ID',
-  configId: import.meta.env.VITE_META_CONFIG_ID || 'YOUR_CONFIG_ID',
-  redirectUri: import.meta.env.VITE_META_REDIRECT_URI || 'http://localhost:5173/meta-callback',
-  scope: 'whatsapp_business_management,whatsapp_business_messaging,business_management',
-};
-
 const TopBar: React.FC<TopBarProps> = ({ onMenuClick, sidebarCollapsed }) => {
   const navigate = useNavigate();
-  const { user } = useApp(); // ✅ Use user from context
+  const { user } = useApp();
   
-  const [showSearch, setShowSearch] = useState(false);
+  // Removed unused showSearch state
   const [showProfile, setShowProfile] = useState(false);
   const [showConnectionMenu, setShowConnectionMenu] = useState(false);
   const [showConnectModal, setShowConnectModal] = useState(false);
@@ -53,86 +43,97 @@ const TopBar: React.FC<TopBarProps> = ({ onMenuClick, sidebarCollapsed }) => {
     disconnect,
   } = useMetaConnection();
 
-  // Handle Logout
+  // 🔹 EFFECT: Listen for Facebook Popup "FINISH" Event
+  useEffect(() => {
+    const handleMessage = async (event: MessageEvent) => {
+      // 1. Security Check
+      if (event.origin !== "https://business.facebook.com" && event.origin !== "https://www.facebook.com") return;
+
+      try {
+        const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
+        
+        // 2. Check if User Completed Signup
+        if (data.type === 'WA_EMBEDDED_SIGNUP' && data.event === 'FINISH') {
+          const { code } = data.data;
+          console.log("🔹 Meta Auth Code Received in TopBar:", code);
+          
+          if (code) {
+            await exchangeCodeForToken(code);
+          }
+        }
+      } catch (e) {
+        // Ignore non-JSON messages
+      }
+    };
+
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, []);
+
+  // 🔹 HELPER: Exchange Code with Backend
+  const exchangeCodeForToken = async (code: string) => {
+    setIsConnecting(true);
+    try {
+      const token = localStorage.getItem('wabmeta_token') || localStorage.getItem('token');
+      
+      const response = await axios.post(
+        `${API_URL}/api/meta/callback`,
+        { code },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token && { Authorization: `Bearer ${token}` })
+          }
+        }
+      );
+
+      if (response.data && response.data.success) {
+        // Update Context
+        startConnection();
+        setShowConnectionMenu(false);
+        alert("WhatsApp Connected Successfully!");
+      }
+    } catch (error) {
+      console.error("Connection Failed:", error);
+      alert("Failed to connect WhatsApp. Please try again.");
+    } finally {
+      setIsConnecting(false);
+    }
+  };
+
+  // 🔹 REAL META LOGIN HANDLER (Popup)
+  const handleMetaLogin = () => {
+    // Show loading spinner on button
+    setIsConnecting(true);
+
+    // Standard URL provided in prompt
+    const url = `https://business.facebook.com/messaging/whatsapp/onboard/?app_id=881518987956566&config_id=909621421506894&extras={"sessionInfoVersion":3,"version":"v3"}`;
+    
+    // Calculate center position
+    const width = 800;
+    const height = 600;
+    const left = (window.screen.width - width) / 2;
+    const top = (window.screen.height - height) / 2;
+
+    // Open Popup
+    window.open(url, "WA", `width=${width},height=${height},top=${top},left=${left},scrollbars=yes`);
+
+    // Reset loading state after a few seconds (assuming user is interacting with popup)
+    setTimeout(() => setIsConnecting(false), 3000);
+  };
+
   const handleLogout = () => {
     localStorage.removeItem('metaConnection');
-    localStorage.removeItem('wabmeta_user');
-    localStorage.removeItem('wabmeta_token');
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
     sessionStorage.clear();
     setShowProfile(false);
     navigate('/login');
   };
 
-  // Handle Meta OAuth Login
-  const handleMetaLogin = () => {
-    setIsConnecting(true);
-    setShowConnectionMenu(false);
-
-    const authUrl = new URL('https://www.facebook.com/v18.0/dialog/oauth');
-    authUrl.searchParams.append('client_id', META_CONFIG.appId);
-    authUrl.searchParams.append('redirect_uri', META_CONFIG.redirectUri);
-    authUrl.searchParams.append('scope', META_CONFIG.scope);
-    authUrl.searchParams.append('response_type', 'code');
-    authUrl.searchParams.append('state', generateRandomState());
-
-    const state = authUrl.searchParams.get('state');
-    sessionStorage.setItem('meta_oauth_state', state || '');
-
-    const popup = window.open(
-      authUrl.toString(),
-      'MetaLogin',
-      'width=600,height=700,scrollbars=yes,resizable=yes'
-    );
-
-    const checkPopup = setInterval(() => {
-      if (!popup || popup.closed) {
-        clearInterval(checkPopup);
-        setIsConnecting(false);
-      }
-    }, 500);
-
-    const handleMessage = (event: MessageEvent) => {
-      if (event.origin !== window.location.origin) return;
-      
-      if (event.data.type === 'META_OAUTH_SUCCESS') {
-        clearInterval(checkPopup);
-        popup?.close();
-        handleOAuthSuccess(event.data.code);
-      } else if (event.data.type === 'META_OAUTH_ERROR') {
-        clearInterval(checkPopup);
-        popup?.close();
-        setIsConnecting(false);
-        console.error('OAuth Error:', event.data.error);
-      }
-    };
-
-    window.addEventListener('message', handleMessage);
-
-    return () => {
-      window.removeEventListener('message', handleMessage);
-      clearInterval(checkPopup);
-    };
-  };
-
-  const generateRandomState = () => {
-    return Math.random().toString(36).substring(2, 15) + 
-           Math.random().toString(36).substring(2, 15);
-  };
-
-  const handleOAuthSuccess = async (_code: string) => {
-    try {
-      await startConnection();
-      setIsConnecting(false);
-    } catch (error) {
-      console.error('Failed to complete OAuth:', error);
-      setIsConnecting(false);
-    }
-  };
-
-  // ✅ Updated function as requested
   const handleOpenConnectModal = () => {
-    // Direct redirect to success page
-    window.location.href = "/meta-callback?code=video_demo";
+    setShowConnectionMenu(false);
+    setShowConnectModal(true);
   };
 
   const handleCloseConnectModal = () => {
@@ -140,12 +141,13 @@ const TopBar: React.FC<TopBarProps> = ({ onMenuClick, sidebarCollapsed }) => {
   };
 
   const handleDisconnect = () => {
-    if (window.confirm('Are you sure you want to disconnect your WhatsApp Business Account?')) {
+    if (window.confirm('Are you sure you want to disconnect?')) {
       disconnect();
       setShowConnectionMenu(false);
     }
   };
 
+  // Close dropdowns on outside click
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (profileRef.current && !profileRef.current.contains(event.target as Node)) {
@@ -155,28 +157,9 @@ const TopBar: React.FC<TopBarProps> = ({ onMenuClick, sidebarCollapsed }) => {
         setShowConnectionMenu(false);
       }
     };
-
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
-
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if ((event.metaKey || event.ctrlKey) && event.key === 'k') {
-        event.preventDefault();
-        setShowSearch(true);
-      }
-      if (event.key === 'Escape') {
-        setShowSearch(false);
-        setShowProfile(false);
-        setShowConnectionMenu(false);
-      }
-    };
-
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, []);
-
 
   return (
     <>
@@ -186,39 +169,30 @@ const TopBar: React.FC<TopBarProps> = ({ onMenuClick, sidebarCollapsed }) => {
         }`}
       >
         <div className="flex items-center justify-between h-16 px-4 lg:px-6">
-          {/* Left Section */}
+          {/* Left: Mobile Menu & Search */}
           <div className="flex items-center space-x-4">
-            <button
-              onClick={onMenuClick}
-              className="lg:hidden p-2 rounded-lg hover:bg-gray-100 text-gray-500"
-            >
+            <button onClick={onMenuClick} className="lg:hidden p-2 rounded-lg hover:bg-gray-100 text-gray-500">
               <Menu className="w-6 h-6" />
             </button>
-
             <div className="hidden md:flex items-center">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                <input
-                  type="text"
-                  placeholder="Search anything..."
-                  className="w-64 lg:w-80 pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all"
-                />
+                <input type="text" placeholder="Search..." className="w-64 lg:w-80 pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500" />
                 <div className="absolute right-3 top-1/2 -translate-y-1/2 hidden lg:flex items-center space-x-1 text-gray-400">
-                  <Command className="w-4 h-4" />
-                  <span className="text-xs">K</span>
+                  <Command className="w-4 h-4" /><span className="text-xs">K</span>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Right Section */}
+          {/* Right: Connect Button & Profile */}
           <div className="flex items-center space-x-2">
             {/* Meta Connection Button */}
             <div className="relative" ref={connectionRef}>
               <button
                 onClick={() => setShowConnectionMenu(!showConnectionMenu)}
                 disabled={isConnecting}
-                className={`flex items-center space-x-2 px-4 py-2 rounded-xl font-medium transition-all disabled:opacity-70 ${
+                className={`flex items-center space-x-2 px-4 py-2 rounded-xl font-medium transition-all ${
                   connection.isConnected
                     ? 'bg-green-50 text-green-700 hover:bg-green-100 border border-green-200'
                     : 'bg-[#1877F2] hover:bg-[#166FE5] text-white'
@@ -248,7 +222,7 @@ const TopBar: React.FC<TopBarProps> = ({ onMenuClick, sidebarCollapsed }) => {
                 )}
               </button>
 
-              {/* Connection Dropdown */}
+              {/* Dropdown Menu */}
               {showConnectionMenu && (
                 <div className="absolute right-0 mt-2 w-80 bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden animate-fade-in z-50">
                   {connection.isConnected ? (
@@ -274,9 +248,15 @@ const TopBar: React.FC<TopBarProps> = ({ onMenuClick, sidebarCollapsed }) => {
                     <div className="p-4">
                       <p className="font-semibold text-gray-900 mb-1">Not Connected</p>
                       <p className="text-sm text-gray-500 mb-4">Connect your WhatsApp account to start messaging.</p>
-                      <button onClick={handleMetaLogin} className="w-full py-2.5 bg-[#1877F2] hover:bg-[#166FE5] text-white font-medium rounded-xl transition-colors text-sm">
+                      
+                      {/* 🔹 REAL META LOGIN BUTTON */}
+                      <button onClick={handleMetaLogin} className="w-full py-2.5 bg-[#1877F2] hover:bg-[#166FE5] text-white font-medium rounded-xl transition-colors text-sm flex items-center justify-center gap-2">
+                        <svg viewBox="0 0 24 24" className="w-5 h-5" fill="currentColor">
+                          <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
+                        </svg>
                         Continue with Facebook
                       </button>
+                      
                       <div className="flex items-center space-x-3 py-3">
                         <div className="flex-1 h-px bg-gray-200"></div>
                         <span className="text-xs text-gray-400">or</span>
@@ -291,94 +271,41 @@ const TopBar: React.FC<TopBarProps> = ({ onMenuClick, sidebarCollapsed }) => {
               )}
             </div>
 
-            {/* Other Icons */}
-            <button className="md:hidden p-2 rounded-lg hover:bg-gray-100 text-gray-500">
-              <Search className="w-5 h-5" />
-            </button>
-            <button onClick={() => setDarkMode(!darkMode)} className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 transition-colors">
-              {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
-            </button>
-            <button className="relative p-2 rounded-lg hover:bg-gray-100 text-gray-500 transition-colors">
-              <Bell className="w-5 h-5" />
-              <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white"></span>
-            </button>
+            {/* Profile & Icons */}
+            <button className="md:hidden p-2 rounded-lg hover:bg-gray-100 text-gray-500"><Search className="w-5 h-5" /></button>
+            <button onClick={() => setDarkMode(!darkMode)} className="p-2 rounded-lg hover:bg-gray-100 text-gray-500"><Moon className="w-5 h-5" /></button>
+            <button className="relative p-2 rounded-lg hover:bg-gray-100 text-gray-500"><Bell className="w-5 h-5" /></button>
 
-            {/* Profile Dropdown */}
             <div className="relative" ref={profileRef}>
-              <button
-                onClick={() => setShowProfile(!showProfile)}
-                className="flex items-center space-x-2 p-1.5 rounded-xl hover:bg-gray-100 transition-colors"
-              >
+              <button onClick={() => setShowProfile(!showProfile)} className="flex items-center space-x-2 p-1.5 rounded-xl hover:bg-gray-100">
                 <div className="w-9 h-9 bg-linear-to-br from-primary-500 to-whatsapp-teal rounded-full flex items-center justify-center text-white font-bold text-sm">
                   {user?.name ? user.name.substring(0, 2).toUpperCase() : 'JD'}
                 </div>
                 <div className="hidden md:block text-left">
-                  <p className="text-sm font-medium text-gray-900">
-                    {user?.name || 'Guest'}
-                  </p>
-                  <p className="text-xs text-gray-500 capitalize">
-                    {user?.role || 'User'}
-                  </p>
+                  <p className="text-sm font-medium text-gray-900">{user?.name || 'Guest'}</p>
+                  <p className="text-xs text-gray-500">{user?.role || 'User'}</p>
                 </div>
-                <ChevronDown className={`hidden md:block w-4 h-4 text-gray-400 transition-transform ${showProfile ? 'rotate-180' : ''}`} />
+                <ChevronDown className="hidden md:block w-4 h-4 text-gray-400" />
               </button>
 
               {showProfile && (
-                <div className="absolute right-0 mt-2 w-56 bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden animate-fade-in z-50">
+                <div className="absolute right-0 mt-2 w-56 bg-white rounded-2xl shadow-xl border border-gray-100 z-50">
                   <div className="px-4 py-3 border-b border-gray-100">
-                    <p className="text-sm font-semibold text-gray-900">
-                      {user?.name || 'Guest'}
-                    </p>
-                    <p className="text-sm text-gray-500 truncate">
-                      {user?.email || 'No email'}
-                    </p>
+                    <p className="text-sm font-semibold">{user?.name}</p>
+                    <p className="text-sm text-gray-500 truncate">{user?.email}</p>
                   </div>
-                  
                   <div className="py-2">
-                    <Link to="/dashboard/profile" className="flex items-center space-x-3 px-4 py-2 text-gray-700 hover:bg-gray-50 transition-colors">
-                      <User className="w-4 h-4 text-gray-400" />
-                      <span className="text-sm">My Profile</span>
-                    </Link>
-                    <Link to="/dashboard/settings" className="flex items-center space-x-3 px-4 py-2 text-gray-700 hover:bg-gray-50 transition-colors">
-                      <Settings className="w-4 h-4 text-gray-400" />
-                      <span className="text-sm">Settings</span>
-                    </Link>
-                    <Link to="/dashboard/billing" className="flex items-center space-x-3 px-4 py-2 text-gray-700 hover:bg-gray-50 transition-colors">
-                      <CreditCard className="w-4 h-4 text-gray-400" />
-                      <span className="text-sm">Billing</span>
-                    </Link>
-                    <Link to="/dashboard/help" className="flex items-center space-x-3 px-4 py-2 text-gray-700 hover:bg-gray-50 transition-colors">
-                      <HelpCircle className="w-4 h-4 text-gray-400" />
-                      <span className="text-sm">Help & Support</span>
-                    </Link>
+                    <Link to="/dashboard/profile" className="block px-4 py-2 hover:bg-gray-50 text-sm">Profile</Link>
+                    <Link to="/dashboard/settings" className="block px-4 py-2 hover:bg-gray-50 text-sm">Settings</Link>
                   </div>
-                  
                   <div className="border-t border-gray-100 py-2">
-                    <button onClick={handleLogout} className="w-full flex items-center space-x-3 px-4 py-2 text-red-600 hover:bg-red-50 transition-colors text-left">
-                      <LogOut className="w-4 h-4" />
-                      <span className="text-sm">Logout</span>
-                    </button>
+                    <button onClick={handleLogout} className="w-full text-left px-4 py-2 text-red-600 hover:bg-red-50 text-sm">Logout</button>
                   </div>
                 </div>
               )}
             </div>
           </div>
         </div>
-
-        {/* Mobile Search Bar */}
-        {showSearch && (
-          <div className="md:hidden px-4 pb-4 animate-fade-in">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Search anything..."
-                className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500"
-                autoFocus
-              />
-            </div>
-          </div>
-        )}
       </header>
 
       <MetaConnectModal
