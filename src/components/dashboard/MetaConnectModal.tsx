@@ -44,30 +44,31 @@ const MetaConnectModal: React.FC<MetaConnectModalProps> = ({
     phoneNumber: ''
   });
 
-  // 🎥 DEMO HANDLER: Skip Facebook Login Screen
+  // 🔹 REAL META LOGIN HANDLER (Redirects to Facebook)
   const handleMetaLogin = () => {
-    // ❌ REAL CODE (Commented for demo)
-    /*
-    const appId = import.meta.env.VITE_META_APP_ID;
-    const configId = import.meta.env.VITE_META_CONFIG_ID;
-    
-    // ✅ Use window.location.origin for dynamic redirect URI (works on localhost & Vercel)
-    const redirectUri = `${window.location.origin}/meta-callback`;
-    
-    const authUrl = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${appId}&redirect_uri=${redirectUri}&config_id=${configId}&response_type=code&state=wabmeta_signup`;
-    window.open(authUrl, "MetaLogin", "width=600,height=700,scrollbars=yes");
-    */
+    try {
+      setStep('connecting'); // Show loading state before redirect
+      
+      const appId = import.meta.env.VITE_META_APP_ID;
+      const configId = import.meta.env.VITE_META_CONFIG_ID;
 
-    // ✅ DEMO CODE: Direct Redirect to Callback
-    console.log("🎥 DEMO MODE: Redirecting to callback directly...");
-    setStep('connecting');
+      if (!appId || !configId) {
+        throw new Error("Meta App ID or Config ID is missing in environment variables.");
+      }
+      
+      // Dynamic Redirect URI based on current origin
+      const redirectUri = `${window.location.origin}/meta-callback`;
     
-    // Simulate delay then redirect
-    setTimeout(() => {
-      // Dynamic redirect for demo too
-      const demoUrl = `${window.location.origin}/meta-callback?code=demo_video_success_code`;
-      window.open(demoUrl, "MetaLogin", "width=600,height=700");
-    }, 1000);
+      // Standard Embedded Signup URL
+      const authUrl = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${appId}&redirect_uri=${redirectUri}&config_id=${configId}&response_type=code&state=wabmeta_signup`;
+    
+      // console.log("Launching Meta Auth:", authUrl);
+      window.location.href = authUrl; // Same tab redirect
+    } catch (err: any) {
+      console.error("Meta Login Error:", err);
+      setError(err.message || "Failed to initialize Meta login.");
+      setStep('error');
+    }
   };
 
   // Handle Manual Setup Submit
@@ -336,8 +337,8 @@ const MetaConnectModal: React.FC<MetaConnectModalProps> = ({
           {step === 'connecting' && (
             <div className="py-12 text-center">
               <Loader2 className="w-10 h-10 text-blue-600 animate-spin mx-auto mb-4" />
-              <h3 className="text-xl font-bold text-gray-900">Connecting...</h3>
-              <p className="text-gray-500">Please complete the login in the popup window.</p>
+              <h3 className="text-xl font-bold text-gray-900">Redirecting to Facebook...</h3>
+              <p className="text-gray-500">Please complete the login to connect WhatsApp.</p>
             </div>
           )}
 
