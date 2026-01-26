@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import {
   X,
@@ -44,30 +44,126 @@ const MetaConnectModal: React.FC<MetaConnectModalProps> = ({
     phoneNumber: ''
   });
 
-  // 🔹 REAL META LOGIN HANDLER (Redirects to Facebook)
+  // 🔹 EFFECT: Listen for Facebook Popup Messages
+  useEffect(() => {
+    const handleMessage = async (event: MessageEvent) => {
+      // 1. Security Check: Allow messages only from Facebook
+      if (event.origin !== "https://business.facebook.com" && event.origin !== "https://www.facebook.com") return;
+
+      try {
+        // Parse data (sometimes it's a string, sometimes an object)
+        const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
+        
+        // 2. Check for Embedded Signup Finish Event
+        if (data.type === 'WA_EMBEDDED_SIGNUP' && data.event === 'FINISH') {
+          const { code } = data.data;
+          console.log("🔹 Meta Auth Code Received:", code);
+          
+          // 3. Exchange Code for Token with Backend
+          if (code) {
+            await exchangeCodeForToken(code);
+          }
+        }
+      } catch (e) {
+        // Ignore non-JSON messages
+        console.error("Error parsing Meta message:", e);
+      }
+    };
+
+    window.addEventListener('message', handleMessage);
+    
+    // Cleanup listener on unmount
+    return () => window.removeEventListener('message', handleMessage);
+  }, []);
+
+  // 🔹 HELPER: Exchange Code for Token (Backend Call)
+  const exchangeCodeForToken = async (code: string) => {
+    setStep('connecting');
+    setError(null);
+
+    try {
+      const token = localStorage.getItem('wabmeta_token') || localStorage.getItem('token');
+      
+      const response = await axios.post(
+        `${API_URL}/api/meta/callback`,
+        { code },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token && { Authorization: `Bearer ${token}` })
+          }
+        }
+      );
+
+      if (response.data && response.data.success) {
+        // Create a dummy account object from response or defaults
+        const accountData: WhatsAppBusinessAccount = {
+          id: response.data.meta?.wabaId || 'Unknown',
+          name: response.data.meta?.businessName || 'WhatsApp Business',
+          phoneNumber: response.data.meta?.phoneNumber || 'Pending',
+          phoneNumberId: response.data.meta?.phoneNumberId || 'Unknown',
+          verificationStatus: 'verified',
+          qualityRating: 'GREEN',
+          messagingLimit: '1K/day'
+        };
+
+        setSelectedAccount(accountData);
+        setStep('success');
+
+        // Close modal after delay
+        setTimeout(() => {
+          onConnect(response.data.meta?.accessToken, accountData);
+          onClose();
+          resetModal();
+        }, 2000);
+      }
+    } catch (err: any) {
+      console.error("Token Exchange Error:", err);
+      setError("Failed to finalize connection with Meta.");
+      setStep('error');
+    }
+  };
+
+  // 🔹 META LOGIN HANDLER (Popup Mode)
   const handleMetaLogin = () => {
     try {
-      setStep('connecting'); // Show loading state before redirect
+      // Don't set 'connecting' immediately so user sees the popup, 
+      // but we can show a loader
+      setIsLoading(true);
       
       const appId = import.meta.env.VITE_META_APP_ID;
-      const configId = import.meta.env.VITE_META_CONFIG_ID;
+      const configId = import.meta.env.VITE_META_CONFIG_ID; // Using Config ID from env now
 
       if (!appId || !configId) {
         throw new Error("Meta App ID or Config ID is missing in environment variables.");
       }
       
-      // Dynamic Redirect URI based on current origin
-      const redirectUri = `${window.location.origin}/meta-callback`;
-    
       // Standard Embedded Signup URL
-      const authUrl = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${appId}&redirect_uri=${redirectUri}&config_id=${configId}&response_type=code&state=wabmeta_signup`;
+      // Note: Using window.location.origin as redirect_uri for the postMessage flow
+      const redirectUri = window.location.origin; 
+      
+      const authUrl = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${appId}&redirect_uri=${redirectUri}&config_id=${configId}&response_type=code&state=wabmeta_popup`;
     
-      // console.log("Launching Meta Auth:", authUrl);
-      window.location.href = authUrl; // Same tab redirect
+      // Open in a Popup Window (Required for postMessage listener to work)
+      const width = 600;
+      const height = 700;
+      const left = (window.screen.width - width) / 2;
+      const top = (window.screen.height - height) / 2;
+
+      window.open(
+        authUrl, 
+        "MetaLogin", 
+        `width=${width},height=${height},top=${top},left=${left},scrollbars=yes`
+      );
+
+      // We stay on 'intro' step or move to 'connecting' manually if preferred
+      // setStep('connecting'); 
+
     } catch (err: any) {
       console.error("Meta Login Error:", err);
       setError(err.message || "Failed to initialize Meta login.");
       setStep('error');
+      setIsLoading(false);
     }
   };
 
@@ -138,12 +234,14 @@ const MetaConnectModal: React.FC<MetaConnectModalProps> = ({
   const handleRetry = () => {
     setError(null);
     setStep('intro');
+    setIsLoading(false);
   };
 
   const resetModal = () => {
     setStep('intro');
     setSelectedAccount(null);
     setError(null);
+    setIsLoading(false);
     setManualFormData({
       wabaId: '',
       phoneNumberId: '',
@@ -227,13 +325,20 @@ const MetaConnectModal: React.FC<MetaConnectModalProps> = ({
                 {/* OAuth Button */}
                 <button
                   onClick={handleMetaLogin}
-                  className="w-full flex items-center justify-center space-x-3 py-4 bg-[#1877F2] hover:bg-[#166FE5] text-white font-semibold rounded-xl transition-all transform hover:scale-[1.02]"
+                  disabled={isLoading}
+                  className="w-full flex items-center justify-center space-x-3 py-4 bg-[#1877F2] hover:bg-[#166FE5] text-white font-semibold rounded-xl transition-all transform hover:scale-[1.02] disabled:opacity-70"
                 >
-                  <svg viewBox="0 0 24 24" className="w-6 h-6" fill="currentColor">
-                    <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
-                  </svg>
-                  <span>Continue with Facebook</span>
-                  <ExternalLink className="w-4 h-4" />
+                  {isLoading ? (
+                     <Loader2 className="w-6 h-6 animate-spin" />
+                  ) : (
+                    <>
+                      <svg viewBox="0 0 24 24" className="w-6 h-6" fill="currentColor">
+                        <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
+                      </svg>
+                      <span>Continue with Facebook</span>
+                      <ExternalLink className="w-4 h-4" />
+                    </>
+                  )}
                 </button>
 
                 {/* Divider */}
@@ -337,8 +442,8 @@ const MetaConnectModal: React.FC<MetaConnectModalProps> = ({
           {step === 'connecting' && (
             <div className="py-12 text-center">
               <Loader2 className="w-10 h-10 text-blue-600 animate-spin mx-auto mb-4" />
-              <h3 className="text-xl font-bold text-gray-900">Redirecting to Facebook...</h3>
-              <p className="text-gray-500">Please complete the login to connect WhatsApp.</p>
+              <h3 className="text-xl font-bold text-gray-900">Connecting...</h3>
+              <p className="text-gray-500">Please complete the login in the popup window.</p>
             </div>
           )}
 
