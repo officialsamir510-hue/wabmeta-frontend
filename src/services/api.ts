@@ -30,6 +30,8 @@ export const auth = {
   resendOTP: (data: any) => api.post('/auth/resend-otp', data),
   updateProfile: (data: any) => api.put('/auth/profile', data),
   logout: () => api.post('/auth/logout'),
+  googleLogin: (data: { token: string }) =>
+    axios.post('/auth/google-login', data),
 };
 
 export const contacts = {
