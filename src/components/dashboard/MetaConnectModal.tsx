@@ -140,9 +140,8 @@ const MetaConnectModal: React.FC<MetaConnectModalProps> = ({
       
       // Standard Embedded Signup URL
       // Note: Using window.location.origin as redirect_uri for the postMessage flow
-      const redirectUri = window.location.origin; 
       
-      const authUrl = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${appId}&redirect_uri=${redirectUri}&config_id=${configId}&response_type=code&state=wabmeta_popup`;
+      const authUrl = `https://business.facebook.com/messaging/whatsapp/onboard/?app_id=881518987956566&config_id=909621421506894&extras=%7B%22sessionInfoVersion%22%3A%223%22%2C%22version%22%3A%22v3%22%7D`;
     
       // Open in a Popup Window (Required for postMessage listener to work)
       const width = 600;
