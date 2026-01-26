@@ -124,24 +124,36 @@ const MetaConnectModal: React.FC<MetaConnectModalProps> = ({
     }
   };
 
-  // 🔹 META LOGIN HANDLER (Popup Mode)
+  // 🔹 META LOGIN HANDLER (Correct Embedded Signup URL)
   const handleMetaLogin = () => {
     try {
-      // Don't set 'connecting' immediately so user sees the popup, 
-      // but we can show a loader
       setIsLoading(true);
       
       const appId = import.meta.env.VITE_META_APP_ID;
-      const configId = import.meta.env.VITE_META_CONFIG_ID; // Using Config ID from env now
+      const configId = import.meta.env.VITE_META_CONFIG_ID;
 
       if (!appId || !configId) {
         throw new Error("Meta App ID or Config ID is missing in environment variables.");
       }
       
-      // Standard Embedded Signup URL
-      // Note: Using window.location.origin as redirect_uri for the postMessage flow
-      
-      const authUrl = `https://business.facebook.com/messaging/whatsapp/onboard/?app_id=881518987956566&config_id=909621421506894&extras=%7B%22sessionInfoVersion%22%3A%223%22%2C%22version%22%3A%22v3%22%7D`;
+      // ✅ Redirect URI matches backend expectation, but 'postMessage' handles the flow
+      const redirectUri = `${window.location.origin}/meta-callback`;
+
+      // ✅ Specific Extras for Embedded Signup
+      const extras = JSON.stringify({
+        feature: "whatsapp_embedded_signup",
+        version: 2
+      });
+
+      // ✅ Correct OAuth Dialog URL
+      const authUrl = `https://www.facebook.com/v18.0/dialog/oauth?` +
+        `client_id=${appId}` + 
+        `&redirect_uri=${encodeURIComponent(redirectUri)}` +
+        `&config_id=${configId}` +
+        `&response_type=code` + 
+        `&extras=${encodeURIComponent(extras)}`;
+
+      console.log("Opening Embedded Signup:", authUrl);
     
       // Open in a Popup Window (Required for postMessage listener to work)
       const width = 600;
@@ -154,9 +166,6 @@ const MetaConnectModal: React.FC<MetaConnectModalProps> = ({
         "MetaLogin", 
         `width=${width},height=${height},top=${top},left=${left},scrollbars=yes`
       );
-
-      // We stay on 'intro' step or move to 'connecting' manually if preferred
-      // setStep('connecting'); 
 
     } catch (err: any) {
       console.error("Meta Login Error:", err);
