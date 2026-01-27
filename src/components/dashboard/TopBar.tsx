@@ -2,19 +2,29 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   Search,
-  Bell,
+  MessageSquare,
   ChevronDown,
   Settings,
   User,
   LogOut,
-  Moon,
-  Sun,
   Menu,
   Command,
-  CreditCard,
-  HelpCircle
+  WifiOff,
+  CheckCircle2,
+  HelpCircle,
+  Loader2
 } from 'lucide-react';
+import MetaConnectModal from './MetaConnectModal';
+import useMetaConnection from '../../hooks/useMetaConnection';
 import { useApp } from '../../context/AppContext';
+
+// Meta OAuth Configuration
+const META_CONFIG = {
+  appId: import.meta.env.VITE_META_APP_ID || 'YOUR_FB_APP_ID',
+  configId: import.meta.env.VITE_META_CONFIG_ID || 'YOUR_CONFIG_ID',
+  redirectUri: import.meta.env.VITE_META_REDIRECT_URI || 'http://localhost:5173/meta-callback',
+  scope: 'whatsapp_business_management,whatsapp_business_messaging,business_management',
+};
 
 interface TopBarProps {
   onMenuClick: () => void;
@@ -26,12 +36,42 @@ const TopBar: React.FC<TopBarProps> = ({ onMenuClick, sidebarCollapsed }) => {
   const { user } = useApp();
   
   const [showSearch, setShowSearch] = useState(false);
-  const [showNotifications, setShowNotifications] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
-  const [darkMode, setDarkMode] = useState(false);
+  const [showConnectionMenu, setShowConnectionMenu] = useState(false);
+  const [showConnectModal, setShowConnectModal] = useState(false);
+  const [isConnecting, setIsConnecting] = useState(false);
 
-  const notificationRef = useRef<HTMLDivElement>(null);
   const profileRef = useRef<HTMLDivElement>(null);
+  const connectionRef = useRef<HTMLDivElement>(null);
+
+  const { 
+    connection, 
+    startConnection, 
+    disconnect,
+  } = useMetaConnection();
+
+  // 🔹 LISTEN FOR POPUP SUCCESS MESSAGE
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      // Security check: Ensure origin matches if needed, but for OAuth redirects it might vary
+      // if (event.origin !== window.location.origin) return;
+
+      if (event.data.type === 'META_SUCCESS') {
+        console.log("✅ Meta Login Success! Refreshing connection state...");
+        setIsConnecting(false);
+        setShowConnectionMenu(false);
+        startConnection(); // Refresh hook state
+        // Optional: Show toast notification
+      } else if (event.data.type === 'META_ERROR') {
+        console.error("❌ Meta Login Failed:", event.data.error);
+        setIsConnecting(false);
+        alert("Connection failed: " + (event.data.error || "Unknown error"));
+      }
+    };
+    
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, [startConnection]);
 
   // Handle Logout
   const handleLogout = () => {
@@ -43,14 +83,69 @@ const TopBar: React.FC<TopBarProps> = ({ onMenuClick, sidebarCollapsed }) => {
     navigate('/login');
   };
 
+  // Handle Meta OAuth Login
+  const handleMetaLogin = () => {
+    setIsConnecting(true);
+    // Keep menu open to show loading spinner
+    // setShowConnectionMenu(false); 
+
+    const authUrl = new URL('https://www.facebook.com/v18.0/dialog/oauth');
+    authUrl.searchParams.append('client_id', META_CONFIG.appId);
+    authUrl.searchParams.append('redirect_uri', META_CONFIG.redirectUri);
+    authUrl.searchParams.append('scope', META_CONFIG.scope);
+    authUrl.searchParams.append('response_type', 'code');
+    authUrl.searchParams.append('state', generateRandomState());
+
+    const state = authUrl.searchParams.get('state');
+    sessionStorage.setItem('meta_oauth_state', state || '');
+
+    const popup = window.open(
+      authUrl.toString(),
+      'MetaLogin',
+      'width=600,height=700,scrollbars=yes,resizable=yes'
+    );
+
+    // Watch for popup closure
+    const checkPopup = setInterval(() => {
+      if (!popup || popup.closed) {
+        clearInterval(checkPopup);
+        setIsConnecting(false);
+      }
+    }, 1000);
+  };
+
+  const generateRandomState = () => {
+    return Math.random().toString(36).substring(2, 15) + 
+           Math.random().toString(36).substring(2, 15);
+  };
+
+  const handleOpenConnectModal = () => {
+    setShowConnectionMenu(false);
+    setShowConnectModal(true);
+  };
+
+  const handleCloseConnectModal = () => {
+    setShowConnectModal(false);
+  };
+
+  const handleDisconnect = () => {
+    if (window.confirm('Are you sure you want to disconnect your WhatsApp Business Account?')) {
+      disconnect();
+      setShowConnectionMenu(false);
+    }
+  };
+
   // Click outside handler
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (notificationRef.current && !notificationRef.current.contains(event.target as Node)) {
-        setShowNotifications(false);
-      }
+      // if (notificationRef.current && !notificationRef.current.contains(event.target as Node)) {
+      //   setShowNotifications(false);
+      // }
       if (profileRef.current && !profileRef.current.contains(event.target as Node)) {
         setShowProfile(false);
+      }
+      if (connectionRef.current && !connectionRef.current.contains(event.target as Node)) {
+        setShowConnectionMenu(false);
       }
     };
 
@@ -67,8 +162,8 @@ const TopBar: React.FC<TopBarProps> = ({ onMenuClick, sidebarCollapsed }) => {
       }
       if (event.key === 'Escape') {
         setShowSearch(false);
-        setShowNotifications(false);
         setShowProfile(false);
+        setShowConnectionMenu(false);
       }
     };
 
@@ -76,17 +171,6 @@ const TopBar: React.FC<TopBarProps> = ({ onMenuClick, sidebarCollapsed }) => {
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  const notifications = [
-    {
-      id: 1,
-      type: 'message',
-      title: 'New message from Priya',
-      description: 'Hi, I wanted to know about...',
-      time: '2 min ago',
-      unread: true
-    },
-    // Add more mock notifications if needed
-  ];
 
   return (
     <>
@@ -123,75 +207,144 @@ const TopBar: React.FC<TopBarProps> = ({ onMenuClick, sidebarCollapsed }) => {
 
           {/* Right Section */}
           <div className="flex items-center space-x-2">
-            
-            {/* Mobile Search */}
-            <button 
-              onClick={() => setShowSearch(!showSearch)}
-              className="md:hidden p-2 rounded-lg hover:bg-gray-100 text-gray-500"
-            >
-              <Search className="w-5 h-5" />
-            </button>
-
-            {/* Dark Mode Toggle */}
-            <button
-              onClick={() => setDarkMode(!darkMode)}
-              className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 transition-colors"
-              title={darkMode ? 'Light Mode' : 'Dark Mode'}
-            >
-              {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
-            </button>
-
-            {/* Notifications */}
-            <div className="relative" ref={notificationRef}>
+            {/* Meta Connection Button */}
+            <div className="relative" ref={connectionRef}>
               <button
-                onClick={() => setShowNotifications(!showNotifications)}
-                className="relative p-2 rounded-lg hover:bg-gray-100 text-gray-500 transition-colors"
+                onClick={() => setShowConnectionMenu(!showConnectionMenu)}
+                disabled={isConnecting}
+                className={`flex items-center space-x-2 px-4 py-2 rounded-xl font-medium transition-all disabled:opacity-70 ${
+                  connection.isConnected
+                    ? 'bg-green-50 text-green-700 hover:bg-green-100 border border-green-200'
+                    : 'bg-[#1877F2] hover:bg-[#166FE5] text-white'
+                }`}
               >
-                <Bell className="w-5 h-5" />
-                <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white"></span>
+                {isConnecting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span className="hidden sm:inline">Connecting...</span>
+                  </>
+                ) : connection.isConnected ? (
+                  <>
+                    <span className="relative flex h-2 w-2">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+                    </span>
+                    <span className="hidden sm:inline">Connected</span>
+                    <ChevronDown className="w-4 h-4" />
+                  </>
+                ) : (
+                  <>
+                    <svg viewBox="0 0 24 24" className="w-5 h-5" fill="currentColor">
+                      <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
+                    </svg>
+                    <span className="hidden sm:inline">Connect with Meta</span>
+                  </>
+                )}
               </button>
 
-              {showNotifications && (
+              {/* Connection Dropdown */}
+              {showConnectionMenu && (
                 <div className="absolute right-0 mt-2 w-80 bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden animate-fade-in z-50">
-                  <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
-                    <h3 className="font-semibold text-gray-900">Notifications</h3>
-                    <button className="text-sm text-primary-600 hover:text-primary-700 font-medium">
-                      Mark all read
-                    </button>
-                  </div>
-                  
-                  <div className="max-h-80 overflow-y-auto">
-                    {notifications.map((notification) => (
-                      <div
-                        key={notification.id}
-                        className={`flex items-start space-x-3 px-4 py-3 hover:bg-gray-50 transition-colors cursor-pointer ${
-                          notification.unread ? 'bg-primary-50/50' : ''
-                        }`}
-                      >
-                        <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center shrink-0 text-blue-600">
-                           <Bell className="w-5 h-5" />
+                  {connection.isConnected && connection.businessAccount ? (
+                    <>
+                      <div className="p-4 border-b border-gray-100">
+                        <div className="flex items-center space-x-3">
+                          <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center shrink-0">
+                            <MessageSquare className="w-6 h-6 text-green-600" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center space-x-2">
+                              <span className="font-semibold text-gray-900 truncate">
+                                {connection.businessAccount.name}
+                              </span>
+                              <CheckCircle2 className="w-4 h-4 text-green-500 shrink-0" />
+                            </div>
+                            <p className="text-sm text-gray-500 truncate">
+                              {connection.businessAccount.phoneNumber}
+                            </p>
+                          </div>
                         </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-gray-900">{notification.title}</p>
-                          <p className="text-sm text-gray-500 truncate">{notification.description}</p>
-                          <p className="text-xs text-gray-400 mt-1">{notification.time}</p>
-                        </div>
-                        {notification.unread && (
-                          <div className="w-2 h-2 bg-primary-500 rounded-full shrink-0 mt-2"></div>
-                        )}
                       </div>
-                    ))}
-                  </div>
-                  
-                  <div className="px-4 py-3 border-t border-gray-100">
-                    <Link 
-                      to="/dashboard/notifications"
-                      onClick={() => setShowNotifications(false)}
-                      className="block text-center text-sm text-primary-600 hover:text-primary-700 font-medium"
-                    >
-                      View all notifications
-                    </Link>
-                  </div>
+
+                      <div className="p-4 bg-gray-50 space-y-2">
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-gray-500">Status</span>
+                          <span className="flex items-center space-x-1 text-green-600 font-medium">
+                            <span className="w-2 h-2 bg-green-500 rounded-full"></span>
+                            <span>Active</span>
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-gray-500">Quality Rating</span>
+                          <span className={`font-medium ${
+                            connection.businessAccount.qualityRating === 'GREEN'
+                              ? 'text-green-600'
+                              : 'text-yellow-600'
+                          }`}>
+                            {connection.businessAccount.qualityRating || 'N/A'}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="p-2 border-t border-gray-100">
+                        <button
+                          onClick={handleDisconnect}
+                          className="w-full flex items-center space-x-2 px-3 py-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                        >
+                          <WifiOff className="w-4 h-4" />
+                          <span className="text-sm">Disconnect</span>
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="p-4">
+                      <div className="flex items-center space-x-3 mb-4">
+                        <div className="w-12 h-12 bg-gray-100 rounded-xl flex items-center justify-center shrink-0">
+                          <WifiOff className="w-6 h-6 text-gray-400" />
+                        </div>
+                        <div>
+                          <p className="font-semibold text-gray-900">Not Connected</p>
+                          <p className="text-sm text-gray-500">Connect your WhatsApp account</p>
+                        </div>
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <button
+                          onClick={handleMetaLogin}
+                          disabled={isConnecting}
+                          className="w-full flex items-center justify-center space-x-2 py-3 bg-[#1877F2] hover:bg-[#166FE5] text-white font-medium rounded-xl transition-colors disabled:opacity-70"
+                        >
+                          {isConnecting ? (
+                            <>
+                              <Loader2 className="w-5 h-5 animate-spin" />
+                              <span>Connecting...</span>
+                            </>
+                          ) : (
+                            <>
+                              <svg viewBox="0 0 24 24" className="w-5 h-5" fill="currentColor">
+                                <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
+                              </svg>
+                              <span>Continue with Facebook</span>
+                            </>
+                          )}
+                        </button>
+
+                        <div className="flex items-center space-x-3 py-2">
+                          <div className="flex-1 h-px bg-gray-200"></div>
+                          <span className="text-xs text-gray-400">or</span>
+                          <div className="flex-1 h-px bg-gray-200"></div>
+                        </div>
+
+                        <button
+                          onClick={handleOpenConnectModal}
+                          className="w-full flex items-center justify-center space-x-2 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-xl transition-colors"
+                        >
+                          <Settings className="w-4 h-4" />
+                          <span>Manual Setup</span>
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -206,12 +359,8 @@ const TopBar: React.FC<TopBarProps> = ({ onMenuClick, sidebarCollapsed }) => {
                   {user?.name ? user.name.substring(0, 2).toUpperCase() : 'JD'}
                 </div>
                 <div className="hidden md:block text-left">
-                  <p className="text-sm font-medium text-gray-900">
-                    {user?.name || 'Guest'}
-                  </p>
-                  <p className="text-xs text-gray-500 capitalize">
-                    {user?.role || 'User'}
-                  </p>
+                  <p className="text-sm font-medium text-gray-900">{user?.name || 'Guest'}</p>
+                  <p className="text-xs text-gray-500">{user?.role || 'User'}</p>
                 </div>
                 <ChevronDown className={`hidden md:block w-4 h-4 text-gray-400 transition-transform ${showProfile ? 'rotate-180' : ''}`} />
               </button>
@@ -219,12 +368,8 @@ const TopBar: React.FC<TopBarProps> = ({ onMenuClick, sidebarCollapsed }) => {
               {showProfile && (
                 <div className="absolute right-0 mt-2 w-56 bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden animate-fade-in z-50">
                   <div className="px-4 py-3 border-b border-gray-100">
-                    <p className="text-sm font-semibold text-gray-900">
-                      {user?.name || 'Guest'}
-                    </p>
-                    <p className="text-sm text-gray-500 truncate">
-                      {user?.email || 'No email'}
-                    </p>
+                    <p className="text-sm font-semibold text-gray-900">{user?.name}</p>
+                    <p className="text-sm text-gray-500 truncate">{user?.email}</p>
                   </div>
                   
                   <div className="py-2">
@@ -243,14 +388,6 @@ const TopBar: React.FC<TopBarProps> = ({ onMenuClick, sidebarCollapsed }) => {
                     >
                       <Settings className="w-4 h-4 text-gray-400" />
                       <span className="text-sm">Settings</span>
-                    </Link>
-                    <Link
-                      to="/dashboard/billing"
-                      onClick={() => setShowProfile(false)}
-                      className="flex items-center space-x-3 px-4 py-2 text-gray-700 hover:bg-gray-50 transition-colors"
-                    >
-                      <CreditCard className="w-4 h-4 text-gray-400" />
-                      <span className="text-sm">Billing</span>
                     </Link>
                     <Link
                       to="/dashboard/help"
@@ -292,6 +429,16 @@ const TopBar: React.FC<TopBarProps> = ({ onMenuClick, sidebarCollapsed }) => {
           </div>
         )}
       </header>
+
+      {/* Meta Connect Modal (Manual Flow) */}
+      <MetaConnectModal
+        isOpen={showConnectModal}
+        onClose={handleCloseConnectModal}
+        onConnect={(_accessToken, _account) => {
+          startConnection();
+          handleCloseConnectModal();
+        }}
+      />
     </>
   );
 };
