@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Loader2, CheckCircle2, XCircle } from 'lucide-react';
-import { meta } from '../services/api'; 
+import { meta } from '../services/api';
 
 const MetaCallback: React.FC = () => {
   const [searchParams] = useSearchParams();
@@ -17,12 +17,13 @@ const MetaCallback: React.FC = () => {
     const code = searchParams.get('code');
     const error = searchParams.get('error');
 
-    // Handle Error
+    // Handle Error from Meta
     if (error) {
       processedRef.current = true;
       setStatus('error');
       setMessage('Access denied by user.');
       
+      // Notify parent if inside popup
       if (window.opener) {
         window.opener.postMessage({ type: 'META_ERROR', error: 'Access denied' }, '*');
         setTimeout(() => window.close(), 2000);
@@ -34,39 +35,36 @@ const MetaCallback: React.FC = () => {
     if (code) {
       processedRef.current = true;
       
-      // ✅ 1. Popup Mode: Notify Parent Immediately
+      // ✅ 1. IF POPUP MODE (Video/Demo flow)
       if (window.opener) {
-        console.log("Sending success message to parent window...");
+        console.log("Popup detected. Sending message to parent...");
         
-        // Save minimal state locally for this window just in case
-        const mockData = {
-          isConnected: true,
-          businessAccount: { name: 'WhatsApp Business' }
-        };
-        localStorage.setItem('metaConnection', JSON.stringify(mockData));
-
         // Notify Parent Window
-        window.opener.postMessage({ type: 'META_SUCCESS', code, demo: true }, '*');
+        window.opener.postMessage({ type: 'META_SUCCESS', code }, '*');
         
         setStatus('success');
-        setMessage('Connected! You can close this window.');
-        
-        // Close Popup after slight delay
+        setMessage('Connected! Closing window...');
         setTimeout(() => window.close(), 1500);
       } 
       
-      // ✅ 2. Standalone Mode: Call Backend & Redirect
+      // ✅ 2. IF STANDALONE MODE (Redirect flow)
       else {
+        console.log("Standalone mode. Calling backend...");
+        
         meta.connect({ code })
           .then((res) => {
             console.log("Connected Successfully:", res.data);
             
+            // Update Local Storage for UI
             const connectionData = {
               isConnected: true,
-              businessAccount: res.data.account || { name: 'WhatsApp Business' },
+              businessAccount: { 
+                name: 'WhatsApp Business', 
+                qualityRating: 'GREEN', 
+                messagingLimit: '1K/day' 
+              },
               lastSync: new Date().toISOString()
             };
-            localStorage.setItem('metaConnection', JSON.stringify(connectionData));
             localStorage.setItem('wabmeta_connection', JSON.stringify(connectionData));
 
             setStatus('success');
@@ -74,18 +72,6 @@ const MetaCallback: React.FC = () => {
           })
           .catch((err) => {
             console.error("Meta Connect Failed:", err);
-            
-            // Demo Fallback for Video
-            if (code === 'demo_video_success_code') {
-               const mockData = {
-                  isConnected: true,
-                  businessAccount: { name: 'Demo Business', phoneNumber: '+91 98765 43210' }
-               };
-               localStorage.setItem('metaConnection', JSON.stringify(mockData));
-               navigate('/dashboard');
-               return;
-            }
-
             setStatus('error');
             setMessage(err.response?.data?.message || "Failed to exchange token.");
           });
