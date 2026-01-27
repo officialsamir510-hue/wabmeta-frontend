@@ -71,6 +71,25 @@ const Dashboard: React.FC = () => {
     fetchDashboardData();
   }, []);
 
+  // Listen for Popup Success Message
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      // Check if message is from our popup
+      if (event.data?.type === 'META_SUCCESS') {
+        console.log("✅ OAuth Success! Refreshing dashboard state...");
+        
+        // Force refresh connection state
+        startConnection();
+        
+        // Optional: Reload page to ensure everything is fresh
+        // window.location.reload(); 
+      }
+    };
+    
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, [startConnection]);
+
   const calculateProgress = (total: number, sent: number) => {
     if (!total || total === 0) return 0;
     return Math.round((sent / total) * 100);
@@ -131,20 +150,26 @@ const Dashboard: React.FC = () => {
     { name: 'Sun', delivered: 97, failed: 3 },
   ];
 
-  // ✅ Embedded Signup Handler
+  // ✅ Updated OAuth Handler (Safe for Video)
   const handleMetaLogin = () => {
-    // Replace these IDs with your actual values if different
-    const appId = "881518987956566";
-    const configId = "909621421506894";
+    // Replace with your actual App ID
+    const appId = "881518987956566"; 
     
-    const url = `https://business.facebook.com/messaging/whatsapp/onboard/?app_id=${appId}&config_id=${configId}&extras={"sessionInfoVersion":3,"version":"v3"}`;
+    // Redirect to your callback page (works on localhost too if configured in Meta App)
+    // If testing locally, ensure 'http://localhost:5173/meta-callback' is in 'Valid OAuth Redirect URIs'
+    const redirectUri = `${window.location.origin}/meta-callback`; 
+
+    // Standard OAuth URL (Not Embedded Signup) to avoid BSP error screen
+    const authUrl = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${appId}&redirect_uri=${redirectUri}&response_type=code&scope=whatsapp_business_management,whatsapp_business_messaging,business_management`;
     
-    const width = 800;
-    const height = 600;
+    // Calculate center position
+    const width = 600;
+    const height = 700;
     const left = (window.screen.width - width) / 2;
     const top = (window.screen.height - height) / 2;
 
-    window.open(url, "WA", `width=${width},height=${height},top=${top},left=${left}`);
+    console.log("Opening Meta Login:", authUrl);
+    window.open(authUrl, "MetaLogin", `width=${width},height=${height},top=${top},left=${left}`);
   };
 
   const handleSync = async () => {
@@ -209,7 +234,7 @@ const Dashboard: React.FC = () => {
               {/* Primary Button: Connect */}
               <button
                 onClick={handleMetaLogin}
-                className="flex items-center justify-center gap-2 px-6 py-3 bg-[#1877F2] hover:bg-[#166FE5] text-white font-semibold rounded-xl shadow-lg shadow-blue-500/30 transition-all transform hover:scale-105 active:scale-95"
+                className="flex items-center justify-center gap-2 px-6 py-3 bg-[#1877F2] hover:bg-[#166FE5] text-white font-semibold rounded-xl shadow-lg shadow-blue-500/30 transition-all transform hover:scale-105 active:scale-95 whitespace-nowrap"
               >
                 <svg viewBox="0 0 24 24" className="w-5 h-5 fill-current">
                   <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
