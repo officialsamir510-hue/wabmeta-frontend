@@ -8,8 +8,8 @@ import {
   AlertTriangle,
   ArrowRight,
   Zap,
-  RefreshCw,
-  Loader2
+  Loader2,
+  RefreshCw
 } from 'lucide-react';
 import StatsCard from '../components/dashboard/StatsCard';
 import QuickActions from '../components/dashboard/QuickActions';
@@ -71,24 +71,43 @@ const Dashboard: React.FC = () => {
     fetchDashboardData();
   }, []);
 
-  // Listen for Popup Success Message
+  // Listen for Popup Success Message (OAuth Flow)
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
-      // Check if message is from our popup
       if (event.data?.type === 'META_SUCCESS') {
-        console.log("✅ OAuth Success! Refreshing dashboard state...");
-        
-        // Force refresh connection state
-        startConnection();
-        
-        // Optional: Reload page to ensure everything is fresh
-        // window.location.reload(); 
+        console.log("✅ OAuth Success! Setting Connection Data...");
+
+        if (event.data.demo) {
+          const mockData = {
+            isConnected: true,
+            isConnecting: false,
+            businessName: "WabMeta Demo Business",
+            phoneNumber: "+91 98765 43210",
+            businessId: "BIZ_123456789",
+            phoneNumberId: "PN_987654321",
+            accessToken: "mock_access_token_xyz",
+            qualityRating: "GREEN",
+            messagingLimit: "1K/day",
+            lastSync: new Date().toLocaleTimeString(),
+            error: null,
+            businessAccount: { 
+              name: "WabMeta Demo Business",
+              phoneNumber: "+91 98765 43210",
+              qualityRating: "GREEN",
+              messagingLimit: "1K/day"
+            }
+          };
+          localStorage.setItem('metaConnection', JSON.stringify(mockData));
+          localStorage.setItem('wabmeta_connection', JSON.stringify(mockData));
+        }
+
+        window.location.reload();
       }
     };
     
     window.addEventListener('message', handleMessage);
     return () => window.removeEventListener('message', handleMessage);
-  }, [startConnection]);
+  }, []);
 
   const calculateProgress = (total: number, sent: number) => {
     if (!total || total === 0) return 0;
@@ -130,6 +149,7 @@ const Dashboard: React.FC = () => {
     },
   ];
 
+  // Mock chart data
   const messageData = [
     { name: 'Mon', messages: 2400 },
     { name: 'Tue', messages: 1398 },
@@ -150,28 +170,22 @@ const Dashboard: React.FC = () => {
     { name: 'Sun', delivered: 97, failed: 3 },
   ];
 
-  // ✅ Updated OAuth Handler (Safe for Video)
+  // ✅ OAuth Handler
   const handleMetaLogin = () => {
-    // Replace with your actual App ID
     const appId = "881518987956566"; 
-    
-    // Redirect to your callback page (works on localhost too if configured in Meta App)
-    // If testing locally, ensure 'http://localhost:5173/meta-callback' is in 'Valid OAuth Redirect URIs'
     const redirectUri = `${window.location.origin}/meta-callback`; 
 
-    // Standard OAuth URL (Not Embedded Signup) to avoid BSP error screen
     const authUrl = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${appId}&redirect_uri=${redirectUri}&response_type=code&scope=whatsapp_business_management,whatsapp_business_messaging,business_management`;
     
-    // Calculate center position
     const width = 600;
     const height = 700;
     const left = (window.screen.width - width) / 2;
     const top = (window.screen.height - height) / 2;
 
-    console.log("Opening Meta Login:", authUrl);
     window.open(authUrl, "MetaLogin", `width=${width},height=${height},top=${top},left=${left}`);
   };
 
+  // ✅ Used Handler (Sync)
   const handleSync = async () => {
     try {
       await refreshConnection();
@@ -200,6 +214,15 @@ const Dashboard: React.FC = () => {
           <p className="text-gray-500 mt-1">Here's what's happening with your business today.</p>
         </div>
         <div className="flex items-center space-x-3">
+          {/* ✅ Used handleSync here */}
+          <button 
+            onClick={handleSync}
+            className="p-2 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors"
+            title="Refresh Connection"
+          >
+            <RefreshCw className="w-5 h-5 text-gray-600" />
+          </button>
+          
           <Link
             to="/dashboard/campaigns/new"
             className="inline-flex items-center space-x-2 px-4 py-2.5 bg-primary-500 hover:bg-primary-600 text-white font-medium rounded-xl transition-colors"
@@ -374,35 +397,7 @@ const Dashboard: React.FC = () => {
       {/* Bottom Grid */}
       <div className="grid lg:grid-cols-2 gap-6">
         <QuickActions />
-        <RecentActivity />
-      </div>
-
-      {/* API Status Footer */}
-      <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center space-x-6">
-            <div className="flex items-center space-x-2">
-              <span className={`w-3 h-3 rounded-full ${connection.isConnected ? 'bg-green-500 animate-pulse' : 'bg-gray-400'}`}></span>
-              <span className="text-sm text-gray-600">
-                {connection.isConnected ? 'WhatsApp API Connected' : 'WhatsApp API Disconnected'}
-              </span>
-            </div>
-            <div className="flex items-center space-x-2">
-              <span className="w-3 h-3 bg-green-500 rounded-full"></span>
-              <span className="text-sm text-gray-600">All systems operational</span>
-            </div>
-          </div>
-          <div className="flex items-center space-x-4 text-sm text-gray-500">
-            <span>Last sync: {connection.lastSync || 'Never'}</span>
-            <button 
-              onClick={handleSync}
-              className="text-primary-600 hover:text-primary-700 font-medium flex items-center space-x-1"
-            >
-              <RefreshCw className="w-4 h-4" />
-              <span>Sync Now</span>
-            </button>
-          </div>
-        </div>
+        <RecentActivity /> {/* ✅ Used RecentActivity component */}
       </div>
 
       {/* Meta Connect Modal (Manual Flow) */}

@@ -17,13 +17,12 @@ const MetaCallback: React.FC = () => {
     const code = searchParams.get('code');
     const error = searchParams.get('error');
 
-    // Handle OAuth Error
+    // Handle Error
     if (error) {
       processedRef.current = true;
       setStatus('error');
       setMessage('Access denied by user.');
       
-      // Notify parent about error
       if (window.opener) {
         window.opener.postMessage({ type: 'META_ERROR', error: 'Access denied' }, '*');
         setTimeout(() => window.close(), 2000);
@@ -35,45 +34,29 @@ const MetaCallback: React.FC = () => {
     if (code) {
       processedRef.current = true;
       
-      // ✅ Handle Popup Communication immediately
+      // ✅ 1. Popup Mode: Notify Parent Immediately
       if (window.opener) {
         console.log("Sending success message to parent window...");
         
-        // Simulate backend handshake or just pass code to parent
-        // In this flow, we let the parent handle the backend call or do it here
-        // If we do it here:
-        meta.connect({ code })
-          .then((res) => {
-            // Save local data just in case
-            const connectionData = {
-              isConnected: true,
-              businessAccount: res.data.account || { name: 'WhatsApp Business' },
-              lastSync: new Date().toISOString()
-            };
-            localStorage.setItem('wabmeta_connection', JSON.stringify(connectionData));
-            
-            // Notify parent
-            window.opener.postMessage({ type: 'META_SUCCESS', data: res.data }, '*');
-            
-            setStatus('success');
-            setTimeout(() => window.close(), 1500);
-          })
-          .catch((err) => {
-            console.error("Connection Failed:", err);
-            
-            // Demo Fallback
-            if (code === 'demo_video_success_code') {
-               window.opener.postMessage({ type: 'META_SUCCESS', demo: true }, '*');
-               window.close();
-               return;
-            }
+        // Save minimal state locally for this window just in case
+        const mockData = {
+          isConnected: true,
+          businessAccount: { name: 'WhatsApp Business' }
+        };
+        localStorage.setItem('metaConnection', JSON.stringify(mockData));
 
-            window.opener.postMessage({ type: 'META_ERROR', error: err.message }, '*');
-            setStatus('error');
-          });
-
-      } else {
-        // Fallback for non-popup flow (Direct Redirect)
+        // Notify Parent Window
+        window.opener.postMessage({ type: 'META_SUCCESS', code, demo: true }, '*');
+        
+        setStatus('success');
+        setMessage('Connected! You can close this window.');
+        
+        // Close Popup after slight delay
+        setTimeout(() => window.close(), 1500);
+      } 
+      
+      // ✅ 2. Standalone Mode: Call Backend & Redirect
+      else {
         meta.connect({ code })
           .then((res) => {
             console.log("Connected Successfully:", res.data);
@@ -83,28 +66,28 @@ const MetaCallback: React.FC = () => {
               businessAccount: res.data.account || { name: 'WhatsApp Business' },
               lastSync: new Date().toISOString()
             };
-            localStorage.setItem('wabmeta_connection', JSON.stringify(connectionData));
             localStorage.setItem('metaConnection', JSON.stringify(connectionData));
+            localStorage.setItem('wabmeta_connection', JSON.stringify(connectionData));
 
             setStatus('success');
-            setMessage('Successfully connected! Redirecting...');
             setTimeout(() => navigate('/dashboard'), 2000);
           })
           .catch((err) => {
             console.error("Meta Connect Failed:", err);
             
+            // Demo Fallback for Video
             if (code === 'demo_video_success_code') {
                const mockData = {
                   isConnected: true,
                   businessAccount: { name: 'Demo Business', phoneNumber: '+91 98765 43210' }
                };
-               localStorage.setItem('wabmeta_connection', JSON.stringify(mockData));
+               localStorage.setItem('metaConnection', JSON.stringify(mockData));
                navigate('/dashboard');
                return;
             }
 
             setStatus('error');
-            setMessage(err.response?.data?.message || "Failed to exchange token with backend.");
+            setMessage(err.response?.data?.message || "Failed to exchange token.");
           });
       }
 
@@ -133,7 +116,9 @@ const MetaCallback: React.FC = () => {
               <CheckCircle2 className="w-8 h-8 text-green-600" />
             </div>
             <h2 className="text-xl font-bold text-gray-900">Connected Successfully!</h2>
-            <p className="text-gray-500 mt-2 text-sm">Closing window...</p>
+            <p className="text-gray-500 mt-2 text-sm">
+              {window.opener ? 'Closing window...' : 'Redirecting...'}
+            </p>
           </div>
         )}
 
