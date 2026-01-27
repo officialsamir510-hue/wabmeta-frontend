@@ -74,6 +74,12 @@ export const useMetaConnection = () => {
     }));
   }, []);
 
+  const refreshConnection = useCallback(() => {
+    setConnection(initialState);
+    localStorage.removeItem(STORAGE_KEY);
+    startConnection();
+  }, []);
+
   return {
     connection,
     startConnection,
@@ -81,6 +87,7 @@ export const useMetaConnection = () => {
     disconnect,
     setError,
     cancelConnection,
+    refreshConnection,
   };
 };
 

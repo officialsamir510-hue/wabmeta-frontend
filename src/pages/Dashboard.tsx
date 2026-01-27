@@ -16,14 +16,13 @@ import QuickActions from '../components/dashboard/QuickActions';
 import RecentActivity from '../components/dashboard/RecentActivity';
 import ChartCard from '../components/dashboard/ChartCard';
 import ConnectionStatus from '../components/dashboard/ConnectionStatus';
+import MetaConnectModal from '../components/dashboard/MetaConnectModal';
 import useMetaConnection from '../hooks/useMetaConnection';
 import { dashboard, campaigns } from '../services/api';
 
 const Dashboard: React.FC = () => {
-  // Meta Connection Hook
-  const { connection, disconnect } = useMetaConnection();
+  const { connection, startConnection, disconnect, refreshConnection } = useMetaConnection();
   
-  // State for stats and campaigns
   const [statsData, setStatsData] = useState({
     contacts: 0,
     messagesSent: 0,
@@ -32,6 +31,7 @@ const Dashboard: React.FC = () => {
   });
   const [activeCampaigns, setActiveCampaigns] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showManualModal, setShowManualModal] = useState(false);
 
   // Fetch Data on Load
   useEffect(() => {
@@ -111,7 +111,6 @@ const Dashboard: React.FC = () => {
     },
   ];
 
-  // Mock chart data
   const messageData = [
     { name: 'Mon', messages: 2400 },
     { name: 'Tue', messages: 1398 },
@@ -132,21 +131,28 @@ const Dashboard: React.FC = () => {
     { name: 'Sun', delivered: 97, failed: 3 },
   ];
 
-  // ✅ Direct Meta Connection Handler
-  const handleDirectConnect = () => {
-    const appId = import.meta.env.VITE_META_APP_ID;
-    const configId = import.meta.env.VITE_META_CONFIG_ID;
-    const redirectUri = `${window.location.origin}/meta-callback`;
+  // ✅ Embedded Signup Handler
+  const handleMetaLogin = () => {
+    // Replace these IDs with your actual values if different
+    const appId = "881518987956566";
+    const configId = "909621421506894";
     
-    const authUrl = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${appId}&redirect_uri=${redirectUri}&config_id=${configId}&response_type=code&state=wabmeta_connect`;
+    const url = `https://business.facebook.com/messaging/whatsapp/onboard/?app_id=${appId}&config_id=${configId}&extras={"sessionInfoVersion":3,"version":"v3"}`;
     
-    console.log("Opening Meta Login:", authUrl);
-    window.open(authUrl, "MetaLogin", "width=600,height=700");
+    const width = 800;
+    const height = 600;
+    const left = (window.screen.width - width) / 2;
+    const top = (window.screen.height - height) / 2;
+
+    window.open(url, "WA", `width=${width},height=${height},top=${top},left=${left}`);
   };
 
   const handleSync = async () => {
-    // TODO: Implement sync logic if available in useMetaConnection
-    console.warn('Sync functionality is not available.');
+    try {
+      await refreshConnection();
+    } catch (error) {
+      console.error('Failed to sync:', error);
+    }
   };
 
   if (loading) {
@@ -165,7 +171,7 @@ const Dashboard: React.FC = () => {
       {/* Welcome Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Good morning, John! 👋</h1>
+          <h1 className="text-2xl font-bold text-gray-900">Good morning! 👋</h1>
           <p className="text-gray-500 mt-1">Here's what's happening with your business today.</p>
         </div>
         <div className="flex items-center space-x-3">
@@ -183,40 +189,42 @@ const Dashboard: React.FC = () => {
       {connection.isConnected ? (
         <ConnectionStatus connection={connection} onDisconnect={disconnect} />
       ) : (
-        <div className="bg-linear-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-2xl p-6">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div className="flex items-center space-x-4">
-              <div className="w-14 h-14 bg-blue-100 rounded-xl flex items-center justify-center">
-                <svg viewBox="0 0 24 24" className="w-8 h-8" fill="#1877F2">
+        <div className="bg-linear-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-2xl p-6 shadow-sm">
+          <div className="flex flex-col md:flex-row items-center justify-between gap-6">
+            <div className="flex items-center space-x-4 w-full md:w-auto">
+              <div className="w-16 h-16 bg-blue-100 rounded-2xl flex items-center justify-center shrink-0 shadow-sm">
+                <svg viewBox="0 0 24 24" className="w-10 h-10" fill="#1877F2">
                   <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
                 </svg>
               </div>
               <div>
-                <h3 className="font-semibold text-gray-900">Connect Your WhatsApp Business</h3>
-                <p className="text-gray-600">Link your account to start sending messages and grow your business</p>
+                <h3 className="text-xl font-bold text-gray-900">Connect WhatsApp Business</h3>
+                <p className="text-gray-600 max-w-lg mt-1 text-sm md:text-base">
+                  Link your account to start sending automated campaigns and manage customer chats directly from WabMeta.
+                </p>
               </div>
             </div>
             
-            {/* ✅ Updated Connect Button */}
-            <button
-              onClick={handleDirectConnect}
-              disabled={connection.isConnecting}
-              className="flex items-center space-x-2 px-6 py-3 bg-[#1877F2] hover:bg-[#166FE5] text-white font-medium rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {connection.isConnecting ? (
-                <>
-                  <RefreshCw className="w-5 h-5 animate-spin" />
-                  <span>Connecting...</span>
-                </>
-              ) : (
-                <>
-                  <svg viewBox="0 0 24 24" className="w-5 h-5" fill="currentColor">
-                    <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
-                  </svg>
-                  <span>Connect with Meta</span>
-                </>
-              )}
-            </button>
+            <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
+              {/* Primary Button: Connect */}
+              <button
+                onClick={handleMetaLogin}
+                className="flex items-center justify-center gap-2 px-6 py-3 bg-[#1877F2] hover:bg-[#166FE5] text-white font-semibold rounded-xl shadow-lg shadow-blue-500/30 transition-all transform hover:scale-105 active:scale-95"
+              >
+                <svg viewBox="0 0 24 24" className="w-5 h-5 fill-current">
+                  <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
+                </svg>
+                Connect with Facebook
+              </button>
+              
+              {/* Secondary Button: Manual */}
+              <button
+                onClick={() => setShowManualModal(true)}
+                className="px-6 py-3 bg-white border-2 border-gray-200 text-gray-700 font-semibold rounded-xl hover:bg-gray-50 transition-all active:scale-95"
+              >
+                Manual Setup
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -234,7 +242,7 @@ const Dashboard: React.FC = () => {
         </div>
         <Link
           to="/dashboard/billing"
-          className="flex items-center space-x-1 px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white font-medium rounded-lg transition-colors whitespace-nowrap"
+          className="flex items-center space-x-1 px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white font-medium rounded-lg transition-colors whitespace-nowrap shadow-sm"
         >
           <Zap className="w-4 h-4" />
           <span>Recharge</span>
@@ -371,6 +379,16 @@ const Dashboard: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Meta Connect Modal (Manual Flow) */}
+      <MetaConnectModal
+        isOpen={showManualModal}
+        onClose={() => setShowManualModal(false)}
+        onConnect={(_token, _account) => {
+          startConnection();
+          setShowManualModal(false);
+        }}
+      />
     </div>
   );
 };
