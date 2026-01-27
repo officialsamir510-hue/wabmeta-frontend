@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
 import {
   X,
   MessageSquare,
@@ -13,17 +12,16 @@ import {
   Key
 } from 'lucide-react';
 import type { WhatsAppBusinessAccount } from '../../types/meta';
+import { meta } from '../../services/api';
 
 interface MetaConnectModalProps {
   isOpen: boolean;
   onClose: () => void;
   onConnect: (accessToken: string, account: WhatsAppBusinessAccount) => void;
+  isConnecting?: boolean;
 }
 
-type Step = 'intro' | 'manual-setup' | 'connecting' | 'select-account' | 'permissions' | 'success' | 'error';
-
-// API Configuration
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+type Step = 'intro' | 'manual-setup' | 'connecting' | 'success' | 'error';
 
 const MetaConnectModal: React.FC<MetaConnectModalProps> = ({
   isOpen,
@@ -31,7 +29,6 @@ const MetaConnectModal: React.FC<MetaConnectModalProps> = ({
   onConnect
 }) => {
   const [step, setStep] = useState<Step>('intro');
-  const [selectedAccount, setSelectedAccount] = useState<WhatsAppBusinessAccount | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   
@@ -44,140 +41,50 @@ const MetaConnectModal: React.FC<MetaConnectModalProps> = ({
     phoneNumber: ''
   });
 
-  // 🔹 EFFECT: Listen for Facebook Popup Messages
+  // Effect to listen for OAuth popup success
   useEffect(() => {
     const handleMessage = async (event: MessageEvent) => {
-      // 1. Security Check: Allow messages only from Facebook
-      if (event.origin !== "https://business.facebook.com" && event.origin !== "https://www.facebook.com") return;
+      // Security Check
+      if (event.origin !== "https://business.facebook.com" && event.origin !== "https://www.facebook.com" && event.origin !== window.location.origin) return;
 
       try {
-        // Parse data (sometimes it's a string, sometimes an object)
         const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
         
-        // 2. Check for Embedded Signup Finish Event
+        // OAuth Success
         if (data.type === 'WA_EMBEDDED_SIGNUP' && data.event === 'FINISH') {
+          // This part is handled by the callback page usually, but kept for completeness
           const { code } = data.data;
           console.log("🔹 Meta Auth Code Received:", code);
-          
-          // 3. Exchange Code for Token with Backend
-          if (code) {
-            await exchangeCodeForToken(code);
-          }
         }
       } catch (e) {
-        // Ignore non-JSON messages
-        console.error("Error parsing Meta message:", e);
+        // Ignore parsing errors
       }
     };
 
     window.addEventListener('message', handleMessage);
-    
-    // Cleanup listener on unmount
     return () => window.removeEventListener('message', handleMessage);
   }, []);
 
-  // 🔹 HELPER: Exchange Code for Token (Backend Call)
-  const exchangeCodeForToken = async (code: string) => {
-    setStep('connecting');
-    setError(null);
-
-    try {
-      const token = localStorage.getItem('wabmeta_token') || localStorage.getItem('token');
-      
-      const response = await axios.post(
-        `${API_URL}/api/meta/callback`,
-        { code },
-        {
-          headers: {
-            'Content-Type': 'application/json',
-            ...(token && { Authorization: `Bearer ${token}` })
-          }
-        }
-      );
-
-      if (response.data && response.data.success) {
-        // Create a dummy account object from response or defaults
-        const accountData: WhatsAppBusinessAccount = {
-          id: response.data.meta?.wabaId || 'Unknown',
-          name: response.data.meta?.businessName || 'WhatsApp Business',
-          phoneNumber: response.data.meta?.phoneNumber || 'Pending',
-          phoneNumberId: response.data.meta?.phoneNumberId || 'Unknown',
-          verificationStatus: 'verified',
-          qualityRating: 'GREEN',
-          messagingLimit: '1K/day'
-        };
-
-        setSelectedAccount(accountData);
-        setStep('success');
-
-        // Close modal after delay
-        setTimeout(() => {
-          onConnect(response.data.meta?.accessToken, accountData);
-          onClose();
-          resetModal();
-        }, 2000);
-      }
-    } catch (err: any) {
-      console.error("Token Exchange Error:", err);
-      setError("Failed to finalize connection with Meta.");
-      setStep('error');
-    }
-  };
-
-  // 🔹 META LOGIN HANDLER (Correct Embedded Signup URL)
+  // Handle Meta OAuth Login (Opens Popup)
   const handleMetaLogin = () => {
-    try {
-      setIsLoading(true);
-      
-      const appId = import.meta.env.VITE_META_APP_ID;
-      const configId = import.meta.env.VITE_META_CONFIG_ID;
+    const appId = import.meta.env.VITE_META_APP_ID || "881518987956566"; 
+    const redirectUri = `${window.location.origin}/meta-callback`; 
 
-      if (!appId || !configId) {
-        throw new Error("Meta App ID or Config ID is missing in environment variables.");
-      }
-      
-      // ✅ Redirect URI matches backend expectation, but 'postMessage' handles the flow
-      const redirectUri = `${window.location.origin}/meta-callback`;
-
-      // ✅ Specific Extras for Embedded Signup
-      const extras = JSON.stringify({
-        feature: "whatsapp_embedded_signup",
-        version: 2
-      });
-
-      // ✅ Correct OAuth Dialog URL
-      const authUrl = `https://www.facebook.com/v18.0/dialog/oauth?` +
-        `client_id=${appId}` + 
-        `&redirect_uri=${encodeURIComponent(redirectUri)}` +
-        `&config_id=${configId}` +
-        `&response_type=code` + 
-        `&extras=${encodeURIComponent(extras)}`;
-
-      console.log("Opening Embedded Signup:", authUrl);
+    const authUrl = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${appId}&redirect_uri=${redirectUri}&response_type=code&scope=whatsapp_business_management,whatsapp_business_messaging,business_management`;
     
-      // Open in a Popup Window (Required for postMessage listener to work)
-      const width = 600;
-      const height = 700;
-      const left = (window.screen.width - width) / 2;
-      const top = (window.screen.height - height) / 2;
+    const width = 600;
+    const height = 700;
+    const left = (window.screen.width - width) / 2;
+    const top = (window.screen.height - height) / 2;
 
-      window.open(
-        authUrl, 
-        "MetaLogin", 
-        `width=${width},height=${height},top=${top},left=${left},scrollbars=yes`
-      );
-
-    } catch (err: any) {
-      console.error("Meta Login Error:", err);
-      setError(err.message || "Failed to initialize Meta login.");
-      setStep('error');
-      setIsLoading(false);
-    }
+    window.open(authUrl, "MetaLogin", `width=${width},height=${height},top=${top},left=${left}`);
+    setStep('connecting');
   };
 
-  // Handle Manual Setup Submit
+  // ✅ Handle Manual Setup Submit
   const handleManualSetup = async () => {
     if (!manualFormData.wabaId || !manualFormData.accessToken) {
+      setError("WABA ID and Access Token are required.");
       return;
     }
 
@@ -186,53 +93,58 @@ const MetaConnectModal: React.FC<MetaConnectModalProps> = ({
     setError(null);
 
     try {
-      const token = localStorage.getItem('wabmeta_token') || localStorage.getItem('token');
-      
-      const response = await axios.post(
-        `${API_URL}/api/meta/connect`,
-        {
-          wabaId: manualFormData.wabaId.trim(),
-          phoneNumberId: manualFormData.phoneNumberId.trim(),
-          accessToken: manualFormData.accessToken.trim(),
-          businessName: manualFormData.businessName.trim(),
-          phoneNumber: manualFormData.phoneNumber.trim()
-        },
-        {
-          headers: {
-            'Content-Type': 'application/json',
-            ...(token && { Authorization: `Bearer ${token}` })
-          }
-        }
-      );
+      // 🚀 Real Backend Call using centralized API
+      const response = await meta.connect({
+        wabaId: manualFormData.wabaId.trim(),
+        phoneNumberId: manualFormData.phoneNumberId.trim(),
+        accessToken: manualFormData.accessToken.trim(),
+        businessName: manualFormData.businessName.trim(),
+        phoneNumber: manualFormData.phoneNumber.trim()
+      });
 
-      if (response.data && response.data.success) {
-        const accountData: WhatsAppBusinessAccount = {
-          id: response.data.meta?.wabaId || manualFormData.wabaId,
-          name: response.data.meta?.businessName || manualFormData.businessName,
-          phoneNumber: response.data.meta?.phoneNumber || manualFormData.phoneNumber,
-          phoneNumberId: response.data.meta?.phoneNumberId || manualFormData.phoneNumberId,
-          verificationStatus: 'verified',
-          qualityRating: 'GREEN',
-          messagingLimit: '1K/day'
-        };
-
-        setSelectedAccount(accountData);
+      if (response.data.success || response.data.connected) {
         setStep('success');
+        
+        // Update Local State immediately for UI responsiveness
+        const connectionData = {
+          isConnected: true,
+          isConnecting: false,
+          businessAccount: {
+            name: manualFormData.businessName || 'WhatsApp Business',
+            phoneNumber: manualFormData.phoneNumber || 'Not Available',
+            qualityRating: "GREEN", // Default assumption
+            messagingLimit: "250/day" // Default assumption
+          },
+          lastSync: new Date().toISOString()
+        };
+        
+        localStorage.setItem('wabmeta_connection', JSON.stringify(connectionData));
+        localStorage.setItem('metaConnection', JSON.stringify(connectionData));
+
+        // Call onConnect to notify parent
+        onConnect(
+          manualFormData.accessToken, 
+          {
+            id: manualFormData.wabaId,
+            name: manualFormData.businessName,
+            phoneNumber: manualFormData.phoneNumber,
+            phoneNumberId: manualFormData.phoneNumberId,
+            verificationStatus: 'verified',
+            qualityRating: 'GREEN',
+            messagingLimit: '250/day'
+          }
+        );
 
         setTimeout(() => {
-          onConnect(
-            response.data.meta?.accessToken || manualFormData.accessToken,
-            accountData
-          );
           onClose();
-          resetModal();
+          window.location.reload(); // Refresh to update Dashboard immediately
         }, 1500);
       } else {
-        throw new Error(response.data?.message || 'Connection failed');
+        throw new Error(response.data.message || 'Connection failed');
       }
     } catch (err: any) {
-      console.error('Meta Connect Error:', err);
-      setError(err.response?.data?.message || err.message || 'Failed to connect.');
+      console.error("Connect Error:", err);
+      setError(err.response?.data?.message || "Invalid Credentials or Server Error. Please try again.");
       setStep('error');
     } finally {
       setIsLoading(false);
@@ -247,7 +159,6 @@ const MetaConnectModal: React.FC<MetaConnectModalProps> = ({
 
   const resetModal = () => {
     setStep('intro');
-    setSelectedAccount(null);
     setError(null);
     setIsLoading(false);
     setManualFormData({
@@ -268,7 +179,6 @@ const MetaConnectModal: React.FC<MetaConnectModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      {/* Backdrop */}
       <div 
         className="absolute inset-0 bg-black/50 backdrop-blur-sm"
         onClick={handleClose}
@@ -333,20 +243,13 @@ const MetaConnectModal: React.FC<MetaConnectModalProps> = ({
                 {/* OAuth Button */}
                 <button
                   onClick={handleMetaLogin}
-                  disabled={isLoading}
-                  className="w-full flex items-center justify-center space-x-3 py-4 bg-[#1877F2] hover:bg-[#166FE5] text-white font-semibold rounded-xl transition-all transform hover:scale-[1.02] disabled:opacity-70"
+                  className="w-full flex items-center justify-center space-x-3 py-4 bg-[#1877F2] hover:bg-[#166FE5] text-white font-semibold rounded-xl transition-all transform hover:scale-[1.02]"
                 >
-                  {isLoading ? (
-                     <Loader2 className="w-6 h-6 animate-spin" />
-                  ) : (
-                    <>
-                      <svg viewBox="0 0 24 24" className="w-6 h-6" fill="currentColor">
-                        <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
-                      </svg>
-                      <span>Continue with Facebook</span>
-                      <ExternalLink className="w-4 h-4" />
-                    </>
-                  )}
+                  <svg viewBox="0 0 24 24" className="w-6 h-6" fill="currentColor">
+                    <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
+                  </svg>
+                  <span>Continue with Facebook</span>
+                  <ExternalLink className="w-4 h-4" />
                 </button>
 
                 {/* Divider */}
@@ -377,7 +280,7 @@ const MetaConnectModal: React.FC<MetaConnectModalProps> = ({
             <div className="space-y-5">
               <div className="text-center mb-4">
                 <h3 className="text-xl font-bold text-gray-900">Manual Setup</h3>
-                <p className="text-gray-500 text-sm">Enter API credentials</p>
+                <p className="text-gray-500 text-sm">Enter API credentials from Meta Developer Portal</p>
               </div>
               
               <div className="space-y-4">
@@ -456,7 +359,7 @@ const MetaConnectModal: React.FC<MetaConnectModalProps> = ({
           )}
 
           {/* Step: Success */}
-          {step === 'success' && selectedAccount && (
+          {step === 'success' && (
             <div className="py-12 text-center">
               <CheckCircle2 className="w-16 h-16 text-green-600 mx-auto mb-4" />
               <h3 className="text-xl font-bold text-gray-900">Connected!</h3>
