@@ -3,7 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate, Link } from 'react-ro
 import { Lock } from 'lucide-react';
 import ErrorBoundary from './components/common/ErrorBoundary';
 import LoadingScreen from './components/common/LoadingScreen';
-import { usePlanAccess } from './hooks/usePlanAccess'; // Ensure this hook is imported
+import { usePlanAccess } from './hooks/usePlanAccess';
 import MetaCallback from './pages/MetaCallback';
 
 // Lazy Load Pages
@@ -94,6 +94,9 @@ function App() {
             {/* ===== Public Routes ===== */}
             <Route path="/" element={<Landing />} />
             
+            {/* ✅ Meta Callback (Moved Outside Dashboard) */}
+            <Route path="/meta-callback" element={<MetaCallback />} />
+            
             {/* ===== Auth Routes ===== */}
             <Route path="/login" element={<Login />} />
             <Route path="/signup" element={<Signup />} />
@@ -105,7 +108,6 @@ function App() {
             {/* ===== Dashboard Routes ===== */}
             <Route path="/dashboard" element={<DashboardLayout />}>
               <Route index element={<Dashboard />} />
-              <Route path="meta-callback" element={<MetaCallback />} />
               
               {/* Inbox */}
               <Route path="inbox" element={<Inbox />} />
