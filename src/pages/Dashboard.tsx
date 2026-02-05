@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import {
   Send,
   MessageSquare,
@@ -9,73 +9,101 @@ import {
   ArrowRight,
   Zap,
   Loader2,
-  RefreshCw
-} from 'lucide-react';
-import StatsCard from '../components/dashboard/StatsCard';
-import QuickActions from '../components/dashboard/QuickActions';
-import RecentActivity from '../components/dashboard/RecentActivity';
-import ChartCard from '../components/dashboard/ChartCard';
-import ConnectionStatus from '../components/dashboard/ConnectionStatus';
-import MetaConnectModal from '../components/dashboard/MetaConnectModal';
-import useMetaConnection from '../hooks/useMetaConnection';
-import { dashboard, campaigns } from '../services/api';
+  RefreshCw,
+} from "lucide-react";
+
+import StatsCard from "../components/dashboard/StatsCard";
+import QuickActions from "../components/dashboard/QuickActions";
+import RecentActivity from "../components/dashboard/RecentActivity";
+import ChartCard from "../components/dashboard/ChartCard";
+import ConnectionStatus from "../components/dashboard/ConnectionStatus";
+import MetaConnectModal from "../components/dashboard/MetaConnectModal";
+import useMetaConnection from "../hooks/useMetaConnection";
+
+// ✅ Added 'billing' to imports
+import { campaigns, contacts, templates, inbox, billing } from "../services/api";
 
 const Dashboard: React.FC = () => {
   const { connection, startConnection, refreshConnection } = useMetaConnection();
-  
+
   const [statsData, setStatsData] = useState({
     contacts: 0,
     messagesSent: 0,
     deliveryRate: 0,
-    responseRate: 0
+    responseRate: 0,
   });
+
   const [activeCampaigns, setActiveCampaigns] = useState<any[]>([]);
+  const [billingUsage, setBillingUsage] = useState<any>(null); // ✅ New state for billing
   const [loading, setLoading] = useState(true);
   const [showManualModal, setShowManualModal] = useState(false);
 
-  // Helper to safely calculate progress
   const calculateProgress = (total: number = 0, sent: number = 0) => {
-    if (!total || total === 0) return 0;
+    if (!total) return 0;
     return Math.round((sent / total) * 100);
   };
 
-  // Fetch Data on Load
   useEffect(() => {
     let isMounted = true;
 
     const fetchDashboardData = async () => {
       try {
-        const [statsRes, campaignsRes] = await Promise.all([
-          dashboard.getStats().catch(() => ({ data: {} })), // Fallback on error
-          campaigns.getAll().catch(() => ({ data: [] }))
-        ]);
+        // ✅ Added billing.getUsage() to Promise.all
+        const [
+          contactsStatsRes,
+          campaignsStatsRes,
+          templatesStatsRes,
+          inboxStatsRes,
+          campaignsListRes,
+          billingUsageRes
+        ] = await Promise.all([
+            contacts.stats(),
+            campaigns.stats(),
+            templates.stats(),
+            inbox.stats(),
+            campaigns.getAll({ page: 1, limit: 5 }).catch(() => ({ data: { data: [] } })),
+            billing.getUsage().catch(() => ({ data: { data: null } })), // Handle potential billing errors gracefully
+          ]);
 
         if (!isMounted) return;
 
-        setStatsData(prev => ({ ...prev, ...statsRes.data }));
+        const contactsStats = contactsStatsRes.data?.data;
+        const campStats = campaignsStatsRes.data?.data;
+        const inStats = inboxStatsRes.data?.data;
         
-        // Handle Campaigns List
-        const allCampaigns = Array.isArray(campaignsRes.data) 
-          ? campaignsRes.data 
-          : (campaignsRes.data?.campaigns || []);
+        // ✅ Set Billing Data
+        setBillingUsage(billingUsageRes.data?.data);
 
-        const active = allCampaigns
-          .filter((c: any) => 
-            c && c.status && ['running', 'scheduled', 'completed'].includes(c.status.toLowerCase())
+        const totalSent = campStats?.totalMessagesSent || 0;
+        const totalDelivered = campStats?.totalMessagesDelivered || 0;
+        const deliveryRate = totalSent > 0 ? Math.round((totalDelivered / totalSent) * 100) : 0;
+
+        setStatsData({
+          contacts: contactsStats?.total || 0,
+          messagesSent: totalSent,
+          deliveryRate,
+          responseRate: inStats?.responseRate || 0,
+        });
+
+        // ✅ Campaigns list mapping
+        const list = campaignsListRes.data?.data || [];
+
+        const active = (Array.isArray(list) ? list : [])
+          .filter((c: any) =>
+            c?.status ? ["RUNNING", "SCHEDULED", "COMPLETED"].includes(String(c.status).toUpperCase()) : false
           )
           .slice(0, 5)
           .map((c: any) => ({
-            id: c._id || c.id,
-            name: c.name || 'Untitled Campaign',
-            status: c.status?.toLowerCase() || 'unknown',
-            sent: c.stats?.sent || 0,
-            delivered: c.stats?.delivered || 0,
-            opened: c.stats?.read || 0,
-            progress: calculateProgress(c.stats?.total, c.stats?.sent)
+            id: c.id,
+            name: c.name || "Untitled Campaign",
+            status: String(c.status || "unknown").toLowerCase(),
+            sent: c.sentCount || 0,
+            delivered: c.deliveredCount || 0,
+            opened: c.readCount || 0,
+            progress: calculateProgress(c.totalContacts || 0, c.sentCount || 0),
           }));
-          
-        setActiveCampaigns(active);
 
+        setActiveCampaigns(active);
       } catch (error) {
         console.error("Dashboard Data Error:", error);
       } finally {
@@ -84,112 +112,103 @@ const Dashboard: React.FC = () => {
     };
 
     fetchDashboardData();
-
-    return () => { isMounted = false; };
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
-  // Listen for Popup Success Message (OAuth Flow)
+  // OAuth popup success message listener
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
-      if (event.data?.type === 'META_SUCCESS') {
-        console.log("✅ OAuth Success! Setting Connection Data...");
-
-        // If in Demo Mode (Video recording)
-        const mockData = {
-          isConnected: true,
-          isConnecting: false,
-          businessName: "WabMeta Business",
-          phoneNumber: "+91 98765 43210",
-          businessId: "BIZ_123",
-          phoneNumberId: "PN_123",
-          accessToken: "mock_token",
-          qualityRating: "GREEN",
-          messagingLimit: "1K/day",
-          lastSync: new Date().toLocaleTimeString(),
-          error: null,
-          businessAccount: { 
-            name: "WabMeta Business",
-            phoneNumber: "+91 98765 43210",
-            qualityRating: "GREEN",
-            messagingLimit: "1K/day"
-          }
-        };
-        
-        localStorage.setItem('metaConnection', JSON.stringify(mockData));
-        localStorage.setItem('wabmeta_connection', JSON.stringify(mockData));
-
+      if (event.data?.type === "META_SUCCESS") {
+        console.log("✅ OAuth Success!", event.data?.payload);
         window.location.reload();
       }
     };
-    
-    window.addEventListener('message', handleMessage);
-    return () => window.removeEventListener('message', handleMessage);
+
+    window.addEventListener("message", handleMessage);
+    return () => window.removeEventListener("message", handleMessage);
   }, []);
+
+  // ✅ Logic to determine if credits are low
+  const lowCredits = (() => {
+    const msg = billingUsage?.messages; // Accessed from state
+    
+    if (!msg || !msg.limit || msg.limit <= 0) return { show: false, remaining: 0 };
+    if (msg.unlimited) return { show: false, remaining: 0 }; // ✅ paid plans: no warning
+
+    const used = Number(msg.used || 0);
+    const limit = Number(msg.limit || 0);
+    const remaining = Math.max(limit - used, 0);
+
+    const show = remaining <= 20 || (used / limit) * 100 >= 80; // ✅ Free demo threshold
+    return { show, remaining };
+  })();
 
   const stats = [
     {
-      title: 'Messages Sent',
+      title: "Messages Sent",
       value: (statsData.messagesSent || 0).toLocaleString(),
       change: 0,
       icon: Send,
-      iconColor: 'text-blue-600',
-      iconBg: 'bg-blue-100'
+      iconColor: "text-blue-600",
+      iconBg: "bg-blue-100",
     },
     {
-      title: 'Delivery Rate',
+      title: "Delivery Rate",
       value: `${statsData.deliveryRate || 0}%`,
       change: 0,
       icon: CheckCircle2,
-      iconColor: 'text-green-600',
-      iconBg: 'bg-green-100'
+      iconColor: "text-green-600",
+      iconBg: "bg-green-100",
     },
     {
-      title: 'Active Contacts',
+      title: "Active Contacts",
       value: (statsData.contacts || 0).toLocaleString(),
       change: 0,
       icon: Users,
-      iconColor: 'text-purple-600',
-      iconBg: 'bg-purple-100'
+      iconColor: "text-purple-600",
+      iconBg: "bg-purple-100",
     },
     {
-      title: 'Response Rate',
+      title: "Response Rate",
       value: `${statsData.responseRate || 0}%`,
       change: 0,
       icon: MessageSquare,
-      iconColor: 'text-orange-600',
-      iconBg: 'bg-orange-100'
+      iconColor: "text-orange-600",
+      iconBg: "bg-orange-100",
     },
   ];
 
-  // Mock chart data (Can be replaced with API later)
+  // Mock chart data
   const messageData = [
-    { name: 'Mon', messages: 2400 },
-    { name: 'Tue', messages: 1398 },
-    { name: 'Wed', messages: 9800 },
-    { name: 'Thu', messages: 3908 },
-    { name: 'Fri', messages: 4800 },
-    { name: 'Sat', messages: 3800 },
-    { name: 'Sun', messages: 4300 },
+    { name: "Mon", messages: 2400 },
+    { name: "Tue", messages: 1398 },
+    { name: "Wed", messages: 9800 },
+    { name: "Thu", messages: 3908 },
+    { name: "Fri", messages: 4800 },
+    { name: "Sat", messages: 3800 },
+    { name: "Sun", messages: 4300 },
   ];
 
   const deliveryData = [
-    { name: 'Mon', delivered: 95, failed: 5 },
-    { name: 'Tue', delivered: 98, failed: 2 },
-    { name: 'Wed', delivered: 97, failed: 3 },
-    { name: 'Thu', delivered: 99, failed: 1 },
-    { name: 'Fri', delivered: 96, failed: 4 },
-    { name: 'Sat', delivered: 98, failed: 2 },
-    { name: 'Sun', delivered: 97, failed: 3 },
+    { name: "Mon", delivered: 95, failed: 5 },
+    { name: "Tue", delivered: 98, failed: 2 },
+    { name: "Wed", delivered: 97, failed: 3 },
+    { name: "Thu", delivered: 99, failed: 1 },
+    { name: "Fri", delivered: 96, failed: 4 },
+    { name: "Sat", delivered: 98, failed: 2 },
+    { name: "Sun", delivered: 97, failed: 3 },
   ];
 
-  // OAuth Handler
   const handleMetaLogin = () => {
-    const appId = "881518987956566"; 
-    const redirectUri = `${window.location.origin}/meta-callback`; 
+    const appId = import.meta.env.VITE_META_APP_ID;
+    const redirectUri = `${window.location.origin}/meta-callback`;
 
-    const authUrl = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${appId}&redirect_uri=${redirectUri}&response_type=code&scope=whatsapp_business_management,whatsapp_business_messaging,business_management`;
-    
-    // Open in Popup
+    const authUrl = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${appId}&redirect_uri=${encodeURIComponent(
+      redirectUri
+    )}&response_type=code&scope=whatsapp_business_management,whatsapp_business_messaging,business_management`;
+
     const width = 600;
     const height = 700;
     const left = (window.screen.width - width) / 2;
@@ -202,7 +221,7 @@ const Dashboard: React.FC = () => {
     try {
       await refreshConnection();
     } catch (error) {
-      console.error('Failed to sync:', error);
+      console.error("Failed to sync:", error);
     }
   };
 
@@ -222,18 +241,18 @@ const Dashboard: React.FC = () => {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Good morning! 👋</h1>
+          <h1 className="text-2xl font-bold text-gray-900">Good morning!</h1>
           <p className="text-gray-500 mt-1">Here's what's happening with your business today.</p>
         </div>
         <div className="flex items-center space-x-3">
-          <button 
+          <button
             onClick={handleSync}
             className="p-2 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors"
             title="Refresh Connection"
           >
             <RefreshCw className="w-5 h-5 text-gray-600" />
           </button>
-          
+
           <Link
             to="/dashboard/campaigns/new"
             className="inline-flex items-center space-x-2 px-4 py-2.5 bg-primary-500 hover:bg-primary-600 text-white font-medium rounded-xl transition-colors"
@@ -261,7 +280,7 @@ const Dashboard: React.FC = () => {
                 </p>
               </div>
             </div>
-            
+
             <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
               <button
                 onClick={handleMetaLogin}
@@ -269,7 +288,7 @@ const Dashboard: React.FC = () => {
               >
                 Connect with Facebook
               </button>
-              
+
               <button
                 onClick={() => setShowManualModal(true)}
                 className="px-6 py-3 bg-white border-2 border-gray-200 text-gray-700 font-semibold rounded-xl hover:bg-gray-50 transition-all active:scale-95"
@@ -281,25 +300,29 @@ const Dashboard: React.FC = () => {
         </div>
       )}
 
-      {/* Alert Banner */}
-      <div className="bg-linear-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div className="flex items-center space-x-3">
-          <div className="w-10 h-10 bg-amber-100 rounded-full flex items-center justify-center shrink-0">
-            <AlertTriangle className="w-5 h-5 text-amber-600" />
+      {/* ✅ Alert Banner (Conditionally Rendered) */}
+      {lowCredits.show && (
+        <div className="bg-linear-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="flex items-center space-x-3">
+            <div className="w-10 h-10 bg-amber-100 rounded-full flex items-center justify-center shrink-0">
+              <AlertTriangle className="w-5 h-5 text-amber-600" />
+            </div>
+            <div>
+              <p className="font-medium text-amber-800">Low message credits</p>
+              <p className="text-sm text-amber-600">
+                You have {lowCredits.remaining} credits remaining. Recharge to continue sending messages.
+              </p>
+            </div>
           </div>
-          <div>
-            <p className="font-medium text-amber-800">Low message credits</p>
-            <p className="text-sm text-amber-600">You have 500 credits remaining. Recharge to continue sending messages.</p>
-          </div>
+          <Link
+            to="/dashboard/billing"
+            className="flex items-center space-x-1 px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white font-medium rounded-lg transition-colors whitespace-nowrap shadow-sm"
+          >
+            <Zap className="w-4 h-4" />
+            <span>Recharge</span>
+          </Link>
         </div>
-        <Link
-          to="/dashboard/billing"
-          className="flex items-center space-x-1 px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white font-medium rounded-lg transition-colors whitespace-nowrap shadow-sm"
-        >
-          <Zap className="w-4 h-4" />
-          <span>Recharge</span>
-        </Link>
-      </div>
+      )}
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6">
@@ -310,31 +333,15 @@ const Dashboard: React.FC = () => {
 
       {/* Charts Row */}
       <div className="grid lg:grid-cols-2 gap-6">
-        <ChartCard
-          title="Messages Overview"
-          subtitle="Total messages sent this week"
-          type="area"
-          data={messageData}
-          dataKey="messages"
-        />
-        <ChartCard
-          title="Delivery Performance"
-          subtitle="Message delivery rate"
-          type="bar"
-          data={deliveryData}
-          dataKey="delivered"
-          color="#10B981"
-        />
+        <ChartCard title="Messages Overview" subtitle="Total messages sent this week" type="area" data={messageData} dataKey="messages" />
+        <ChartCard title="Delivery Performance" subtitle="Message delivery rate" type="bar" data={deliveryData} dataKey="delivered" color="#10B981" />
       </div>
 
       {/* Active Campaigns Table */}
       <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-lg font-semibold text-gray-900">Active Campaigns</h2>
-          <Link 
-            to="/dashboard/campaigns"
-            className="flex items-center space-x-1 text-sm text-primary-600 hover:text-primary-700 font-medium"
-          >
+          <Link to="/dashboard/campaigns" className="flex items-center space-x-1 text-sm text-primary-600 hover:text-primary-700 font-medium">
             <span>View all</span>
             <ArrowRight className="w-4 h-4" />
           </Link>
@@ -352,6 +359,7 @@ const Dashboard: React.FC = () => {
                 <th className="pb-3 text-sm font-medium text-gray-500">Progress</th>
               </tr>
             </thead>
+
             <tbody className="divide-y divide-gray-100">
               {activeCampaigns.map((campaign) => (
                 <tr key={campaign.id} className="hover:bg-gray-50 transition-colors">
@@ -359,12 +367,16 @@ const Dashboard: React.FC = () => {
                     <p className="font-medium text-gray-900">{campaign.name}</p>
                   </td>
                   <td className="py-4">
-                    <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${
-                      campaign.status === 'running' ? 'bg-green-100 text-green-700' :
-                      campaign.status === 'scheduled' ? 'bg-blue-100 text-blue-700' :
-                      'bg-gray-100 text-gray-700'
-                    }`}>
-                      {campaign.status === 'running' && (
+                    <span
+                      className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${
+                        campaign.status === "running"
+                          ? "bg-green-100 text-green-700"
+                          : campaign.status === "scheduled"
+                          ? "bg-blue-100 text-blue-700"
+                          : "bg-gray-100 text-gray-700"
+                      }`}
+                    >
+                      {campaign.status === "running" && (
                         <span className="w-1.5 h-1.5 bg-green-500 rounded-full mr-1.5 animate-pulse"></span>
                       )}
                       {campaign.status.charAt(0).toUpperCase() + campaign.status.slice(1)}
@@ -376,16 +388,14 @@ const Dashboard: React.FC = () => {
                   <td className="py-4">
                     <div className="flex items-center space-x-2">
                       <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
-                        <div 
-                          className="h-full bg-primary-500 rounded-full transition-all"
-                          style={{ width: `${campaign.progress}%` }}
-                        ></div>
+                        <div className="h-full bg-primary-500 rounded-full transition-all" style={{ width: `${campaign.progress}%` }}></div>
                       </div>
                       <span className="text-sm text-gray-600 w-10">{campaign.progress}%</span>
                     </div>
                   </td>
                 </tr>
               ))}
+
               {activeCampaigns.length === 0 && (
                 <tr>
                   <td colSpan={6} className="py-8 text-center text-gray-500">

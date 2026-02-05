@@ -17,25 +17,21 @@ import CampaignCard from '../components/campaigns/CampaignCard';
 import CampaignFilters from '../components/campaigns/CampaignFilters';
 import type { Campaign, CampaignStatus } from '../types/campaign';
 import { campaigns as campaignApi } from '../services/api';
-import { usePlanAccess } from '../hooks/usePlanAccess'; // ✅ Import Hook
+import { usePlanAccess } from '../hooks/usePlanAccess';
 
 const Campaigns: React.FC = () => {
-  const { hasAccess } = usePlanAccess(); // ✅ Use Hook
-  
+  const { hasAccess } = usePlanAccess();
+
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
-  const [filters, setFilters] = useState<{
-    statuses: CampaignStatus[];
-    dateRange: string;
-  }>({
+  const [filters, setFilters] = useState<{ statuses: CampaignStatus[]; dateRange: string }>({
     statuses: [],
     dateRange: 'all'
   });
 
-  // Fetch Campaigns on Load
   useEffect(() => {
     fetchCampaigns();
   }, []);
@@ -44,42 +40,49 @@ const Campaigns: React.FC = () => {
     setLoading(true);
     setError(null);
     try {
-      const response = await campaignApi.getAll();
-      const campaignsData = response.data?.campaigns || response.data || [];
-      
+      const response = await campaignApi.getAll({ page: 1, limit: 50 });
+
+      // ✅ Correct array location
+      const campaignsData = Array.isArray(response.data?.data) ? response.data.data : [];
+
       const mappedCampaigns: Campaign[] = campaignsData.map((c: any) => ({
-        id: c._id || c.id,
+        id: c.id,
         name: c.name,
         description: c.description || '',
         templateId: c.templateId,
         templateName: c.templateName || 'Unknown Template',
+
         audience: {
-          type: c.audience?.type || 'all',
-          tags: c.audience?.tags || [],
-          totalContacts: c.stats?.total || 0
+          type: c.contactGroupId ? 'group' : 'all',
+          tags: [],
+          totalContacts: c.totalContacts || 0
         },
-        status: (c.status || 'DRAFT').toLowerCase() as CampaignStatus,
-        scheduledAt: c.schedule ? `${c.schedule.date} at ${c.schedule.time}` : undefined,
+
+        status: String(c.status || 'DRAFT').toLowerCase() as CampaignStatus,
+
+        scheduledAt: c.scheduledAt ? new Date(c.scheduledAt).toLocaleString() : undefined,
+
         stats: {
-          total: c.stats?.total || 0,
-          sent: c.stats?.sent || 0,
-          delivered: c.stats?.delivered || 0,
-          read: c.stats?.read || 0,
-          replied: c.stats?.replied || 0,
-          failed: c.stats?.failed || 0,
-          pending: c.stats?.pending || 0
+          total: c.totalContacts || 0,
+          sent: c.sentCount || 0,
+          delivered: c.deliveredCount || 0,
+          read: c.readCount || 0,
+          replied: 0,
+          failed: c.failedCount || 0,
+          pending: c.pendingCount || 0
         },
+
         createdAt: c.createdAt || new Date().toISOString(),
-        createdBy: c.createdBy || 'Unknown User',
-        variableMapping: c.variables || {}
+        createdBy: '—',
+        variableMapping: c.variableMapping || {}
       }));
 
       setCampaigns(mappedCampaigns);
     } catch (err: any) {
-      console.error("Error fetching campaigns:", err);
+      console.error('Error fetching campaigns:', err);
       setError(err.response?.data?.message || 'Failed to load campaigns');
-      
-      if (process.env.NODE_ENV === 'development') {
+
+      if (import.meta.env.MODE === 'development') {
         setCampaigns(getDemoCampaigns());
       }
     } finally {
@@ -94,17 +97,9 @@ const Campaigns: React.FC = () => {
       description: 'Festive season promotional campaign',
       templateId: '1',
       templateName: 'Diwali Sale Promotion',
-      audience: { type: 'all', totalContacts: 2500 },
+      audience: { type: 'all', totalContacts: 2500, tags: [] },
       status: 'completed',
-      stats: {
-        total: 2500,
-        sent: 2500,
-        delivered: 2450,
-        read: 1800,
-        replied: 320,
-        failed: 50,
-        pending: 0
-      },
+      stats: { total: 2500, sent: 2500, delivered: 2450, read: 1800, replied: 0, failed: 50, pending: 0 },
       createdAt: '2 days ago',
       createdBy: 'John Doe',
       variableMapping: { '1': 'first_name', '2': 'order_date' }
@@ -119,10 +114,11 @@ const Campaigns: React.FC = () => {
   ];
 
   const filteredCampaigns = campaigns.filter(campaign => {
-    const matchesSearch = campaign.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         campaign.templateName.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesStatus = filters.statuses.length === 0 || 
-                         filters.statuses.includes(campaign.status);
+    const matchesSearch =
+      campaign.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      campaign.templateName.toLowerCase().includes(searchQuery.toLowerCase());
+
+    const matchesStatus = filters.statuses.length === 0 || filters.statuses.includes(campaign.status);
     return matchesSearch && matchesStatus;
   });
 
@@ -143,7 +139,7 @@ const Campaigns: React.FC = () => {
   const handlePause = async (id: string) => {
     try {
       await campaignApi.pause(id);
-      setCampaigns(prev => prev.map(c => c.id === id ? { ...c, status: 'paused' } : c));
+      setCampaigns(prev => prev.map(c => (c.id === id ? { ...c, status: 'paused' } : c)));
     } catch (err: any) {
       alert(err.response?.data?.message || 'Failed to pause campaign');
     }
@@ -151,8 +147,11 @@ const Campaigns: React.FC = () => {
 
   const handleResume = async (id: string) => {
     try {
-      await campaignApi.start(id);
-      setCampaigns(prev => prev.map(c => c.id === id ? { ...c, status: 'running' } : c));
+      // ✅ resume endpoint exists in our backend
+      if (campaignApi.resume) await campaignApi.resume(id);
+      else await campaignApi.start(id);
+
+      setCampaigns(prev => prev.map(c => (c.id === id ? { ...c, status: 'running' } : c)));
     } catch (err: any) {
       alert(err.response?.data?.message || 'Failed to resume campaign');
     }
@@ -186,8 +185,7 @@ const Campaigns: React.FC = () => {
           >
             <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
           </button>
-          
-          {/* ✅ Locked Create Button Logic */}
+
           {hasAccess('automation') ? (
             <Link
               to="/dashboard/campaigns/new"
@@ -217,10 +215,7 @@ const Campaigns: React.FC = () => {
           <div>
             <h3 className="text-sm font-medium text-red-800">Error Loading Campaigns</h3>
             <p className="text-sm text-red-600 mt-1">{error}</p>
-            <button 
-              onClick={fetchCampaigns}
-              className="text-sm font-medium text-red-700 hover:text-red-800 mt-2 underline"
-            >
+            <button onClick={fetchCampaigns} className="text-sm font-medium text-red-700 hover:text-red-800 mt-2 underline">
               Retry
             </button>
           </div>
@@ -254,13 +249,13 @@ const Campaigns: React.FC = () => {
             onFilterChange={setFilters}
           />
         </div>
-        
+
         <div className="flex items-center space-x-2">
           <button
             onClick={() => setViewMode('grid')}
             className={`p-2 rounded-lg transition-colors ${
-              viewMode === 'grid' 
-                ? 'bg-primary-100 text-primary-600' 
+              viewMode === 'grid'
+                ? 'bg-primary-100 text-primary-600'
                 : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
             }`}
           >
@@ -269,8 +264,8 @@ const Campaigns: React.FC = () => {
           <button
             onClick={() => setViewMode('list')}
             className={`p-2 rounded-lg transition-colors ${
-              viewMode === 'list' 
-                ? 'bg-primary-100 text-primary-600' 
+              viewMode === 'list'
+                ? 'bg-primary-100 text-primary-600'
                 : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
             }`}
           >
@@ -281,11 +276,7 @@ const Campaigns: React.FC = () => {
 
       {/* Campaigns Grid */}
       {filteredCampaigns.length > 0 ? (
-        <div className={`grid gap-6 ${
-          viewMode === 'grid' 
-            ? 'grid-cols-1 lg:grid-cols-2' 
-            : 'grid-cols-1'
-        }`}>
+        <div className={`grid gap-6 ${viewMode === 'grid' ? 'grid-cols-1 lg:grid-cols-2' : 'grid-cols-1'}`}>
           {filteredCampaigns.map((campaign) => (
             <CampaignCard
               key={campaign.id}
@@ -304,13 +295,9 @@ const Campaigns: React.FC = () => {
           </div>
           <h3 className="text-lg font-semibold text-gray-900 mb-2">No campaigns found</h3>
           <p className="text-gray-500 mb-6">
-            {searchQuery || filters.statuses.length > 0
-              ? 'Try adjusting your filters'
-              : 'Create your first campaign to get started'
-            }
+            {searchQuery || filters.statuses.length > 0 ? 'Try adjusting your filters' : 'Create your first campaign to get started'}
           </p>
-          
-          {/* ✅ Locked Create Button (Empty State) */}
+
           {hasAccess('automation') ? (
             <Link
               to="/dashboard/campaigns/new"
@@ -320,10 +307,7 @@ const Campaigns: React.FC = () => {
               <span>Create Campaign</span>
             </Link>
           ) : (
-            <button
-              disabled
-              className="inline-flex items-center space-x-2 px-4 py-2.5 bg-gray-100 text-gray-400 font-medium rounded-xl cursor-not-allowed"
-            >
+            <button disabled className="inline-flex items-center space-x-2 px-4 py-2.5 bg-gray-100 text-gray-400 font-medium rounded-xl cursor-not-allowed">
               <Plus className="w-5 h-5" />
               <span>Create Campaign</span>
               <Lock className="w-4 h-4 ml-1" />

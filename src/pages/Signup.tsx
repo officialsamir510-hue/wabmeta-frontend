@@ -1,21 +1,29 @@
-import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { 
-  Mail, Lock, User, Building2, ArrowRight, ArrowLeft, Check, Sparkles, AlertCircle
-} from 'lucide-react';
-import AuthLayout from '../components/auth/AuthLayout';
-import Input from '../components/common/Input';
-import Button from '../components/common/Button';
-import Checkbox from '../components/common/Checkbox';
-import SocialLoginButtons from '../components/auth/SocialLoginButtons';
-import PasswordStrengthMeter from '../components/auth/PasswordStrengthMeter';
-import { auth } from '../services/api';
+import React, { useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import {
+  Mail,
+  Lock,
+  User,
+  Building2,
+  ArrowRight,
+  ArrowLeft,
+  Check,
+  Sparkles,
+  AlertCircle,
+} from "lucide-react";
+import AuthLayout from "../components/auth/AuthLayout";
+import Input from "../components/common/Input";
+import Button from "../components/common/Button";
+import Checkbox from "../components/common/Checkbox";
+import SocialLoginButtons from "../components/auth/SocialLoginButtons";
+import PasswordStrengthMeter from "../components/auth/PasswordStrengthMeter";
+import { auth } from "../services/api";
 
 interface FormData {
   firstName: string;
   lastName: string;
   email: string;
-  phone: string;
+  phone: string; // 10 digit (UI)
   companyName: string;
   password: string;
   confirmPassword: string;
@@ -31,13 +39,13 @@ const Signup: React.FC = () => {
   const [apiError, setApiError] = useState<string | null>(null);
 
   const [formData, setFormData] = useState<FormData>({
-    firstName: '',
-    lastName: '',
-    email: '',
-    phone: '',
-    companyName: '',
-    password: '',
-    confirmPassword: '',
+    firstName: "",
+    lastName: "",
+    email: "",
+    phone: "",
+    companyName: "",
+    password: "",
+    confirmPassword: "",
     agreeToTerms: false,
     subscribeNewsletter: true,
   });
@@ -46,44 +54,49 @@ const Signup: React.FC = () => {
 
   const validateStep1 = () => {
     const newErrors: Record<string, string> = {};
-    if (!formData.firstName.trim()) newErrors.firstName = 'First name is required';
-    if (!formData.lastName.trim()) newErrors.lastName = 'Last name is required';
-    if (!formData.email) {
-      newErrors.email = 'Email is required';
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
-      newErrors.email = 'Please enter a valid email';
+    if (!formData.firstName.trim()) newErrors.firstName = "First name is required";
+    if (!formData.lastName.trim()) newErrors.lastName = "Last name is required";
+
+    if (!formData.email) newErrors.email = "Email is required";
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+      newErrors.email = "Please enter a valid email";
     }
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
   const validateStep2 = () => {
     const newErrors: Record<string, string> = {};
-    if (!formData.phone) {
-      newErrors.phone = 'Phone number is required';
-    } else if (!/^[6-9]\d{9}$/.test(formData.phone)) {
-      newErrors.phone = 'Please enter a valid 10-digit phone number';
+
+    // Backend expects E.164 like +91XXXXXXXXXX
+    if (!formData.phone) newErrors.phone = "Phone number is required";
+    else if (!/^[6-9]\d{9}$/.test(formData.phone)) {
+      newErrors.phone = "Please enter a valid 10-digit phone number";
     }
-    if (!formData.companyName.trim()) newErrors.companyName = 'Company name is required';
+
+    if (!formData.companyName.trim()) newErrors.companyName = "Company name is required";
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
   const validateStep3 = () => {
     const newErrors: Record<string, string> = {};
-    if (!formData.password) {
-      newErrors.password = 'Password is required';
-    } else if (formData.password.length < 8) {
-      newErrors.password = 'Password must be at least 8 characters';
+
+    // Backend password policy: 1 uppercase, 1 lowercase, 1 number, min 8
+    const strongPasswordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/;
+
+    if (!formData.password) newErrors.password = "Password is required";
+    else if (!strongPasswordRegex.test(formData.password)) {
+      newErrors.password = "Password must have 1 uppercase, 1 lowercase and 1 number (min 8 chars)";
     }
-    if (!formData.confirmPassword) {
-      newErrors.confirmPassword = 'Please confirm your password';
-    } else if (formData.password !== formData.confirmPassword) {
-      newErrors.confirmPassword = 'Passwords do not match';
-    }
-    if (!formData.agreeToTerms) {
-      newErrors.agreeToTerms = 'You must agree to the terms and conditions';
-    }
+
+    if (!formData.confirmPassword) newErrors.confirmPassword = "Please confirm your password";
+    else if (formData.password !== formData.confirmPassword) newErrors.confirmPassword = "Passwords do not match";
+
+    if (!formData.agreeToTerms) newErrors.agreeToTerms = "You must agree to the terms and conditions";
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -103,58 +116,73 @@ const Signup: React.FC = () => {
     }
   };
 
+  const updateFormData = (field: keyof FormData, value: string | boolean) => {
+    setFormData({ ...formData, [field]: value });
+    if (errors[field]) setErrors({ ...errors, [field]: "" });
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setApiError(null);
 
     if (!validateStep3()) return;
-    
+
     setLoading(true);
-    
+
     try {
-      // Backend request
-      const response = await auth.signup({
-        name: `${formData.firstName} ${formData.lastName}`.trim(),
-        email: formData.email,
+      // ✅ Convert phone to E.164 for backend
+      const phoneE164 = `+91${formData.phone}`;
+
+      // ✅ New backend expects: firstName, lastName, organizationName
+      const response = await auth.register({
+        firstName: formData.firstName.trim(),
+        lastName: formData.lastName.trim(),
+        email: formData.email.trim().toLowerCase(),
         password: formData.password,
-        phone: formData.phone,
-        companyName: formData.companyName,
+        phone: phoneE164,
+        organizationName: formData.companyName.trim(),
       });
 
-      console.log('Signup Response:', response.data);
+      const result = response.data?.data;
+      const accessToken = result?.tokens?.accessToken;
+      const user = result?.user;
+      const organization = result?.organization;
 
-      // Check if OTP was sent (backend should return 'requireVerification: true')
-      if (response.data.requireVerification || response.data.message?.includes('OTP')) {
-        navigate('/verify-otp', { state: { email: formData.email } });
-      } else {
-        // Direct login fallback (rare)
-        navigate('/login');
+      if (!accessToken || !user) {
+        console.error("Unexpected register response:", response.data);
+        setApiError("Registration failed: invalid server response.");
+        return;
       }
 
+      // ✅ store token in the key that api.ts interceptor uses
+      localStorage.setItem("accessToken", accessToken);
+      // optional compatibility
+      localStorage.setItem("token", accessToken);
+      localStorage.setItem("wabmeta_token", accessToken);
+
+      localStorage.setItem("wabmeta_user", JSON.stringify(user));
+      if (organization) localStorage.setItem("wabmeta_org", JSON.stringify(organization));
+
+      // ✅ New backend sends verification email link (not OTP by default)
+      // So just go to dashboard or show “check email”
+      navigate("/dashboard");
     } catch (error: any) {
       console.error("Signup Error:", error);
-      setApiError(error.response?.data?.message || 'Registration failed. Please try again.');
+      setApiError(error.response?.data?.message || "Registration failed. Please try again.");
     } finally {
       setLoading(false);
     }
   };
 
-  const updateFormData = (field: keyof FormData, value: string | boolean) => {
-    setFormData({ ...formData, [field]: value });
-    if (errors[field]) setErrors({ ...errors, [field]: '' });
-  };
-
   return (
-    <AuthLayout 
-      title={
-        step === 1 ? "Create your account" :
-        step === 2 ? "Business Information" :
-        "Set your password"
-      }
+    <AuthLayout
+      title={step === 1 ? "Create your account" : step === 2 ? "Business Information" : "Set your password"}
       subtitle={
-        step === 1 ? "Start your 14-day free trial. No credit card required." :
-        step === 2 ? "Tell us about your business" :
-        "Choose a secure password for your account"
+        step === 1
+          ? "Start your free trial. No credit card required."
+          : step === 2
+          ? "Tell us about your business"
+          : "Choose a secure password for your account"
       }
     >
       {/* Progress Bar */}
@@ -162,23 +190,19 @@ const Signup: React.FC = () => {
         <div className="flex items-center justify-between mb-2">
           {[1, 2, 3].map((s) => (
             <div key={s} className="flex items-center">
-              <div 
+              <div
                 className={`w-10 h-10 rounded-full flex items-center justify-center font-semibold transition-all duration-300 ${
-                  s < step 
-                    ? 'bg-primary-500 text-white' 
-                    : s === step 
-                      ? 'bg-primary-500 text-white ring-4 ring-primary-100' 
-                      : 'bg-gray-200 text-gray-500'
+                  s < step
+                    ? "bg-primary-500 text-white"
+                    : s === step
+                    ? "bg-primary-500 text-white ring-4 ring-primary-100"
+                    : "bg-gray-200 text-gray-500"
                 }`}
               >
                 {s < step ? <Check className="w-5 h-5" /> : s}
               </div>
               {s < 3 && (
-                <div 
-                  className={`w-16 h-1 mx-2 rounded transition-all duration-300 ${
-                    s < step ? 'bg-primary-500' : 'bg-gray-200'
-                  }`}
-                ></div>
+                <div className={`w-16 h-1 mx-2 rounded transition-all duration-300 ${s < step ? "bg-primary-500" : "bg-gray-200"}`}></div>
               )}
             </div>
           ))}
@@ -202,25 +226,25 @@ const Signup: React.FC = () => {
                 placeholder="John"
                 icon={<User className="w-5 h-5" />}
                 value={formData.firstName}
-                onChange={(e) => updateFormData('firstName', e.target.value)}
+                onChange={(e) => updateFormData("firstName", e.target.value)}
                 error={errors.firstName}
               />
               <Input
                 label="Last Name"
                 placeholder="Doe"
                 value={formData.lastName}
-                onChange={(e) => updateFormData('lastName', e.target.value)}
+                onChange={(e) => updateFormData("lastName", e.target.value)}
                 error={errors.lastName}
               />
             </div>
-            
+
             <Input
               label="Email Address"
               type="email"
               placeholder="john@company.com"
               icon={<Mail className="w-5 h-5" />}
               value={formData.email}
-              onChange={(e) => updateFormData('email', e.target.value)}
+              onChange={(e) => updateFormData("email", e.target.value)}
               error={errors.email}
             />
 
@@ -254,21 +278,21 @@ const Signup: React.FC = () => {
                   type="tel"
                   placeholder="9876543210"
                   value={formData.phone}
-                  onChange={(e) => updateFormData('phone', e.target.value)}
+                  onChange={(e) => updateFormData("phone", e.target.value)}
                   className={`flex-1 px-4 py-3.5 border rounded-r-xl transition-all focus:outline-none focus:ring-2 ${
-                    errors.phone ? 'border-red-300 focus:ring-red-500/20' : 'border-gray-200 focus:ring-primary-500/20'
+                    errors.phone ? "border-red-300 focus:ring-red-500/20" : "border-gray-200 focus:ring-primary-500/20"
                   }`}
                 />
               </div>
               {errors.phone && <p className="mt-2 text-sm text-red-600">{errors.phone}</p>}
             </div>
-            
+
             <Input
               label="Company Name"
               placeholder="Acme Inc."
               icon={<Building2 className="w-5 h-5" />}
               value={formData.companyName}
-              onChange={(e) => updateFormData('companyName', e.target.value)}
+              onChange={(e) => updateFormData("companyName", e.target.value)}
               error={errors.companyName}
             />
 
@@ -293,19 +317,19 @@ const Signup: React.FC = () => {
                 placeholder="Create a strong password"
                 icon={<Lock className="w-5 h-5" />}
                 value={formData.password}
-                onChange={(e) => updateFormData('password', e.target.value)}
+                onChange={(e) => updateFormData("password", e.target.value)}
                 error={errors.password}
               />
               <PasswordStrengthMeter password={formData.password} />
             </div>
-            
+
             <Input
               label="Confirm Password"
               type="password"
               placeholder="Confirm your password"
               icon={<Lock className="w-5 h-5" />}
               value={formData.confirmPassword}
-              onChange={(e) => updateFormData('confirmPassword', e.target.value)}
+              onChange={(e) => updateFormData("confirmPassword", e.target.value)}
               error={errors.confirmPassword}
             />
 
@@ -313,19 +337,25 @@ const Signup: React.FC = () => {
               <Checkbox
                 id="agree-terms"
                 checked={formData.agreeToTerms}
-                onChange={(checked) => updateFormData('agreeToTerms', checked)}
+                onChange={(checked) => updateFormData("agreeToTerms", checked)}
                 error={errors.agreeToTerms}
                 label={
                   <span>
-                    I agree to the <Link to="/terms" className="text-primary-600 hover:underline">Terms</Link> and{' '}
-                    <Link to="/privacy" className="text-primary-600 hover:underline">Privacy Policy</Link>
+                    I agree to the{" "}
+                    <Link to="/terms" className="text-primary-600 hover:underline">
+                      Terms
+                    </Link>{" "}
+                    and{" "}
+                    <Link to="/privacy" className="text-primary-600 hover:underline">
+                      Privacy Policy
+                    </Link>
                   </span>
                 }
               />
               <Checkbox
                 id="subscribe"
                 checked={formData.subscribeNewsletter}
-                onChange={(checked) => updateFormData('subscribeNewsletter', checked)}
+                onChange={(checked) => updateFormData("subscribeNewsletter", checked)}
                 label="Send me product updates"
               />
             </div>
@@ -342,8 +372,10 @@ const Signup: React.FC = () => {
         )}
 
         <p className="text-center text-gray-600">
-          Already have an account?{' '}
-          <Link to="/login" className="font-semibold text-primary-600 hover:text-primary-500">Sign in</Link>
+          Already have an account?{" "}
+          <Link to="/login" className="font-semibold text-primary-600 hover:text-primary-500">
+            Sign in
+          </Link>
         </p>
       </form>
     </AuthLayout>

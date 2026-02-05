@@ -1,5 +1,10 @@
+/* src/index.css */
+
 @import "tailwindcss";
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+
+/* ✅ Tailwind v4 dark variant enable */
+@custom-variant dark (&:where(.dark, .dark *));
 
 /* Custom CSS Variables for your theme */
 @theme {
@@ -13,23 +18,42 @@
   --color-primary-700: #15803d;
   --color-primary-800: #166534;
   --color-primary-900: #14532d;
-  
+
   --color-whatsapp-light: #DCF8C6;
   --color-whatsapp-dark: #075E54;
   --color-whatsapp-teal: #128C7E;
   --color-whatsapp-blue: #34B7F1;
-  
+
   --font-family-sans: 'Inter', system-ui, sans-serif;
-  
+
   --shadow-soft: 0 2px 15px -3px rgba(0, 0, 0, 0.07), 0 10px 20px -2px rgba(0, 0, 0, 0.04);
   --shadow-glow: 0 0 40px rgba(37, 211, 102, 0.15);
-  
+
   --animate-float: float 6s ease-in-out infinite;
 }
 
 @keyframes float {
   0%, 100% { transform: translateY(0); }
   50% { transform: translateY(-20px); }
+}
+
+/* ✅ Base body colors for light/dark */
+html, body {
+  height: 100%;
+}
+
+body {
+  font-family: 'Inter', system-ui, sans-serif;
+  @apply bg-gray-50 text-gray-900;
+}
+
+.dark body {
+  @apply bg-slate-950 text-slate-100;
+}
+
+/* ✅ Smooth theme transition */
+* {
+  transition: background-color 150ms ease, color 150ms ease, border-color 150ms ease;
 }
 
 /* Custom Scrollbar */
@@ -51,7 +75,19 @@
 ::-webkit-scrollbar-thumb:hover {
   background: #94a3b8;
 }
-/* Add to src/index.css */
+
+/* ✅ Dark scrollbar */
+.dark ::-webkit-scrollbar-track {
+  background: #0b1220;
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: #334155;
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: #475569;
+}
 
 /* Fade In Animation */
 .animate-fade-in {
@@ -59,14 +95,8 @@
 }
 
 @keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
 /* Shake Animation for Errors */
@@ -96,27 +126,25 @@
 }
 
 @keyframes checkMark {
-  0% {
-    transform: scale(0);
-    opacity: 0;
-  }
-  50% {
-    transform: scale(1.2);
-  }
-  100% {
-    transform: scale(1);
-    opacity: 1;
-  }
+  0%   { transform: scale(0); opacity: 0; }
+  50%  { transform: scale(1.2); }
+  100% { transform: scale(1); opacity: 1; }
 }
 
 /* Input Focus Ring */
 .focus-ring {
-  @apply focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2;
+  @apply focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-white;
+}
+.dark .focus-ring {
+  @apply focus:ring-offset-slate-950;
 }
 
 /* Glass Effect */
 .glass {
   @apply bg-white/80 backdrop-blur-lg;
+}
+.dark .glass {
+  @apply bg-slate-900/60;
 }
 
 /* Gradient Border */
@@ -125,4 +153,99 @@
   background: linear-gradient(white, white) padding-box,
               linear-gradient(135deg, #25D366, #128C7E) border-box;
   border: 2px solid transparent;
+}
+.dark .gradient-border {
+  background: linear-gradient(#0b1220, #0b1220) padding-box,
+              linear-gradient(135deg, #25D366, #128C7E) border-box;
+}
+/* =======================================================
+   DARK MODE COMPATIBILITY PATCH (for existing light classes)
+   Add this at the END of src/index.css
+   ======================================================= */
+
+.dark .bg-white { background-color: rgb(15 23 42) !important; }         /* slate-900 */
+.dark .bg-gray-50 { background-color: rgb(2 6 23) !important; }        /* slate-950 */
+.dark .bg-gray-100 { background-color: rgb(30 41 59) !important; }     /* slate-800 */
+.dark .bg-gray-200 { background-color: rgb(51 65 85) !important; }     /* slate-700 */
+
+.dark .text-gray-900 { color: rgb(248 250 252) !important; }           /* slate-50 */
+.dark .text-gray-800 { color: rgb(241 245 249) !important; }           /* slate-100 */
+.dark .text-gray-700 { color: rgb(226 232 240) !important; }           /* slate-200 */
+.dark .text-gray-600 { color: rgb(203 213 225) !important; }           /* slate-300 */
+.dark .text-gray-500 { color: rgb(148 163 184) !important; }           /* slate-400 */
+.dark .text-gray-400 { color: rgb(100 116 139) !important; }           /* slate-500 */
+
+.dark .border-gray-200 { border-color: rgb(51 65 85) !important; }     /* slate-700 */
+.dark .border-gray-100 { border-color: rgb(30 41 59) !important; }     /* slate-800 */
+.dark .divide-gray-100 > :not([hidden]) ~ :not([hidden]) { border-color: rgb(30 41 59) !important; }
+.dark .divide-gray-200 > :not([hidden]) ~ :not([hidden]) { border-color: rgb(51 65 85) !important; }
+
+/* Hover utility overrides (Tailwind classes are escaped with backslashes) */
+.dark .hover\:bg-gray-50:hover { background-color: rgb(30 41 59) !important; }   /* slate-800 */
+.dark .hover\:bg-gray-100:hover { background-color: rgb(51 65 85) !important; } /* slate-700 */
+.dark .hover\:text-gray-900:hover { color: rgb(248 250 252) !important; }
+
+/* Inputs */
+.dark input,
+.dark textarea,
+.dark select {
+  background-color: rgb(30 41 59) !important;  /* slate-800 */
+  border-color: rgb(51 65 85) !important;      /* slate-700 */
+  color: rgb(248 250 252) !important;          /* slate-50 */
+}
+
+.dark input::placeholder,
+.dark textarea::placeholder {
+  color: rgb(148 163 184) !important;          /* slate-400 */
+}
+
+/* Shadows (optional) */
+.dark .shadow,
+.dark .shadow-sm,
+.dark .shadow-md,
+.dark .shadow-lg,
+.dark .shadow-xl {
+  box-shadow: 0 10px 25px rgba(0,0,0,0.35) !important;
+}
+/* =========================
+   DARK FIX for glass/bg-white/xx + light gradients
+   Paste at END of src/index.css
+   ========================= */
+
+/* glass class ka dark version */
+.dark .glass {
+  background-color: rgb(15 23 42 / 0.75) !important; /* slate-900 75% */
+}
+
+/* bg-white/opacity variants */
+.dark .bg-white\/95,
+.dark .bg-white\/90,
+.dark .bg-white\/85,
+.dark .bg-white\/80,
+.dark .bg-white\/75,
+.dark .bg-white\/70,
+.dark .bg-white\/60,
+.dark .bg-white\/50 {
+  background-color: rgb(15 23 42 / 0.75) !important;
+}
+
+/* light info backgrounds */
+.dark .bg-blue-50 { background-color: rgb(15 23 42) !important; }    /* slate-900 */
+.dark .bg-indigo-50 { background-color: rgb(15 23 42) !important; }  /* slate-900 */
+.dark .bg-sky-50 { background-color: rgb(15 23 42) !important; }     /* slate-900 */
+
+/* gradient from/to (Tailwind uses CSS vars for gradients) */
+.dark .from-blue-50 {
+  --tw-gradient-from: rgb(15 23 42) !important;
+  --tw-gradient-to: rgb(15 23 42 / 0) !important;
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to) !important;
+}
+.dark .to-indigo-50 { --tw-gradient-to: rgb(30 41 59) !important; }  /* slate-800 */
+.dark .to-blue-50   { --tw-gradient-to: rgb(30 41 59) !important; }  /* slate-800 */
+.dark .to-sky-50    { --tw-gradient-to: rgb(30 41 59) !important; }  /* slate-800 */
+
+/* borders in dark */
+.dark .border-gray-100,
+.dark .border-gray-200 {
+  border-color: rgb(51 65 85) !important; /* slate-700 */
 }

@@ -19,9 +19,11 @@ import AddContactModal from '../components/contacts/AddContactModal';
 import api from '../services/api';
 import { useApp } from '../context/AppContext';
 
-// Contact Interface
+// ✅ UI Contact Interface (keep id:number for your table)
+// ✅ add apiId for backend
 interface Contact {
-  id: number;
+  id: number;              // UI id (for selection/table)
+  apiId: string;           // backend Contact.id (cuid)
   firstName: string;
   lastName: string;
   phone: string;
@@ -38,8 +40,7 @@ interface Contact {
 const Contacts: React.FC = () => {
   const navigate = useNavigate();
   const { refreshStats } = useApp();
-  
-  // ✅ Correctly initialized as empty array (No hardcoded data)
+
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -48,57 +49,67 @@ const Contacts: React.FC = () => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingContact, setEditingContact] = useState<Contact | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
-  // Removed unused isSubmitting state
   const itemsPerPage = 10;
 
-  // Check Token
+  // ✅ Token check
   useEffect(() => {
-    const token = localStorage.getItem('wabmeta_token') || localStorage.getItem('token');
+    const token =
+      localStorage.getItem('accessToken') ||
+      localStorage.getItem('token') ||
+      localStorage.getItem('wabmeta_token');
+
     if (!token) {
       navigate('/login');
       return;
     }
     fetchContacts();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [navigate]);
 
   // ✅ Fetch Real Data from API
   const fetchContacts = async () => {
     setLoading(true);
     setError(null);
-    
+
     try {
-      // 🚀 Real API Call
-      const response = await api.get('/contacts');
-      
-      const contactsData = response.data?.contacts || response.data || [];
-      
-      // Transform Data
-      const mappedContacts: Contact[] = contactsData.map((contact: any, index: number) => ({
-        id: typeof contact._id === 'string' ? index + 1 : (contact.id || index + 1),
-        _id: contact._id,
-        firstName: contact.firstName || '',
-        lastName: contact.lastName || '',
-        phone: contact.phone || '',
-        email: contact.email || '',
-        company: contact.company || '',
-        address: contact.address || '',
-        status: contact.status || 'active',
-        tags: contact.tags || [],
-        notes: contact.notes || '',
-        lastContacted: contact.lastContacted || 'Never',
-        createdAt: contact.createdAt || new Date().toISOString()
-      }));
-      
+      const response = await api.get('/contacts'); // baseURL already /api/v1
+
+      // ✅ Correct: backend returns contacts array in response.data.data
+      const contactsData = Array.isArray(response.data?.data) ? response.data.data : [];
+
+      const mappedContacts: Contact[] = contactsData.map((contact: any, index: number) => {
+        const cf = contact.customFields || {};
+
+        // Backend status: ACTIVE | BLOCKED | UNSUBSCRIBED
+        const uiStatus: Contact['status'] =
+          String(contact.status || 'ACTIVE').toUpperCase() === 'ACTIVE' ? 'active' : 'inactive';
+
+        return {
+          id: index + 1,
+          apiId: contact.id, // cuid string
+
+          firstName: contact.firstName || '',
+          lastName: contact.lastName || '',
+          phone: contact.phone || '',
+          email: contact.email || '',
+
+          company: cf.company || '',
+          address: cf.address || '',
+          notes: cf.notes || '',
+
+          status: uiStatus,
+          tags: Array.isArray(contact.tags) ? contact.tags : [],
+
+          lastContacted: contact.lastMessageAt ? new Date(contact.lastMessageAt).toLocaleString() : 'Never',
+          createdAt: contact.createdAt || new Date().toISOString(),
+        };
+      });
+
       setContacts(mappedContacts);
       refreshStats();
     } catch (err: any) {
       console.error('Error fetching contacts:', err);
       setError(err.response?.data?.message || 'Failed to load contacts');
-      
-      // Fallback only for dev environment if API fails completely
-      if (process.env.NODE_ENV === 'development' && !contacts.length) {
-        // Optional: setContacts(getDemoContacts());
-      }
     } finally {
       setLoading(false);
     }
@@ -106,30 +117,10 @@ const Contacts: React.FC = () => {
 
   // Stats calculation based on REAL data
   const stats = [
-    { 
-      label: 'Total Contacts', 
-      value: contacts.length, 
-      icon: Users, 
-      color: 'bg-blue-100 text-blue-600' 
-    },
-    { 
-      label: 'Active', 
-      value: contacts.filter(c => c.status === 'active').length, 
-      icon: UserCheck, 
-      color: 'bg-green-100 text-green-600' 
-    },
-    { 
-      label: 'Inactive', 
-      value: contacts.filter(c => c.status === 'inactive').length, 
-      icon: UserX, 
-      color: 'bg-red-100 text-red-600' 
-    },
-    { 
-      label: 'Pending', 
-      value: contacts.filter(c => c.status === 'pending').length, 
-      icon: Clock, 
-      color: 'bg-yellow-100 text-yellow-600' 
-    },
+    { label: 'Total Contacts', value: contacts.length, icon: Users, color: 'bg-blue-100 text-blue-600' },
+    { label: 'Active', value: contacts.filter(c => c.status === 'active').length, icon: UserCheck, color: 'bg-green-100 text-green-600' },
+    { label: 'Inactive', value: contacts.filter(c => c.status === 'inactive').length, icon: UserX, color: 'bg-red-100 text-red-600' },
+    { label: 'Pending', value: contacts.filter(c => c.status === 'pending').length, icon: Clock, color: 'bg-yellow-100 text-yellow-600' },
   ];
 
   // Filter Logic
@@ -169,17 +160,31 @@ const Contacts: React.FC = () => {
     }
   };
 
-  // ✅ Real Save API Call
+  // ✅ Create/Update contact (backend compatible)
   const handleSaveContact = async (contactData: Partial<Contact>) => {
     try {
+      const payload: any = {
+        firstName: contactData.firstName || '',
+        lastName: contactData.lastName || '',
+        email: contactData.email || null,
+        tags: contactData.tags || [],
+        // backend expects digits only phone; we keep same UI
+        phone: (contactData.phone || '').replace(/\D/g, ''),
+        countryCode: '+91',
+        customFields: {
+          company: contactData.company || '',
+          address: contactData.address || '',
+          notes: contactData.notes || '',
+        }
+      };
+
       if (editingContact) {
-        const contactId = (editingContact as any)._id || editingContact.id;
-        await api.put(`/contacts/${contactId}`, contactData);
+        await api.put(`/contacts/${editingContact.apiId}`, payload);
       } else {
-        await api.post('/contacts', contactData);
+        await api.post('/contacts', payload);
       }
-      
-      await fetchContacts(); // Refresh list from server
+
+      await fetchContacts();
       setShowAddModal(false);
       setEditingContact(null);
     } catch (err: any) {
@@ -187,50 +192,53 @@ const Contacts: React.FC = () => {
     }
   };
 
-  // ✅ Real Delete API Call
+  // ✅ Delete contact
   const handleDeleteContact = async (id: number) => {
     if (!window.confirm('Are you sure?')) return;
-    
+
     const contact = contacts.find(c => c.id === id);
-    const apiId = (contact as any)?._id || id;
+    if (!contact) return;
 
     try {
-      await api.delete(`/contacts/${apiId}`);
-      await fetchContacts(); // Refresh list
+      await api.delete(`/contacts/${contact.apiId}`);
+      await fetchContacts();
     } catch (err: any) {
-      alert('Failed to delete contact');
+      alert(err.response?.data?.message || 'Failed to delete contact');
     }
   };
 
-  // ✅ Real Bulk Actions
+  // ✅ Bulk delete (backend expects { contactIds: [] })
   const handleBulkAction = async (action: string) => {
     if (selectedContacts.length === 0) return;
-    
+
     try {
       if (action === 'delete') {
         if (!window.confirm(`Delete ${selectedContacts.length} contacts?`)) return;
-        
-        const realIds = selectedContacts.map(id => {
-          const c = contacts.find(contact => contact.id === id);
-          return (c as any)?._id || id;
-        });
 
-        await api.delete('/contacts/bulk', { data: { ids: realIds } });
+        const realIds = selectedContacts
+          .map(id => contacts.find(c => c.id === id)?.apiId)
+          .filter(Boolean);
+
+        await api.delete('/contacts/bulk', { data: { contactIds: realIds } });
         await fetchContacts();
         setSelectedContacts([]);
       }
-    } catch (err) {
-      alert('Bulk action failed');
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Bulk action failed');
     }
   };
 
-  // Export
+  // Export CSV (simple)
   const handleExportAll = () => {
-    // Simple CSV export logic... (same as before)
     const headers = ['Name', 'Phone', 'Email', 'Company', 'Status'];
     const rows = contacts.map(c => [
-      `${c.firstName} ${c.lastName}`, c.phone, c.email, c.company, c.status
+      `${c.firstName} ${c.lastName}`.trim(),
+      c.phone,
+      c.email,
+      c.company,
+      c.status
     ]);
+
     const csvContent = [headers, ...rows].map(row => row.join(',')).join('\n');
     const blob = new Blob([csvContent], { type: 'text/csv' });
     const url = window.URL.createObjectURL(blob);
@@ -334,7 +342,7 @@ const Contacts: React.FC = () => {
           selectedContacts={selectedContacts}
           onSelectContact={handleSelectContact}
           onSelectAll={handleSelectAll}
-          onEdit={(c) => { setEditingContact({ ...c, id: c.id }); setShowAddModal(true); }}
+          onEdit={(c) => { setEditingContact(c); setShowAddModal(true); }}
           onDelete={handleDeleteContact}
         />
       )}
@@ -344,14 +352,14 @@ const Contacts: React.FC = () => {
         <div className="flex justify-between items-center bg-white p-4 rounded-xl border border-gray-200">
           <span className="text-sm text-gray-500">Page {currentPage} of {totalPages}</span>
           <div className="flex gap-2">
-            <button 
+            <button
               disabled={currentPage === 1}
               onClick={() => setCurrentPage(prev => prev - 1)}
               className="px-3 py-1 border rounded hover:bg-gray-50 disabled:opacity-50"
             >
               Prev
             </button>
-            <button 
+            <button
               disabled={currentPage === totalPages}
               onClick={() => setCurrentPage(prev => prev + 1)}
               className="px-3 py-1 border rounded hover:bg-gray-50 disabled:opacity-50"

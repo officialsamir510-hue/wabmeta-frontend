@@ -1,191 +1,234 @@
-import React, { useState } from 'react';
-import { Building2, Globe, Mail, MapPin, Save, Loader2, Upload } from 'lucide-react';
-import type { BusinessProfile as BusinessProfileType } from '../../types/settings';
+// src/components/settings/BusinessProfile.tsx
 
-const BusinessProfile: React.FC = () => {
+import React, { useState, useEffect } from 'react';
+import { Building2, Globe, Clock, Camera, Loader2, CheckCircle } from 'lucide-react';
+
+interface Props {
+  organization: any;
+  onUpdate: (data: any) => Promise<{ success: boolean }>;
+}
+
+const BusinessProfile: React.FC<Props> = ({ organization, onUpdate }) => {
   const [saving, setSaving] = useState(false);
-  const [profile, setProfile] = useState<BusinessProfileType>({
-    name: 'WabMeta Business',
-    category: 'Professional Services',
-    description: 'The best WhatsApp marketing platform for growing businesses.',
-    address: '123 Tech Park, Bangalore, India',
-    email: 'support@wabmeta.com',
-    websites: ['https://wabmeta.com', 'https://blog.wabmeta.com'],
-    profilePicture: 'https://via.placeholder.com/150'
+  const [success, setSuccess] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const [formData, setFormData] = useState({
+    name: '',
+    website: '',
+    industry: '',
+    timezone: '',
+    logo: '',
   });
 
-  const handleSave = async () => {
+  const timezones = [
+    { value: 'UTC', label: 'UTC' },
+    { value: 'America/New_York', label: 'Eastern Time (US)' },
+    { value: 'America/Los_Angeles', label: 'Pacific Time (US)' },
+    { value: 'Europe/London', label: 'London' },
+    { value: 'Europe/Paris', label: 'Paris' },
+    { value: 'Asia/Dubai', label: 'Dubai' },
+    { value: 'Asia/Kolkata', label: 'India (IST)' },
+    { value: 'Asia/Singapore', label: 'Singapore' },
+    { value: 'Asia/Tokyo', label: 'Tokyo' },
+    { value: 'Australia/Sydney', label: 'Sydney' },
+  ];
+
+  const industries = [
+    'E-commerce',
+    'Healthcare',
+    'Education',
+    'Finance',
+    'Real Estate',
+    'Technology',
+    'Retail',
+    'Hospitality',
+    'Manufacturing',
+    'Other',
+  ];
+
+  useEffect(() => {
+    if (organization) {
+      setFormData({
+        name: organization.name || '',
+        website: organization.website || '',
+        industry: organization.industry || '',
+        timezone: organization.timezone || 'UTC',
+        logo: organization.logo || '',
+      });
+    }
+  }, [organization]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
     setSaving(true);
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    setSaving(false);
-    // Add toast success
+    setError(null);
+    setSuccess(false);
+
+    try {
+      await onUpdate(formData);
+      setSuccess(true);
+      setTimeout(() => setSuccess(false), 3000);
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Failed to update organization');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleLogoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setFormData({ ...formData, logo: reader.result as string });
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
   return (
-    <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-      <div className="p-6 border-b border-gray-200">
-        <h3 className="text-lg font-semibold text-gray-900">WhatsApp Business Profile</h3>
-        <p className="text-gray-500 text-sm mt-1">
-          This information will be visible to your WhatsApp contacts.
-        </p>
-      </div>
+    <div className="bg-white border border-gray-200 rounded-xl p-6">
+      <h3 className="text-lg font-semibold text-gray-900 mb-6">Business Profile</h3>
 
-      <div className="p-6 space-y-6">
-        {/* Profile Picture */}
+      <form onSubmit={handleSubmit} className="space-y-6">
+        {/* Logo */}
         <div className="flex items-center space-x-6">
-          <div className="relative group">
-            <img
-              src={profile.profilePicture}
-              alt="Profile"
-              className="w-24 h-24 rounded-full object-cover border-4 border-white shadow-md"
-            />
-            <button className="absolute inset-0 bg-black/40 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-              <Upload className="w-6 h-6 text-white" />
-            </button>
-          </div>
-          <div>
-            <h4 className="font-medium text-gray-900">Profile Photo</h4>
-            <p className="text-sm text-gray-500 mb-2">
-              Recommended size: 640x640px. Max size: 5MB.
-            </p>
-            <div className="flex space-x-3">
-              <button className="text-sm text-primary-600 font-medium hover:text-primary-700">
-                Upload New
-              </button>
-              <button className="text-sm text-red-600 font-medium hover:text-red-700">
-                Remove
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <div className="grid md:grid-cols-2 gap-6">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Display Name
-            </label>
-            <div className="relative">
-              <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-              <input
-                type="text"
-                value={profile.name}
-                onChange={(e) => setProfile({ ...profile, name: e.target.value })}
-                className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Category
-            </label>
-            <select
-              value={profile.category}
-              onChange={(e) => setProfile({ ...profile, category: e.target.value })}
-              className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
-            >
-              <option>Professional Services</option>
-              <option>Retail</option>
-              <option>Finance</option>
-              <option>Education</option>
-              <option>Healthcare</option>
-            </select>
-          </div>
-
-          <div className="md:col-span-2">
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Description
-            </label>
-            <textarea
-              value={profile.description}
-              onChange={(e) => setProfile({ ...profile, description: e.target.value })}
-              rows={3}
-              className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Address
-            </label>
-            <div className="relative">
-              <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-              <input
-                type="text"
-                value={profile.address}
-                onChange={(e) => setProfile({ ...profile, address: e.target.value })}
-                className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Email
-            </label>
-            <div className="relative">
-              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-              <input
-                type="email"
-                value={profile.email}
-                onChange={(e) => setProfile({ ...profile, email: e.target.value })}
-                className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500"
-              />
-            </div>
-          </div>
-
-          <div className="md:col-span-2">
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Websites
-            </label>
-            <div className="space-y-3">
-              {profile.websites.map((site, index) => (
-                <div key={index} className="relative">
-                  <Globe className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                  <input
-                    type="url"
-                    value={site}
-                    onChange={(e) => {
-                      const newSites = [...profile.websites];
-                      newSites[index] = e.target.value;
-                      setProfile({ ...profile, websites: newSites });
-                    }}
-                    className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500"
-                  />
-                </div>
-              ))}
-              {profile.websites.length < 2 && (
-                <button
-                  onClick={() => setProfile({ ...profile, websites: [...profile.websites, ''] })}
-                  className="text-sm text-primary-600 font-medium hover:text-primary-700"
-                >
-                  + Add another website
-                </button>
+          <div className="relative">
+            <div className="w-20 h-20 rounded-xl bg-gray-100 flex items-center justify-center overflow-hidden border-2 border-dashed border-gray-300">
+              {formData.logo ? (
+                <img
+                  src={formData.logo}
+                  alt="Logo"
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <Building2 className="w-8 h-8 text-gray-400" />
               )}
             </div>
+            <label className="absolute bottom-0 right-0 p-1.5 bg-white border border-gray-200 rounded-full cursor-pointer hover:bg-gray-50 transition-colors">
+              <Camera className="w-4 h-4 text-gray-500" />
+              <input
+                type="file"
+                accept="image/*"
+                onChange={handleLogoChange}
+                className="hidden"
+              />
+            </label>
+          </div>
+          <div>
+            <p className="text-sm font-medium text-gray-900">Organization Logo</p>
+            <p className="text-sm text-gray-500">Square image, at least 200x200px</p>
           </div>
         </div>
-      </div>
 
-      <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex justify-end">
-        <button
-          onClick={handleSave}
-          disabled={saving}
-          className="flex items-center space-x-2 px-6 py-2.5 bg-primary-500 hover:bg-primary-600 text-white font-medium rounded-xl transition-colors disabled:opacity-50"
-        >
-          {saving ? (
-            <>
-              <Loader2 className="w-4 h-4 animate-spin" />
-              <span>Saving...</span>
-            </>
-          ) : (
-            <>
-              <Save className="w-4 h-4" />
+        {/* Organization Name */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Organization Name
+          </label>
+          <div className="relative">
+            <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+            <input
+              type="text"
+              value={formData.name}
+              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+              className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500"
+              placeholder="Your Company Name"
+            />
+          </div>
+        </div>
+
+        {/* Website */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Website
+          </label>
+          <div className="relative">
+            <Globe className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+            <input
+              type="url"
+              value={formData.website}
+              onChange={(e) => setFormData({ ...formData, website: e.target.value })}
+              className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500"
+              placeholder="https://example.com"
+            />
+          </div>
+        </div>
+
+        {/* Industry */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Industry
+          </label>
+          <select
+            value={formData.industry}
+            onChange={(e) => setFormData({ ...formData, industry: e.target.value })}
+            className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 bg-white"
+          >
+            <option value="">Select industry</option>
+            {industries.map((industry) => (
+              <option key={industry} value={industry}>
+                {industry}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* Timezone */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Timezone
+          </label>
+          <div className="relative">
+            <Clock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+            <select
+              value={formData.timezone}
+              onChange={(e) => setFormData({ ...formData, timezone: e.target.value })}
+              className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 bg-white appearance-none"
+            >
+              {timezones.map((tz) => (
+                <option key={tz.value} value={tz.value}>
+                  {tz.label}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {/* Error Message */}
+        {error && (
+          <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">
+            {error}
+          </div>
+        )}
+
+        {/* Success Message */}
+        {success && (
+          <div className="p-3 bg-green-50 border border-green-200 rounded-lg text-green-600 text-sm flex items-center space-x-2">
+            <CheckCircle className="w-4 h-4" />
+            <span>Organization updated successfully!</span>
+          </div>
+        )}
+
+        {/* Submit Button */}
+        <div className="flex justify-end">
+          <button
+            type="submit"
+            disabled={saving}
+            className="px-6 py-2.5 bg-primary-500 hover:bg-primary-600 text-white font-medium rounded-xl transition-colors disabled:opacity-50 flex items-center space-x-2"
+          >
+            {saving ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>Saving...</span>
+              </>
+            ) : (
               <span>Save Changes</span>
-            </>
-          )}
-        </button>
-      </div>
+            )}
+          </button>
+        </div>
+      </form>
     </div>
   );
 };

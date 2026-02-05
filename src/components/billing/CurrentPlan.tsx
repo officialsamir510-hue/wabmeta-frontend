@@ -1,86 +1,207 @@
 import React, { useState } from 'react';
-import { CheckCircle2, Zap } from 'lucide-react';
-import PricingPlans from './PricingPlans';
-import { usePlanAccess } from '../../hooks/usePlanAccess';
+import { Crown, Check, Loader2 } from 'lucide-react';
+import { billing } from '../../services/api';
+import { loadRazorpayScript } from '../../utils/razorpay';
 
-const CurrentPlan: React.FC = () => {
-  const { currentPlan } = usePlanAccess();
-  const [showUpgrade, setShowUpgrade] = useState(false);
+interface Props {
+  planData: any;
+  availablePlans: any[];
+  onUpgrade: (planType: string, billingCycle: 'monthly' | 'yearly') => Promise<void>;
+  onCancel: () => Promise<void>;
+}
 
-  // Helper to get Plan Details based on currentPlan key
-  const getPlanDetails = (plan: string) => {
-    switch (plan) {
-      case 'yearly': 
-        return { name: '1-Year Plan ⭐', price: '₹8,999', period: '/year', features: ['All Features', 'Priority Support'] };
-      case '6month': 
-        return { name: '6-Month Plan', price: '₹5,000', period: '/6mo', features: ['Chatbot', 'Automation'] };
-      case '3month': 
-        return { name: '3-Month Plan', price: '₹2,500', period: '/3mo', features: ['Chatbot'] };
-      case 'monthly': 
-        return { name: 'Monthly Plan', price: '₹899', period: '/mo', features: ['Basic Features'] };
-      default: 
-        return { name: 'Free Trial', price: 'Free', period: '', features: ['Limited Features'] };
+type PlanKey = 'monthly' | 'three_month' | 'six_month' | 'one_year';
+
+const PACKAGES: { key: PlanKey; label: string; priceINR: number; months: number }[] = [
+  { key: 'monthly', label: 'Monthly', priceINR: 899, months: 1 },
+  { key: 'three_month', label: '3-Month', priceINR: 2500, months: 3 },
+  { key: 'six_month', label: '6-Month ⭐', priceINR: 5000, months: 6 },
+  { key: 'one_year', label: '1-Year ⭐', priceINR: 8999, months: 12 },
+];
+
+const formatINR = (n: number) =>
+  new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(n);
+
+const CurrentPlan: React.FC<Props> = ({ planData, onCancel }) => {
+  const [showPlans, setShowPlans] = useState(false);
+  const [paying, setPaying] = useState<string | null>(null);
+
+  const plan = planData?.plan;
+  const subscription = planData?.subscription;
+
+  const currentCycle: PlanKey | null =
+    subscription?.billingCycle && ['monthly', 'three_month', 'six_month', 'one_year'].includes(subscription.billingCycle)
+      ? subscription.billingCycle
+      : null;
+
+  const currentPackage = currentCycle ? PACKAGES.find((p) => p.key === currentCycle) : null;
+
+  const handlePay = async (planKey: PlanKey) => {
+    setPaying(planKey);
+
+    try {
+      const ok = await loadRazorpayScript();
+      if (!ok) throw new Error('Razorpay SDK failed to load');
+
+      const orderRes = await billing.createRazorpayOrder({ planKey });
+      console.log("✅ Order response:", orderRes.data);
+
+      const { orderId, amount, currency, keyId } = orderRes.data?.data || {};
+      if (!orderId || !keyId) throw new Error("Invalid order response from backend");
+
+      const userStr = localStorage.getItem('wabmeta_user');
+      const user = userStr ? JSON.parse(userStr) : null;
+
+      const options: any = {
+        key: keyId,
+        amount,
+        currency,
+        name: 'WabMeta',
+        description: 'Subscription Payment',
+        order_id: orderId,
+        prefill: {
+          name: user?.name || `${user?.firstName || ''} ${user?.lastName || ''}`.trim(),
+          email: user?.email,
+        },
+        theme: { color: '#25D366' },
+
+        handler: async (resp: any) => {
+          console.log("✅ Razorpay success:", resp);
+          await billing.verifyRazorpayPayment({ ...resp, planKey });
+          alert('Payment Success! Plan activated.');
+          window.location.reload();
+        },
+
+        modal: {
+          ondismiss: () => {
+            console.log("Razorpay modal dismissed");
+          }
+        }
+      };
+
+      const rz = new (window as any).Razorpay(options);
+
+      // ✅ Payment failed handler
+      rz.on('payment.failed', (resp: any) => {
+        console.error("❌ Payment failed:", resp);
+        alert(resp?.error?.description || "Payment failed");
+      });
+
+      rz.open();
+    } catch (e: any) {
+      console.error("❌ Pay error:", e);
+      console.error("❌ Response:", e?.response?.data);
+
+      alert(
+        e?.response?.data?.message ||
+        e?.response?.data?.error?.message ||
+        e?.message ||
+        'Payment failed'
+      );
+    } finally {
+      setPaying(null);
     }
   };
 
-  const details = getPlanDetails(currentPlan);
-
   return (
-    <>
-      <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
-        <div className="flex justify-between items-start">
-          <div>
-            <div className="flex items-center space-x-2 mb-2">
-              <h3 className="text-lg font-bold text-gray-900">{details.name}</h3>
-              <span className="px-2 py-0.5 bg-green-100 text-green-700 text-xs font-medium rounded-full">
-                Active
-              </span>
-            </div>
-            <p className="text-gray-500 text-sm">
-              Next billing date: <span className="font-medium text-gray-900">Feb 15, 2024</span>
-            </p>
-          </div>
-          <div className="text-right">
-            <p className="text-2xl font-bold text-gray-900">
-              {details.price}
-              <span className="text-sm font-normal text-gray-500">{details.period}</span>
-            </p>
-          </div>
-        </div>
+    <div className="bg-white border border-gray-200 rounded-2xl p-6">
+      <div className="flex items-center justify-between mb-6">
+        <h3 className="text-lg font-semibold text-gray-900">Current Plan</h3>
 
-        <div className="mt-6 space-y-3">
-          {details.features.map((feature, index) => (
-            <div key={index} className="flex items-center space-x-2 text-sm text-gray-600">
-              <CheckCircle2 className="w-4 h-4 text-green-500" />
-              <span>{feature}</span>
-            </div>
-          ))}
-          <div className="flex items-center space-x-2 text-sm text-gray-600">
-            <CheckCircle2 className="w-4 h-4 text-green-500" />
-            <span>Unlimited Team Members</span>
-          </div>
-          <div className="flex items-center space-x-2 text-sm text-gray-600">
-            <CheckCircle2 className="w-4 h-4 text-green-500" />
-            <span>Advanced Analytics & Reports</span>
-          </div>
-        </div>
-
-        <div className="mt-6 pt-6 border-t border-gray-100 flex items-center justify-between">
-          <button 
-            onClick={() => setShowUpgrade(true)}
-            className="flex items-center space-x-2 px-4 py-2 bg-primary-500 hover:bg-primary-600 text-white font-medium rounded-lg transition-colors"
-          >
-            <Zap className="w-4 h-4" />
-            <span>Upgrade Plan</span>
-          </button>
-          <button className="text-sm text-gray-500 hover:text-gray-700 font-medium">
-            Cancel Subscription
-          </button>
-        </div>
+        <span className="px-3 py-1 text-sm font-medium rounded-full bg-purple-100 text-purple-700">
+          {plan?.name || 'Free Demo'}
+        </span>
       </div>
 
-      <PricingPlans isOpen={showUpgrade} onClose={() => setShowUpgrade(false)} />
-    </>
+      <div className="mb-6">
+        <div className="flex items-baseline space-x-2">
+          <span className="text-4xl font-bold text-gray-900">
+            {currentPackage
+              ? formatINR(currentPackage.priceINR)
+              : (plan?.monthlyPrice ? `$${plan.monthlyPrice}` : 'Free')}
+          </span>
+          <span className="text-gray-500">
+            {currentPackage ? `/${currentPackage.months}mo` : '/month'}
+          </span>
+        </div>
+
+        {subscription?.currentPeriodEnd && (
+          <p className="text-sm text-gray-500 mt-2">
+            Renews on {new Date(subscription.currentPeriodEnd).toLocaleDateString()}
+          </p>
+        )}
+      </div>
+
+      <div className="space-y-2 mb-6">
+        {(plan?.features || []).slice(0, 4).map((feature: string, index: number) => (
+          <div key={index} className="flex items-center space-x-2 text-sm text-gray-600">
+            <Check className="w-4 h-4 text-green-500" />
+            <span>{feature}</span>
+          </div>
+        ))}
+      </div>
+
+      <div className="space-y-3">
+        <button
+          onClick={() => setShowPlans(true)}
+          className="w-full flex items-center justify-center space-x-2 px-4 py-2.5 bg-primary-500 hover:bg-primary-600 text-white font-medium rounded-xl transition-colors"
+        >
+          <Crown className="w-4 h-4" />
+          <span>Upgrade / Recharge</span>
+        </button>
+
+        {plan?.type !== 'FREE' && subscription?.status === 'ACTIVE' && (
+          <button
+            onClick={onCancel}
+            className="w-full px-4 py-2.5 text-red-600 hover:bg-red-50 font-medium rounded-xl transition-colors"
+          >
+            Cancel Subscription
+          </button>
+        )}
+      </div>
+
+      {showPlans && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl max-w-3xl w-full max-h-[90vh] overflow-auto p-6">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-bold text-gray-900">Choose Package</h2>
+              <button onClick={() => setShowPlans(false)} className="text-gray-400 hover:text-gray-600">×</button>
+            </div>
+
+            <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
+              {PACKAGES.map((p) => (
+                <div key={p.key} className="border-2 border-gray-200 rounded-xl p-4">
+                  <h3 className="font-semibold text-gray-900">{p.label}</h3>
+                  <div className="mt-2">
+                    <span className="text-2xl font-bold">{formatINR(p.priceINR)}</span>
+                  </div>
+                  <p className="text-sm text-gray-500 mt-2">Validity: {p.months} months</p>
+                  <p className="text-sm text-gray-500">Messages: Unlimited*</p>
+
+                  <button
+                    onClick={() => handlePay(p.key)}
+                    disabled={paying === p.key}
+                    className="w-full mt-4 px-4 py-2 rounded-lg font-medium bg-primary-500 hover:bg-primary-600 text-white disabled:opacity-60"
+                  >
+                    {paying === p.key ? (
+                      <span className="inline-flex items-center justify-center gap-2">
+                        <Loader2 className="w-4 h-4 animate-spin" /> Processing...
+                      </span>
+                    ) : (
+                      'Pay with Razorpay'
+                    )}
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            <p className="text-xs text-gray-500 mt-4">
+              Note: Payment can be done only by Organization Owner.
+            </p>
+          </div>
+        </div>
+      )}
+    </div>
   );
 };
 

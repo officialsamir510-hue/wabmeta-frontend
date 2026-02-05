@@ -19,7 +19,6 @@ import type { Template, TemplateCategory, TemplateStatus } from '../types/templa
 import { templates as templateApi } from '../services/api';
 
 const Templates: React.FC = () => {
-  // State
   const [templates, setTemplates] = useState<Template[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -36,42 +35,85 @@ const Templates: React.FC = () => {
     hasMedia: null
   });
 
-  // Fetch Templates on Load
   useEffect(() => {
     loadTemplates();
   }, []);
 
+  const extractVariablesFromText = (text: string) => {
+    const matches = text.match(/\{\{(\d+)\}\}/g) || [];
+    return [...new Set(matches.map((m) => m.replace(/[{}]/g, '')))];
+  };
+
+  const mapHeaderFromBackend = (t: any) => {
+    const ht = (t.headerType || 'NONE').toUpperCase();
+
+    if (ht === 'NONE' || ht === null) return { type: 'none' as const };
+
+    if (ht === 'TEXT') {
+      return {
+        type: 'text' as const,
+        text: t.headerContent || ''
+      };
+    }
+
+    // IMAGE/VIDEO/DOCUMENT -> frontend expects mediaUrl maybe
+    return {
+      type: ht.toLowerCase(), // 'image' | 'video' | 'document'
+      mediaUrl: t.headerContent || undefined,
+      text: undefined
+    } as any;
+  };
+
+  const mapButtonsFromBackend = (t: any) => {
+    const btns = Array.isArray(t.buttons) ? t.buttons : [];
+    return btns.map((b: any, index: number) => ({
+      id: String(index),
+      type: (b.type || '').toLowerCase(), // url | phone_number | quick_reply
+      text: b.text,
+      url: b.url,
+      phoneNumber: b.phoneNumber || b.phone_number
+    }));
+  };
+
   const loadTemplates = async () => {
     setLoading(true);
     setError(null);
+
     try {
       const response = await templateApi.getAll();
-      const templatesData = response.data?.templates || response.data || [];
-      
-      // Map API data to Frontend Template type if necessary
+
+      // ✅ Correct: backend returns list in response.data.data
+      const templatesData = Array.isArray(response.data?.data) ? response.data.data : [];
+
       const mappedTemplates: Template[] = templatesData.map((t: any) => ({
-        id: t._id || t.id,
+        id: t.id,
         name: t.name,
-        category: (t.category || 'UTILITY').toLowerCase() as TemplateCategory,
+        category: String(t.category || 'UTILITY').toLowerCase() as TemplateCategory,
         language: t.language || 'en',
-        status: (t.status || 'PENDING').toLowerCase() as TemplateStatus,
-        header: mapHeader(t.components),
-        body: mapBody(t.components),
-        footer: mapFooter(t.components),
-        buttons: mapButtons(t.components),
-        variables: extractVariables(t.components),
+        status: String(t.status || 'PENDING').toLowerCase() as TemplateStatus,
+
+        header: mapHeaderFromBackend(t),
+        body: t.bodyText || '',
+        footer: t.footerText || '',
+        buttons: mapButtonsFromBackend(t),
+
+        variables:
+          Array.isArray(t.variables) && t.variables.length > 0
+            ? t.variables.map((v: any) => String(v.index))
+            : extractVariablesFromText(t.bodyText || ''),
+
         createdAt: t.createdAt || new Date().toISOString(),
         updatedAt: t.updatedAt || new Date().toISOString(),
         usageCount: t.usageCount || 0,
-        rejectionReason: t.rejectionReason
+        rejectionReason: t.rejectionReason || undefined
       }));
 
       setTemplates(mappedTemplates);
     } catch (err: any) {
-      console.error("Load Error:", err);
+      console.error('Load Error:', err);
       setError(err.response?.data?.message || 'Failed to load templates');
-      
-      // Fallback to sample data in development if API fails
+
+      // fallback sample in dev
       if (import.meta.env.MODE === 'development') {
         setTemplates(getSampleTemplates());
       }
@@ -80,45 +122,6 @@ const Templates: React.FC = () => {
     }
   };
 
-  // Helper Functions for Mapping
-  const mapHeader = (components: any[]) => {
-    const header = components?.find((c: any) => c.type === 'HEADER');
-    if (!header) return { type: 'none' as const };
-    return {
-      type: (header.format?.toLowerCase() || 'text') as any,
-      text: header.text,
-      mediaUrl: header.example?.header_handle?.[0]
-    };
-  };
-
-  const mapBody = (components: any[]) => {
-    return components?.find((c: any) => c.type === 'BODY')?.text || '';
-  };
-
-  const mapFooter = (components: any[]) => {
-    return components?.find((c: any) => c.type === 'FOOTER')?.text || '';
-  };
-
-  const mapButtons = (components: any[]) => {
-    const buttonsComp = components?.find((c: any) => c.type === 'BUTTONS');
-    if (!buttonsComp) return [];
-    
-    return buttonsComp.buttons.map((b: any, index: number) => ({
-      id: String(index),
-      type: b.type.toLowerCase(),
-      text: b.text,
-      url: b.url,
-      phoneNumber: b.phone_number
-    }));
-  };
-
-  const extractVariables = (components: any[]) => {
-    const body = components?.find((c: any) => c.type === 'BODY')?.text || '';
-    const matches = body.match(/\{\{(\d+)\}\}/g) || [];
-    return [...new Set(matches.map((m: string) => m.replace(/[{}]/g, '')))];
-  };
-
-  // Sample Data for Fallback
   const getSampleTemplates = (): Template[] => [
     {
       id: '1',
@@ -129,9 +132,7 @@ const Templates: React.FC = () => {
       header: { type: 'text', text: 'Welcome to {{1}}!' },
       body: 'Hello {{2}}! 👋\n\nThank you for choosing us. We are excited to have you on board.',
       footer: 'Powered by WabMeta',
-      buttons: [
-        { id: '1', type: 'url', text: 'Visit Website', url: 'https://example.com' }
-      ],
+      buttons: [{ id: '1', type: 'url', text: 'Visit Website', url: 'https://example.com' }],
       variables: ['1', '2'],
       createdAt: '2024-01-15',
       updatedAt: '2 hours ago',
@@ -139,24 +140,20 @@ const Templates: React.FC = () => {
     }
   ];
 
-  // Filter templates
-  const filteredTemplates = templates.filter(template => {
-    const matchesSearch = 
+  const filteredTemplates = templates.filter((template) => {
+    const matchesSearch =
       template.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       template.body.toLowerCase().includes(searchQuery.toLowerCase());
-    
-    const matchesCategory = 
-      filters.categories.length === 0 || 
-      filters.categories.includes(template.category);
-    
-    const matchesStatus = 
-      filters.statuses.length === 0 || 
-      filters.statuses.includes(template.status);
+
+    const matchesCategory =
+      filters.categories.length === 0 || filters.categories.includes(template.category);
+
+    const matchesStatus =
+      filters.statuses.length === 0 || filters.statuses.includes(template.status);
 
     return matchesSearch && matchesCategory && matchesStatus;
   });
 
-  // Stats
   const stats = [
     { label: 'Total Templates', value: templates.length, icon: FileText, color: 'bg-blue-100 text-blue-600' },
     { label: 'Approved', value: templates.filter(t => t.status === 'approved').length, icon: CheckCircle2, color: 'bg-green-100 text-green-600' },
@@ -164,10 +161,9 @@ const Templates: React.FC = () => {
     { label: 'Rejected', value: templates.filter(t => t.status === 'rejected').length, icon: XCircle, color: 'bg-red-100 text-red-600' },
   ];
 
-  // Handlers
   const handleDelete = async (id: string) => {
     if (!window.confirm('Are you sure you want to delete this template?')) return;
-    
+
     try {
       await templateApi.delete(id);
       setTemplates(prev => prev.filter(t => t.id !== id));
@@ -177,24 +173,14 @@ const Templates: React.FC = () => {
   };
 
   const handleDuplicate = (_template: Template) => {
-    // Navigate to create page with pre-filled data
-    // You can implement this by passing state via navigation or using a duplication API
     alert('Duplicate feature coming soon!');
   };
 
+  // ✅ For now: just refresh from DB (Meta sync requires whatsappAccountId)
   const handleSync = async () => {
-    setLoading(true);
-    try {
-      await templateApi.sync();
-      await loadTemplates();
-    } catch (err) {
-      alert('Failed to sync templates from Meta');
-    } finally {
-      setLoading(false);
-    }
+    await loadTemplates();
   };
 
-  // Loading State
   if (loading && templates.length === 0) {
     return (
       <div className="flex items-center justify-center h-screen">
@@ -219,7 +205,7 @@ const Templates: React.FC = () => {
             onClick={handleSync}
             disabled={loading}
             className="p-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl transition-colors disabled:opacity-50"
-            title="Sync from Meta"
+            title="Refresh"
           >
             <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
           </button>
@@ -240,10 +226,7 @@ const Templates: React.FC = () => {
           <div>
             <h3 className="text-sm font-medium text-red-800">Error Loading Templates</h3>
             <p className="text-sm text-red-600 mt-1">{error}</p>
-            <button 
-              onClick={loadTemplates}
-              className="text-sm font-medium text-red-700 hover:text-red-800 mt-2 underline"
-            >
+            <button onClick={loadTemplates} className="text-sm font-medium text-red-700 hover:text-red-800 mt-2 underline">
               Retry
             </button>
           </div>
@@ -277,13 +260,13 @@ const Templates: React.FC = () => {
             onFilterChange={setFilters}
           />
         </div>
-        
+
         <div className="flex items-center space-x-2">
           <button
             onClick={() => setViewMode('grid')}
             className={`p-2 rounded-lg transition-colors ${
-              viewMode === 'grid' 
-                ? 'bg-primary-100 text-primary-600' 
+              viewMode === 'grid'
+                ? 'bg-primary-100 text-primary-600'
                 : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
             }`}
           >
@@ -292,8 +275,8 @@ const Templates: React.FC = () => {
           <button
             onClick={() => setViewMode('list')}
             className={`p-2 rounded-lg transition-colors ${
-              viewMode === 'list' 
-                ? 'bg-primary-100 text-primary-600' 
+              viewMode === 'list'
+                ? 'bg-primary-100 text-primary-600'
                 : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
             }`}
           >
@@ -304,11 +287,7 @@ const Templates: React.FC = () => {
 
       {/* Templates Grid */}
       {filteredTemplates.length > 0 ? (
-        <div className={`grid gap-6 ${
-          viewMode === 'grid' 
-            ? 'grid-cols-1 md:grid-cols-2 xl:grid-cols-3' 
-            : 'grid-cols-1'
-        }`}>
+        <div className={`grid gap-6 ${viewMode === 'grid' ? 'grid-cols-1 md:grid-cols-2 xl:grid-cols-3' : 'grid-cols-1'}`}>
           {filteredTemplates.map((template) => (
             <TemplateCard
               key={template.id}
@@ -328,8 +307,7 @@ const Templates: React.FC = () => {
           <p className="text-gray-500 mb-6 max-w-md mx-auto">
             {searchQuery || filters.categories.length > 0 || filters.statuses.length > 0
               ? 'Try adjusting your filters or search query'
-              : 'Create your first message template to get started'
-            }
+              : 'Create your first message template to get started'}
           </p>
           <Link
             to="/dashboard/templates/new"

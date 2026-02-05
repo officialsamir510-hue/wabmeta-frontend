@@ -1,70 +1,97 @@
 import React from 'react';
-import { MessageSquare, BarChart3, AlertCircle } from 'lucide-react';
+import { Users, MessageSquare, Megaphone, FileText, Bot, Users2 } from 'lucide-react';
 
-const UsageStats: React.FC = () => {
-  const usage = {
-    conversations: { used: 8500, total: 10000 },
-    marketing: { used: 12000, total: 15000 }
+interface Props {
+  usageData: any;
+}
+
+const FREE_WARN_REMAINING = 20;
+const FREE_WARN_PCT = 80;
+
+const UsageStats: React.FC<Props> = ({ usageData }) => {
+  if (!usageData) {
+    return (
+      <div className="bg-white border border-gray-200 rounded-2xl p-6">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Usage Statistics</h3>
+        <p className="text-gray-500">No usage data available</p>
+      </div>
+    );
+  }
+
+  const stats = [
+    { label: 'Contacts', icon: Users, ...usageData.contacts, color: 'blue' },
+    { label: 'Messages', icon: MessageSquare, ...usageData.messages, color: 'green' }, // includes unlimited
+    { label: 'Team Members', icon: Users2, ...usageData.teamMembers, color: 'purple' },
+    { label: 'Campaigns', icon: Megaphone, ...usageData.campaigns, color: 'orange' },
+    { label: 'Templates', icon: FileText, ...usageData.templates, color: 'pink' },
+    { label: 'Chatbots', icon: Bot, ...usageData.chatbots, color: 'cyan' },
+  ];
+
+  const getColorClass = (color: string, percentage: number) => {
+    if (percentage >= 90) return 'bg-red-500';
+    if (percentage >= 75) return 'bg-yellow-500';
+    const colors: Record<string, string> = {
+      blue: 'bg-blue-500',
+      green: 'bg-green-500',
+      purple: 'bg-purple-500',
+      orange: 'bg-orange-500',
+      pink: 'bg-pink-500',
+      cyan: 'bg-cyan-500',
+    };
+    return colors[color] || 'bg-gray-500';
   };
 
-  const convPercent = (usage.conversations.used / usage.conversations.total) * 100;
-  const marketPercent = (usage.marketing.used / usage.marketing.total) * 100;
+  const shouldWarnMessages = (used: number, limit: number, unlimited?: boolean) => {
+    if (unlimited) return false;
+    if (!limit || limit <= 0) return false;
+    const remaining = Math.max(limit - used, 0);
+    const pct = (used / limit) * 100;
+    return remaining <= FREE_WARN_REMAINING || pct >= FREE_WARN_PCT;
+  };
 
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm h-full">
-      <h3 className="text-lg font-semibold text-gray-900 mb-6">Current Usage</h3>
+    <div className="bg-white border border-gray-200 rounded-2xl p-6">
+      <h3 className="text-lg font-semibold text-gray-900 mb-6">Usage Statistics</h3>
 
-      <div className="space-y-6">
-        {/* Service Conversations */}
-        <div>
-          <div className="flex justify-between mb-2">
-            <div className="flex items-center space-x-2">
-              <MessageSquare className="w-4 h-4 text-blue-600" />
-              <span className="text-sm font-medium text-gray-700">Service Conversations</span>
-            </div>
-            <span className="text-sm text-gray-500">
-              {usage.conversations.used.toLocaleString()} / {usage.conversations.total.toLocaleString()}
-            </span>
-          </div>
-          <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-            <div 
-              className={`h-full rounded-full ${convPercent > 90 ? 'bg-red-500' : 'bg-blue-500'}`}
-              style={{ width: `${convPercent}%` }}
-            ></div>
-          </div>
-        </div>
+      <div className="space-y-5">
+        {stats.map((stat: any) => {
+          const used = Number(stat.used || 0);
+          const limit = Number(stat.limit || 0);
+          const isMessages = stat.label === 'Messages';
+          const warn = isMessages
+            ? shouldWarnMessages(used, limit, stat.unlimited)
+            : stat.percentage >= 90;
 
-        {/* Marketing Conversations */}
-        <div>
-          <div className="flex justify-between mb-2">
-            <div className="flex items-center space-x-2">
-              <BarChart3 className="w-4 h-4 text-purple-600" />
-              <span className="text-sm font-medium text-gray-700">Marketing Conversations</span>
-            </div>
-            <span className="text-sm text-gray-500">
-              {usage.marketing.used.toLocaleString()} / {usage.marketing.total.toLocaleString()}
-            </span>
-          </div>
-          <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-            <div 
-              className={`h-full rounded-full ${marketPercent > 90 ? 'bg-red-500' : 'bg-purple-500'}`}
-              style={{ width: `${marketPercent}%` }}
-            ></div>
-          </div>
-        </div>
+          const remaining = limit > 0 ? Math.max(limit - used, 0) : 0;
 
-        {/* Alert */}
-        {(convPercent > 80 || marketPercent > 80) && (
-          <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-start space-x-3">
-            <AlertCircle className="w-5 h-5 text-amber-600 mt-0.5" />
-            <div>
-              <p className="text-sm font-medium text-amber-800">Usage Limit Warning</p>
-              <p className="text-xs text-amber-700 mt-1">
-                You are approaching your monthly limit. Upgrade your plan to avoid interruption.
-              </p>
+          return (
+            <div key={stat.label}>
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center space-x-2">
+                  <stat.icon className="w-4 h-4 text-gray-400" />
+                  <span className="text-sm font-medium text-gray-700">{stat.label}</span>
+                </div>
+                <span className="text-sm text-gray-500">
+                  {used.toLocaleString()} / {limit.toLocaleString()}
+                  {isMessages && stat.unlimited ? " (Unlimited*)" : ""}
+                </span>
+              </div>
+
+              <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                <div
+                  className={`h-full transition-all ${getColorClass(stat.color, stat.percentage)}`}
+                  style={{ width: `${Math.min(stat.percentage, 100)}%` }}
+                />
+              </div>
+
+              {warn && (
+                <p className="text-xs text-red-600 mt-1">
+                  ⚠️ {remaining} remaining — Approaching limit
+                </p>
+              )}
             </div>
-          </div>
-        )}
+          );
+        })}
       </div>
     </div>
   );

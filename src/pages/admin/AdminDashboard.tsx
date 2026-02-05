@@ -1,203 +1,452 @@
+// src/pages/admin/AdminDashboard.tsx
+
 import React, { useState, useEffect } from 'react';
-import { Search, Ban, Trash2, Mail, CheckCircle, RefreshCw, Loader2, Monitor, Smartphone, Globe } from 'lucide-react';
+import { 
+  Users, 
+  Building2, 
+  MessageSquare, 
+  CreditCard,
+  TrendingUp,
+  TrendingDown,
+  Activity,
+  Smartphone,
+  BarChart3,
+  ArrowUpRight,
+  ArrowDownRight,
+  Loader2,
+  RefreshCw,
+  AlertCircle,
+  CheckCircle,
+  Clock,
+  Ban
+} from 'lucide-react';
 import { admin } from '../../services/api';
+import { Link } from 'react-router-dom';
 
-const UserManagement: React.FC = () => {
-  const [search, setSearch] = useState('');
-  const [users, setUsers] = useState<any[]>([]);
+// ============================================
+// TYPES
+// ============================================
+interface DashboardStats {
+  users: {
+    total: number;
+    active: number;
+    pending: number;
+    suspended: number;
+    newThisMonth: number;
+  };
+  organizations: {
+    total: number;
+    byPlan: Record<string, number>;
+    newThisMonth: number;
+  };
+  messages: {
+    totalSent: number;
+    todaySent: number;
+    thisMonthSent: number;
+  };
+  revenue: {
+    mrr: number;
+    arr: number;
+  };
+  whatsapp: {
+    connectedAccounts: number;
+    totalContacts: number;
+    totalCampaigns: number;
+  };
+}
+
+// ============================================
+// STAT CARD COMPONENT
+// ============================================
+interface StatCardProps {
+  title: string;
+  value: string | number;
+  change?: number;
+  changeLabel?: string;
+  icon: React.ElementType;
+  iconBg: string;
+  iconColor: string;
+  link?: string;
+}
+
+const StatCard: React.FC<StatCardProps> = ({ 
+  title, value, change, changeLabel, icon: Icon, iconBg, iconColor, link 
+}) => {
+  const CardWrapper = link ? Link : 'div';
+  const wrapperProps = link ? { to: link } : {};
+
+  return (
+    <CardWrapper 
+      {...wrapperProps as any}
+      className={`bg-white rounded-2xl border border-gray-200 p-6 ${link ? 'hover:shadow-lg hover:border-gray-300 transition-all cursor-pointer' : ''}`}
+    >
+      <div className="flex items-start justify-between">
+        <div>
+          <p className="text-sm text-gray-500 font-medium">{title}</p>
+          <p className="text-3xl font-bold text-gray-900 mt-2">
+            {typeof value === 'number' ? value.toLocaleString() : value}
+          </p>
+          {change !== undefined && (
+            <div className={`flex items-center mt-2 text-sm ${change >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+              {change >= 0 ? (
+                <ArrowUpRight className="w-4 h-4 mr-1" />
+              ) : (
+                <ArrowDownRight className="w-4 h-4 mr-1" />
+              )}
+              <span>{Math.abs(change)}% {changeLabel || 'vs last month'}</span>
+            </div>
+          )}
+        </div>
+        <div className={`p-3 rounded-xl ${iconBg}`}>
+          <Icon className={`w-6 h-6 ${iconColor}`} />
+        </div>
+      </div>
+    </CardWrapper>
+  );
+};
+
+// ============================================
+// USER STATUS BREAKDOWN COMPONENT
+// ============================================
+interface StatusBreakdownProps {
+  stats: DashboardStats['users'];
+}
+
+const UserStatusBreakdown: React.FC<StatusBreakdownProps> = ({ stats }) => {
+  const statuses = [
+    { label: 'Active', value: stats.active, icon: CheckCircle, color: 'text-green-600', bg: 'bg-green-100' },
+    { label: 'Pending', value: stats.pending, icon: Clock, color: 'text-yellow-600', bg: 'bg-yellow-100' },
+    { label: 'Suspended', value: stats.suspended, icon: Ban, color: 'text-red-600', bg: 'bg-red-100' },
+  ];
+
+  return (
+    <div className="bg-white rounded-2xl border border-gray-200 p-6">
+      <h3 className="text-lg font-semibold text-gray-900 mb-4">User Status Breakdown</h3>
+      <div className="space-y-4">
+        {statuses.map((status) => (
+          <div key={status.label} className="flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <div className={`p-2 rounded-lg ${status.bg}`}>
+                <status.icon className={`w-4 h-4 ${status.color}`} />
+              </div>
+              <span className="text-gray-700 font-medium">{status.label}</span>
+            </div>
+            <div className="flex items-center space-x-3">
+              <span className="text-2xl font-bold text-gray-900">{status.value.toLocaleString()}</span>
+              <span className="text-sm text-gray-400">
+                ({stats.total > 0 ? Math.round((status.value / stats.total) * 100) : 0}%)
+              </span>
+            </div>
+          </div>
+        ))}
+      </div>
+      
+      {/* Progress Bar */}
+      <div className="mt-6 h-3 bg-gray-100 rounded-full overflow-hidden flex">
+        <div 
+          className="bg-green-500 transition-all" 
+          style={{ width: `${stats.total > 0 ? (stats.active / stats.total) * 100 : 0}%` }}
+        />
+        <div 
+          className="bg-yellow-500 transition-all" 
+          style={{ width: `${stats.total > 0 ? (stats.pending / stats.total) * 100 : 0}%` }}
+        />
+        <div 
+          className="bg-red-500 transition-all" 
+          style={{ width: `${stats.total > 0 ? (stats.suspended / stats.total) * 100 : 0}%` }}
+        />
+      </div>
+    </div>
+  );
+};
+
+// ============================================
+// PLAN DISTRIBUTION COMPONENT
+// ============================================
+interface PlanDistributionProps {
+  byPlan: Record<string, number>;
+  total: number;
+}
+
+const PlanDistribution: React.FC<PlanDistributionProps> = ({ byPlan, total }) => {
+  const planConfig: Record<string, { color: string; bg: string }> = {
+    FREE: { color: 'text-gray-600', bg: 'bg-gray-500' },
+    STARTER: { color: 'text-blue-600', bg: 'bg-blue-500' },
+    PRO: { color: 'text-purple-600', bg: 'bg-purple-500' },
+    ENTERPRISE: { color: 'text-orange-600', bg: 'bg-orange-500' },
+  };
+
+  const plans = Object.entries(byPlan).map(([type, count]) => ({
+    type,
+    count,
+    percentage: total > 0 ? Math.round((count / total) * 100) : 0,
+    ...planConfig[type] || { color: 'text-gray-600', bg: 'bg-gray-500' }
+  }));
+
+  return (
+    <div className="bg-white rounded-2xl border border-gray-200 p-6">
+      <h3 className="text-lg font-semibold text-gray-900 mb-4">Organizations by Plan</h3>
+      <div className="space-y-4">
+        {plans.map((plan) => (
+          <div key={plan.type}>
+            <div className="flex items-center justify-between mb-2">
+              <span className={`font-medium ${plan.color}`}>{plan.type}</span>
+              <span className="text-gray-900 font-bold">{plan.count}</span>
+            </div>
+            <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+              <div 
+                className={`h-full ${plan.bg} transition-all`}
+                style={{ width: `${plan.percentage}%` }}
+              />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+// ============================================
+// QUICK STATS COMPONENT
+// ============================================
+interface QuickStatsProps {
+  whatsapp: DashboardStats['whatsapp'];
+  messages: DashboardStats['messages'];
+}
+
+const QuickStats: React.FC<QuickStatsProps> = ({ whatsapp, messages }) => {
+  const stats = [
+    { label: 'Connected WhatsApp', value: whatsapp.connectedAccounts, icon: Smartphone },
+    { label: 'Total Contacts', value: whatsapp.totalContacts, icon: Users },
+    { label: 'Total Campaigns', value: whatsapp.totalCampaigns, icon: MessageSquare },
+    { label: "Today's Messages", value: messages.todaySent, icon: Activity },
+  ];
+
+  return (
+    <div className="bg-white rounded-2xl border border-gray-200 p-6">
+      <h3 className="text-lg font-semibold text-gray-900 mb-4">Platform Overview</h3>
+      <div className="grid grid-cols-2 gap-4">
+        {stats.map((stat) => (
+          <div key={stat.label} className="bg-gray-50 rounded-xl p-4">
+            <div className="flex items-center space-x-2 mb-2">
+              <stat.icon className="w-4 h-4 text-gray-400" />
+              <span className="text-xs text-gray-500 font-medium">{stat.label}</span>
+            </div>
+            <p className="text-2xl font-bold text-gray-900">{stat.value.toLocaleString()}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+// ============================================
+// MAIN COMPONENT
+// ============================================
+const AdminDashboard: React.FC = () => {
+  const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
-  const [processingId, setProcessingId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [adminUser, setAdminUser] = useState<any>(null);
 
-  // Fetch Users
-  const fetchUsers = async () => {
+  // Fetch Dashboard Stats
+  const fetchStats = async () => {
     setLoading(true);
+    setError(null);
+
     try {
-      const { data } = await admin.getUsers({ search });
-      setUsers(data);
-    } catch (error) {
-      console.error("Fetch Users Failed:", error);
+      const response = await admin.getDashboard();
+      console.log('📊 Dashboard Stats:', response.data);
+      
+      const data = response.data?.data || response.data;
+      setStats(data);
+
+      // Get admin user from localStorage
+      const storedAdmin = localStorage.getItem('wabmeta_admin_user');
+      if (storedAdmin) {
+        setAdminUser(JSON.parse(storedAdmin));
+      }
+
+    } catch (err: any) {
+      console.error('❌ Failed to fetch dashboard:', err);
+      setError(err.response?.data?.message || 'Failed to load dashboard data');
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchUsers();
-  }, [search]); // Re-fetch on search change
+    fetchStats();
+  }, []);
 
-  // Toggle User Status
-  const handleStatusToggle = async (id: string, currentStatus: string) => {
-    if (!window.confirm(`Are you sure you want to ${currentStatus === 'active' ? 'suspend' : 'activate'} this user?`)) return;
+  // Loading State
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-96">
+        <div className="text-center">
+          <Loader2 className="w-10 h-10 text-primary-500 animate-spin mx-auto mb-4" />
+          <p className="text-gray-500">Loading dashboard...</p>
+        </div>
+      </div>
+    );
+  }
 
-    setProcessingId(id);
-    try {
-      const newStatus = currentStatus === 'active' ? 'suspended' : 'active';
-      await admin.updateUserStatus(id, newStatus); 
-      setUsers(users.map(u => u._id === id ? { ...u, status: newStatus } : u));
-    } catch (error) {
-      alert("Failed to update status");
-    } finally {
-      setProcessingId(null);
-    }
-  };
+  // Error State
+  if (error) {
+    return (
+      <div className="flex items-center justify-center h-96">
+        <div className="text-center max-w-md">
+          <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
+          <h3 className="text-lg font-semibold text-gray-900 mb-2">Failed to Load Dashboard</h3>
+          <p className="text-gray-500 mb-4">{error}</p>
+          <button
+            onClick={fetchStats}
+            className="px-4 py-2 bg-primary-500 text-white rounded-xl hover:bg-primary-600 transition-colors"
+          >
+            Try Again
+          </button>
+        </div>
+      </div>
+    );
+  }
 
-  // Delete User
-  const handleDelete = async (id: string) => {
-    if (!window.confirm("This action cannot be undone. Delete user?")) return;
-
-    setProcessingId(id);
-    try {
-      await admin.deleteUser(id);
-      setUsers(users.filter(u => u._id !== id));
-    } catch (error) {
-      alert("Failed to delete user");
-    } finally {
-      setProcessingId(null);
-    }
-  };
-
-  // Helper for Platform Icon
-  const getPlatformIcon = (platform: string) => {
-    switch (platform) {
-      case 'Web': return <Monitor className="w-4 h-4 text-blue-500" />;
-      case 'Mobile App': return <Smartphone className="w-4 h-4 text-green-500" />;
-      case 'API': return <Globe className="w-4 h-4 text-purple-500" />;
-      default: return <Monitor className="w-4 h-4 text-gray-400" />;
-    }
+  // Default stats if null
+  const dashboardStats: DashboardStats = stats || {
+    users: { total: 0, active: 0, pending: 0, suspended: 0, newThisMonth: 0 },
+    organizations: { total: 0, byPlan: {}, newThisMonth: 0 },
+    messages: { totalSent: 0, todaySent: 0, thisMonthSent: 0 },
+    revenue: { mrr: 0, arr: 0 },
+    whatsapp: { connectedAccounts: 0, totalContacts: 0, totalCampaigns: 0 },
   };
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h1 className="text-2xl font-bold text-gray-900">User Management</h1>
-        <div className="flex space-x-3">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Search users..."
-              className="pl-10 pr-4 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 w-64"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">
+            Welcome back, {adminUser?.name || 'Admin'}! 👋
+          </h1>
+          <p className="text-gray-500">Here's what's happening with your platform today.</p>
+        </div>
+        <button
+          onClick={fetchStats}
+          disabled={loading}
+          className="flex items-center space-x-2 px-4 py-2 bg-white border border-gray-200 rounded-xl text-gray-700 hover:bg-gray-50 transition-colors"
+        >
+          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+          <span>Refresh</span>
+        </button>
+      </div>
+
+      {/* Main Stats Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <StatCard
+          title="Total Users"
+          value={dashboardStats.users.total}
+          change={dashboardStats.users.newThisMonth > 0 ? 12 : 0}
+          changeLabel="new this month"
+          icon={Users}
+          iconBg="bg-blue-100"
+          iconColor="text-blue-600"
+          link="/admin/users"
+        />
+        <StatCard
+          title="Organizations"
+          value={dashboardStats.organizations.total}
+          change={dashboardStats.organizations.newThisMonth > 0 ? 8 : 0}
+          changeLabel="new this month"
+          icon={Building2}
+          iconBg="bg-purple-100"
+          iconColor="text-purple-600"
+          link="/admin/organizations"
+        />
+        <StatCard
+          title="Messages Sent"
+          value={dashboardStats.messages.thisMonthSent}
+          icon={MessageSquare}
+          iconBg="bg-green-100"
+          iconColor="text-green-600"
+        />
+        <StatCard
+          title="Monthly Revenue"
+          value={`$${dashboardStats.revenue.mrr.toLocaleString()}`}
+          icon={CreditCard}
+          iconBg="bg-orange-100"
+          iconColor="text-orange-600"
+        />
+      </div>
+
+      {/* Secondary Stats */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* User Status Breakdown */}
+        <UserStatusBreakdown stats={dashboardStats.users} />
+
+        {/* Plan Distribution */}
+        <PlanDistribution 
+          byPlan={dashboardStats.organizations.byPlan} 
+          total={dashboardStats.organizations.total}
+        />
+
+        {/* Quick Stats */}
+        <QuickStats 
+          whatsapp={dashboardStats.whatsapp}
+          messages={dashboardStats.messages}
+        />
+      </div>
+
+      {/* Revenue Card */}
+      <div className="bg-linear-to-r from-gray-900 to-gray-800 rounded-2xl p-6 text-white">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-gray-400 text-sm font-medium">Annual Recurring Revenue (ARR)</p>
+            <p className="text-4xl font-bold mt-2">${dashboardStats.revenue.arr.toLocaleString()}</p>
+            <p className="text-gray-400 text-sm mt-2">
+              Based on ${dashboardStats.revenue.mrr.toLocaleString()} MRR
+            </p>
           </div>
-          <button 
-            onClick={fetchUsers}
-            className="flex items-center space-x-2 px-4 py-2 bg-white border border-gray-200 rounded-xl text-gray-700 hover:bg-gray-50 transition-colors"
-          >
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-            <span>Refresh</span>
-          </button>
+          <div className="hidden md:block">
+            <BarChart3 className="w-20 h-20 text-gray-700" />
+          </div>
         </div>
       </div>
 
-      <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden shadow-sm">
-        {loading && users.length === 0 ? (
-          <div className="flex justify-center items-center h-64">
-            <Loader2 className="w-10 h-10 text-primary-500 animate-spin" />
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50 border-b border-gray-200">
-                <tr>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase">User</th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase">Current Plan</th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase">Active On</th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase">Status</th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase">Joined</th>
-                  <th className="px-6 py-4 text-right text-xs font-semibold text-gray-500 uppercase">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {users.map((user) => (
-                  <tr key={user._id} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-6 py-4">
-                      <div className="flex items-center">
-                        <div className="w-10 h-10 bg-primary-100 rounded-full flex items-center justify-center text-primary-700 font-bold uppercase shrink-0">
-                          {user.name.charAt(0)}
-                        </div>
-                        <div className="ml-3">
-                          <div className="text-sm font-medium text-gray-900">{user.name}</div>
-                          <div className="text-sm text-gray-500">{user.email}</div>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className={`px-2 py-1 text-xs font-medium rounded-full ${
-                        user.plan?.includes('Year') ? 'bg-purple-100 text-purple-700' :
-                        user.plan?.includes('Month') ? 'bg-blue-100 text-blue-700' :
-                        'bg-gray-100 text-gray-700'
-                      }`}>
-                        {user.plan || 'Free Demo'}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center space-x-2">
-                        {getPlatformIcon(user.lastLoginPlatform)}
-                        <span className="text-sm text-gray-600">{user.lastLoginPlatform || 'Web'}</span>
-                        {user.isOnline && (
-                          <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse" title="Online Now"></span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className={`px-2 py-1 text-xs font-medium rounded-full capitalize ${
-                        user.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
-                      }`}>
-                        {user.status || 'active'}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-500">
-                      {new Date(user.createdAt).toLocaleDateString()}
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                      <div className="flex items-center justify-end space-x-2">
-                        <a 
-                          href={`mailto:${user.email}`}
-                          className="p-2 text-gray-400 hover:bg-blue-50 rounded-lg hover:text-blue-600 transition-colors" 
-                          title="Email User"
-                        >
-                          <Mail className="w-4 h-4" />
-                        </a>
-                        <button 
-                          onClick={() => handleStatusToggle(user._id, user.status || 'active')}
-                          disabled={processingId === user._id}
-                          className={`p-2 rounded-lg transition-colors ${
-                            user.status === 'active' 
-                              ? 'text-gray-400 hover:bg-red-50 hover:text-red-600' 
-                              : 'text-gray-400 hover:bg-green-50 hover:text-green-600'
-                          }`}
-                          title={user.status === 'active' ? "Suspend User" : "Activate User"}
-                        >
-                          {user.status === 'active' ? <Ban className="w-4 h-4" /> : <CheckCircle className="w-4 h-4" />}
-                        </button>
-                        <button 
-                          onClick={() => handleDelete(user._id)}
-                          disabled={processingId === user._id}
-                          className="p-2 text-gray-400 hover:bg-red-50 rounded-lg hover:text-red-600 transition-colors" 
-                          title="Delete User"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-                {users.length === 0 && (
-                  <tr>
-                    <td colSpan={6} className="px-6 py-8 text-center text-gray-500">
-                      No users found matching your search.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        )}
+      {/* Quick Actions */}
+      <div className="bg-white rounded-2xl border border-gray-200 p-6">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h3>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <Link
+            to="/admin/users"
+            className="flex items-center space-x-3 p-4 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors"
+          >
+            <Users className="w-5 h-5 text-blue-600" />
+            <span className="font-medium text-gray-700">Manage Users</span>
+          </Link>
+          <Link
+            to="/admin/organizations"
+            className="flex items-center space-x-3 p-4 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors"
+          >
+            <Building2 className="w-5 h-5 text-purple-600" />
+            <span className="font-medium text-gray-700">Organizations</span>
+          </Link>
+          <Link
+            to="/admin/plans"
+            className="flex items-center space-x-3 p-4 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors"
+          >
+            <CreditCard className="w-5 h-5 text-green-600" />
+            <span className="font-medium text-gray-700">Manage Plans</span>
+          </Link>
+          <Link
+            to="/admin/settings"
+            className="flex items-center space-x-3 p-4 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors"
+          >
+            <Activity className="w-5 h-5 text-orange-600" />
+            <span className="font-medium text-gray-700">System Settings</span>
+          </Link>
+        </div>
       </div>
     </div>
   );
 };
 
-export default UserManagement;
+export default AdminDashboard;

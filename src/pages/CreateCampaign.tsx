@@ -13,23 +13,82 @@ import {
   Eye,
   AlertCircle
 } from 'lucide-react';
+
 import TemplateSelector from '../components/campaigns/TemplateSelector';
 import AudienceSelector from '../components/campaigns/AudienceSelector';
 import VariableMapper from '../components/campaigns/VariableMapper';
 import SchedulePicker from '../components/campaigns/SchedulePicker';
 import TemplatePreview from '../components/templates/TemplatePreview';
+import CsvAudienceUploader from '../components/campaigns/CsvAudienceUploader';
+
 import type { CampaignFormData } from '../types/campaign';
 import { templates as templateApi, contacts as contactApi, campaigns as campaignApi } from '../services/api';
 
+// ============================================
+// TYPES
+// ============================================
+interface MappedTemplate {
+  id: string;
+  name: string;
+  category: string;
+  language: string;
+  headerType: string;
+  body: string;
+  buttons: { text: string }[];
+  variables: string[];
+}
+
+interface MappedContact {
+  id: string;
+  name: string;
+  phone: string;
+  tags: string[];
+}
+
+// ============================================
+// HELPER FUNCTIONS
+// ============================================
+const extractVariablesFromBody = (bodyText: string): string[] => {
+  if (!bodyText) return [];
+  const matches = bodyText.match(/\{\{(\d+)\}\}/g) || [];
+  return [...new Set(matches.map((m: string) => m.replace(/[{}]/g, '')))].sort(
+    (a, b) => Number(a) - Number(b)
+  );
+};
+
+const parseApiResponse = <T,>(response: any, possibleKeys: string[]): T[] => {
+  // Direct array
+  if (Array.isArray(response)) return response;
+
+  // Nested in response.data
+  if (response?.data) {
+    if (Array.isArray(response.data)) return response.data;
+    for (const key of possibleKeys) {
+      if (Array.isArray(response.data[key])) return response.data[key];
+    }
+  }
+
+  // Common backend format: { success, data: [...] }
+  if (Array.isArray(response?.data)) return response.data;
+  if (Array.isArray(response?.data?.data)) return response.data.data;
+
+  // Fallback
+  console.warn('Could not parse API response:', response);
+  return [];
+};
+
+// ============================================
+// COMPONENT
+// ============================================
 const CreateCampaign: React.FC = () => {
   const navigate = useNavigate();
   const [currentStep, setCurrentStep] = useState(1);
   const [sending, setSending] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
-  
+
   // Data States
-  const [templates, setTemplates] = useState<any[]>([]);
-  const [contacts, setContacts] = useState<any[]>([]);
+  const [templates, setTemplates] = useState<MappedTemplate[]>([]);
+  const [contacts, setContacts] = useState<MappedContact[]>([]);
   const [availableTags, setAvailableTags] = useState<string[]>([]);
   const [loadingData, setLoadingData] = useState(true);
   const [apiError, setApiError] = useState<string | null>(null);
@@ -48,48 +107,56 @@ const CreateCampaign: React.FC = () => {
     scheduledTime: ''
   });
 
-  // Fetch Templates and Contacts on Load
+  // ==========================================
+  // FETCH DATA ON MOUNT
+  // ==========================================
   useEffect(() => {
     const fetchData = async () => {
       setLoadingData(true);
+      setApiError(null);
+
       try {
         const [templatesRes, contactsRes] = await Promise.all([
           templateApi.getAll(),
           contactApi.getAll()
         ]);
 
-        // Process Templates
-        const templatesData = templatesRes.data?.templates || templatesRes.data || [];
-        const mappedTemplates = templatesData.map((t: any) => ({
+        // ✅ Parse Templates
+        const templatesArray = parseApiResponse<any>(templatesRes.data, ['templates', 'data', 'items']);
+        const mappedTemplates: MappedTemplate[] = templatesArray.map((t: any) => ({
           id: t._id || t.id,
-          name: t.name,
+          name: t.name || 'Untitled',
           category: (t.category || 'UTILITY').toLowerCase(),
           language: t.language || 'en',
-          headerType: t.components?.find((c: any) => c.type === 'HEADER')?.format?.toLowerCase() || 'none',
-          body: t.components?.find((c: any) => c.type === 'BODY')?.text || '',
-          buttons: t.components?.find((c: any) => c.type === 'BUTTONS')?.buttons?.map((b: any) => ({ text: b.text })) || [],
-          variables: extractVariables(t.components)
+          headerType: (t.headerType || 'NONE').toLowerCase(),
+          body: t.bodyText || t.body || '',
+          buttons: Array.isArray(t.buttons) ? t.buttons.map((b: any) => ({ text: b.text || '' })) : [],
+          variables: extractVariablesFromBody(t.bodyText || t.body || '')
         }));
         setTemplates(mappedTemplates);
 
-        // Process Contacts
-        const contactsData = contactsRes.data?.contacts || contactsRes.data || [];
-        const mappedContacts = contactsData.map((c: any) => ({
+        // ✅ Parse Contacts
+        const contactsArray = parseApiResponse<any>(contactsRes.data, ['contacts', 'data', 'items']);
+        const mappedContacts: MappedContact[] = contactsArray.map((c: any) => ({
           id: c._id || c.id,
-          name: `${c.firstName} ${c.lastName}`.trim(),
-          phone: c.phone,
-          tags: c.tags || []
+          name: `${c.firstName || ''} ${c.lastName || ''}`.trim() || c.phone || 'Unknown',
+          phone: c.phone || '',
+          tags: Array.isArray(c.tags) ? c.tags : []
         }));
         setContacts(mappedContacts);
 
-        // Extract Unique Tags
-        const tags = new Set<string>();
-        mappedContacts.forEach((c: any) => c.tags.forEach((tag: string) => tags.add(tag)));
-        setAvailableTags(Array.from(tags));
+        // ✅ Extract Unique Tags
+        const tagsSet = new Set<string>();
+        mappedContacts.forEach((c) => c.tags.forEach((tag: string) => tagsSet.add(tag)));
+        setAvailableTags(Array.from(tagsSet));
 
       } catch (err: any) {
-        console.error("Failed to load data:", err);
-        setApiError("Failed to load templates or contacts. Please refresh.");
+        console.error("❌ Failed to load data:", err);
+        const errorMessage =
+          err.response?.data?.message ||
+          err.message ||
+          "Failed to load templates or contacts. Please refresh.";
+        setApiError(errorMessage);
       } finally {
         setLoadingData(false);
       }
@@ -98,27 +165,57 @@ const CreateCampaign: React.FC = () => {
     fetchData();
   }, []);
 
-  // Helper to extract variables from template components
-  const extractVariables = (components: any[]) => {
-    const body = components?.find((c: any) => c.type === 'BODY')?.text || '';
-    const matches = body.match(/\{\{(\d+)\}\}/g) || [];
-    return [...new Set(matches.map((m: string) => m.replace(/[{}]/g, '')))];
+  // ==========================================
+  // CSV IMPORT HANDLER
+  // ==========================================
+  const handleCsvImported = async (batchTag: string) => {
+    try {
+      const res = await contactApi.getAll({ tags: batchTag, limit: 10000 });
+      const importedArray = parseApiResponse<any>(res.data, ['contacts', 'data', 'items']);
+
+      const importedContacts: MappedContact[] = importedArray.map((c: any) => ({
+        id: c._id || c.id,
+        name: `${c.firstName || ''} ${c.lastName || ''}`.trim() || c.phone || 'Unknown',
+        phone: c.phone || '',
+        tags: Array.isArray(c.tags) ? c.tags : []
+      }));
+
+      setContacts((prev) => {
+        const map = new Map<string, MappedContact>();
+        prev.forEach((p) => map.set(p.id, p));
+        importedContacts.forEach((c) => map.set(c.id, c));
+        return Array.from(map.values());
+      });
+
+      setAvailableTags((prev) => Array.from(new Set([...prev, batchTag])));
+
+      setFormData((prev) => ({
+        ...prev,
+        audienceType: 'tags',
+        selectedTags: [batchTag],
+        selectedContacts: [],
+      }));
+    } catch (e: any) {
+      console.error("❌ Failed to refresh imported contacts:", e);
+      setApiError(e?.response?.data?.message || "Imported, but failed to refresh contact list.");
+    }
   };
 
-  // Get selected template
-  const selectedTemplate = useMemo(() => 
-    templates.find(t => t.id === formData.templateId),
+  // ==========================================
+  // COMPUTED VALUES
+  // ==========================================
+  const selectedTemplate = useMemo(
+    () => templates.find((t) => t.id === formData.templateId),
     [formData.templateId, templates]
   );
 
-  // Calculate total recipients
   const totalRecipients = useMemo(() => {
     switch (formData.audienceType) {
       case 'all':
         return contacts.length;
       case 'tags':
-        return contacts.filter(c => 
-          formData.selectedTags.some(tag => c.tags.includes(tag))
+        return contacts.filter((c) =>
+          formData.selectedTags.some((tag) => c.tags.includes(tag))
         ).length;
       case 'manual':
         return formData.selectedContacts.length;
@@ -127,6 +224,9 @@ const CreateCampaign: React.FC = () => {
     }
   }, [formData.audienceType, formData.selectedTags, formData.selectedContacts, contacts]);
 
+  // ==========================================
+  // STEPS CONFIG
+  // ==========================================
   const steps = [
     { number: 1, title: 'Template', icon: FileText },
     { number: 2, title: 'Audience', icon: Users },
@@ -134,6 +234,9 @@ const CreateCampaign: React.FC = () => {
     { number: 4, title: 'Schedule', icon: Clock },
   ];
 
+  // ==========================================
+  // VALIDATION
+  // ==========================================
   const validateStep = (step: number): boolean => {
     switch (step) {
       case 1:
@@ -142,8 +245,9 @@ const CreateCampaign: React.FC = () => {
         return totalRecipients > 0;
       case 3:
         if (!selectedTemplate) return true;
-        // Check if all variables are mapped
-        return (selectedTemplate.variables || []).every((v: string) => formData.variableMapping[v]);
+        return (selectedTemplate.variables || []).every(
+          (v: string) => formData.variableMapping[v]
+        );
       case 4:
         if (formData.scheduleType === 'later') {
           return !!formData.scheduledDate && !!formData.scheduledTime;
@@ -154,66 +258,82 @@ const CreateCampaign: React.FC = () => {
     }
   };
 
+  // ==========================================
+  // NAVIGATION
+  // ==========================================
   const handleNext = () => {
-    if (validateStep(currentStep) && currentStep < 4) {
-      setCurrentStep(currentStep + 1);
-    }
+    if (validateStep(currentStep) && currentStep < 4) setCurrentStep(currentStep + 1);
   };
 
   const handleBack = () => {
-    if (currentStep > 1) {
-      setCurrentStep(currentStep - 1);
-    }
+    if (currentStep > 1) setCurrentStep(currentStep - 1);
   };
 
+  // ==========================================
+  // SUBMIT CAMPAIGN
+  // ==========================================
   const handleSend = async () => {
     setSending(true);
     setApiError(null);
 
     try {
-      // Determine final audience based on type
-      let audiencePayload: any = { type: formData.audienceType };
+      let audienceContactIds: string[] = [];
 
+      // ✅ Populate contactIds based on type (Backend expects array of IDs)
       if (formData.audienceType === 'all') {
-        audiencePayload.contactIds = contacts.map(c => c.id);
+        audienceContactIds = contacts.map((c) => c.id);
       } else if (formData.audienceType === 'tags') {
-        audiencePayload.tags = formData.selectedTags;
-        audiencePayload.contactIds = contacts
-          .filter(c => formData.selectedTags.some(tag => c.tags.includes(tag)))
-          .map(c => c.id);
+        audienceContactIds = contacts
+          .filter((c) => formData.selectedTags.some((tag) => c.tags.includes(tag)))
+          .map((c) => c.id);
       } else if (formData.audienceType === 'manual') {
-        audiencePayload.contactIds = formData.selectedContacts;
+        audienceContactIds = formData.selectedContacts;
       }
 
-      // Construct Payload
+      // ✅ Validation
+      if (audienceContactIds.length === 0) {
+        throw new Error("No recipients selected. Please check your audience filters.");
+      }
+
       const payload = {
         name: formData.name,
-        description: formData.description,
+        description: formData.description || undefined,
         templateId: formData.templateId,
-        audience: audiencePayload,
-        variables: formData.variableMapping,
-        schedule: formData.scheduleType === 'later' ? {
-          date: formData.scheduledDate,
-          time: formData.scheduledTime
-        } : undefined
+        audience: {
+          type: formData.audienceType,
+          contactIds: audienceContactIds, // ✅ Sending IDs is critical
+          tags: formData.audienceType === 'tags' ? formData.selectedTags : undefined
+        },
+        variables: Object.keys(formData.variableMapping).length > 0 ? formData.variableMapping : undefined,
+        schedule: formData.scheduleType === 'later'
+          ? { date: formData.scheduledDate, time: formData.scheduledTime }
+          : undefined
       };
 
-      // Call API
-      const response = await campaignApi.create(payload);
-      console.log('Campaign Created:', response.data);
+      console.log("📤 Sending campaign payload:", payload);
 
+      const response = await campaignApi.create(payload);
+      console.log("✅ Campaign created:", response.data);
       navigate('/dashboard/campaigns');
     } catch (error: any) {
-      console.error("Campaign Creation Error:", error);
-      setApiError(error.response?.data?.message || 'Failed to create campaign');
+      console.error("❌ Campaign creation error:", error);
+      const errorMessage =
+        error.response?.data?.message ||
+        error.response?.data?.error?.message ||
+        error.message ||
+        'Failed to create campaign';
+      setApiError(errorMessage);
     } finally {
       setSending(false);
     }
   };
 
+  // ==========================================
+  // LOADING STATE
+  // ==========================================
   if (loadingData) {
     return (
-      <div className="flex items-center justify-center h-screen">
+      <div className="flex items-center justify-center h-screen bg-gray-50">
         <div className="text-center">
           <Loader2 className="w-10 h-10 text-primary-500 animate-spin mx-auto mb-4" />
           <p className="text-gray-500">Loading templates and contacts...</p>
@@ -222,6 +342,9 @@ const CreateCampaign: React.FC = () => {
     );
   }
 
+  // ==========================================
+  // RENDER
+  // ==========================================
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
@@ -229,10 +352,7 @@ const CreateCampaign: React.FC = () => {
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center space-x-4">
-              <Link
-                to="/dashboard/campaigns"
-                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-              >
+              <Link to="/dashboard/campaigns" className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
                 <ArrowLeft className="w-5 h-5 text-gray-600" />
               </Link>
               <div>
@@ -240,7 +360,7 @@ const CreateCampaign: React.FC = () => {
                 <p className="text-sm text-gray-500">Step {currentStep} of 4</p>
               </div>
             </div>
-            
+
             {selectedTemplate && (
               <button
                 onClick={() => setShowPreview(true)}
@@ -259,7 +379,13 @@ const CreateCampaign: React.FC = () => {
         {apiError && (
           <div className="mb-6 bg-red-50 border border-red-200 rounded-xl p-4 flex items-start space-x-3">
             <AlertCircle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
-            <p className="text-red-700">{apiError}</p>
+            <div>
+              <p className="text-red-700 font-medium">Error</p>
+              <p className="text-red-600 text-sm">{apiError}</p>
+            </div>
+            <button onClick={() => setApiError(null)} className="ml-auto text-red-400 hover:text-red-600">
+              ×
+            </button>
           </div>
         )}
 
@@ -269,7 +395,7 @@ const CreateCampaign: React.FC = () => {
             {steps.map((step, index) => (
               <React.Fragment key={step.number}>
                 <div className="flex items-center">
-                  <div 
+                  <div
                     className={`w-10 h-10 rounded-full flex items-center justify-center font-semibold transition-all ${
                       step.number < currentStep
                         ? 'bg-primary-500 text-white'
@@ -278,22 +404,14 @@ const CreateCampaign: React.FC = () => {
                           : 'bg-gray-200 text-gray-500'
                     }`}
                   >
-                    {step.number < currentStep ? (
-                      <Check className="w-5 h-5" />
-                    ) : (
-                      <step.icon className="w-5 h-5" />
-                    )}
+                    {step.number < currentStep ? <Check className="w-5 h-5" /> : <step.icon className="w-5 h-5" />}
                   </div>
-                  <span className={`ml-3 font-medium hidden sm:inline ${
-                    step.number <= currentStep ? 'text-gray-900' : 'text-gray-500'
-                  }`}>
+                  <span className={`ml-3 font-medium hidden sm:inline ${step.number <= currentStep ? 'text-gray-900' : 'text-gray-500'}`}>
                     {step.title}
                   </span>
                 </div>
                 {index < steps.length - 1 && (
-                  <div className={`flex-1 h-1 mx-4 rounded ${
-                    step.number < currentStep ? 'bg-primary-500' : 'bg-gray-200'
-                  }`}></div>
+                  <div className={`flex-1 h-1 mx-4 rounded ${step.number < currentStep ? 'bg-primary-500' : 'bg-gray-200'}`} />
                 )}
               </React.Fragment>
             ))}
@@ -302,7 +420,8 @@ const CreateCampaign: React.FC = () => {
 
         {/* Step Content */}
         <div className="bg-white rounded-2xl border border-gray-200 p-6">
-          {/* Step 1: Template Selection */}
+
+          {/* Step 1 */}
           {currentStep === 1 && (
             <div className="space-y-6 animate-fade-in">
               <div>
@@ -312,9 +431,7 @@ const CreateCampaign: React.FC = () => {
 
               <div className="grid gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Campaign Name *
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Campaign Name *</label>
                   <input
                     type="text"
                     value={formData.name}
@@ -323,10 +440,9 @@ const CreateCampaign: React.FC = () => {
                     className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500"
                   />
                 </div>
+
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Description (Optional)
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Description (Optional)</label>
                   <textarea
                     value={formData.description}
                     onChange={(e) => setFormData({ ...formData, description: e.target.value })}
@@ -338,9 +454,7 @@ const CreateCampaign: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Select Template *
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Select Template *</label>
                 {templates.length > 0 ? (
                   <TemplateSelector
                     templates={templates}
@@ -350,9 +464,10 @@ const CreateCampaign: React.FC = () => {
                   />
                 ) : (
                   <div className="text-center py-8 bg-gray-50 rounded-xl border border-dashed border-gray-300">
-                    <p className="text-gray-500">No templates found. Create a template first.</p>
-                    <Link to="/dashboard/templates/new" className="text-primary-600 hover:underline mt-2 inline-block">
-                      Create Template
+                    <FileText className="w-10 h-10 text-gray-400 mx-auto mb-2" />
+                    <p className="text-gray-500">No templates found.</p>
+                    <Link to="/dashboard/templates/new" className="text-primary-600 hover:underline mt-2 inline-block font-medium">
+                      Create Template →
                     </Link>
                   </div>
                 )}
@@ -360,7 +475,7 @@ const CreateCampaign: React.FC = () => {
             </div>
           )}
 
-          {/* Step 2: Audience Selection */}
+          {/* Step 2 (Audience) */}
           {currentStep === 2 && (
             <div className="space-y-6 animate-fade-in">
               <div>
@@ -368,21 +483,31 @@ const CreateCampaign: React.FC = () => {
                 <p className="text-gray-500">Choose who should receive this campaign</p>
               </div>
 
-              <AudienceSelector
-                audienceType={formData.audienceType}
-                onTypeChange={(type) => setFormData({ ...formData, audienceType: type })}
-                selectedTags={formData.selectedTags}
-                onTagsChange={(tags) => setFormData({ ...formData, selectedTags: tags })}
-                selectedContacts={formData.selectedContacts}
-                onContactsChange={(contacts) => setFormData({ ...formData, selectedContacts: contacts })}
-                availableTags={availableTags}
-                contacts={contacts}
-                totalSelected={totalRecipients}
-              />
+              {contacts.length > 0 ? (
+                <AudienceSelector
+                  audienceType={formData.audienceType}
+                  onTypeChange={(type) => setFormData({ ...formData, audienceType: type })}
+                  selectedTags={formData.selectedTags}
+                  onTagsChange={(tags) => setFormData({ ...formData, selectedTags: tags })}
+                  selectedContacts={formData.selectedContacts}
+                  onContactsChange={(c) => setFormData({ ...formData, selectedContacts: c })}
+                  availableTags={availableTags}
+                  contacts={contacts}
+                  totalSelected={totalRecipients}
+                />
+              ) : (
+                <div className="text-center py-6 bg-gray-50 rounded-xl border border-dashed border-gray-300">
+                  <Users className="w-10 h-10 text-gray-400 mx-auto mb-2" />
+                  <p className="text-gray-500">No contacts found yet. Upload CSV to import.</p>
+                </div>
+              )}
+
+              {/* ✅ CSV uploader always available */}
+              <CsvAudienceUploader onImported={handleCsvImported} />
             </div>
           )}
 
-          {/* Step 3: Variable Mapping */}
+          {/* Step 3 */}
           {currentStep === 3 && (
             <div className="space-y-6 animate-fade-in">
               <div>
@@ -397,14 +522,16 @@ const CreateCampaign: React.FC = () => {
                   onMappingChange={(mapping) => setFormData({ ...formData, variableMapping: mapping })}
                 />
               ) : (
-                <div className="text-center py-8 bg-gray-50 rounded-xl">
-                  <p className="text-gray-500">This template has no variables to map.</p>
+                <div className="text-center py-8 bg-green-50 rounded-xl border border-green-200">
+                  <Check className="w-10 h-10 text-green-500 mx-auto mb-2" />
+                  <p className="text-green-700 font-medium">No Variables Required</p>
+                  <p className="text-green-600 text-sm">This template has no variables to map.</p>
                 </div>
               )}
             </div>
           )}
 
-          {/* Step 4: Schedule */}
+          {/* Step 4 */}
           {currentStep === 4 && (
             <div className="space-y-6 animate-fade-in">
               <div>
@@ -420,34 +547,6 @@ const CreateCampaign: React.FC = () => {
                 onDateChange={(date) => setFormData({ ...formData, scheduledDate: date })}
                 onTimeChange={(time) => setFormData({ ...formData, scheduledTime: time })}
               />
-
-              {/* Campaign Summary */}
-              <div className="bg-gray-50 rounded-xl p-6 mt-6">
-                <h3 className="font-semibold text-gray-900 mb-4">Campaign Summary</h3>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-sm text-gray-500">Campaign Name</p>
-                    <p className="font-medium text-gray-900">{formData.name}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-500">Template</p>
-                    <p className="font-medium text-gray-900">{selectedTemplate?.name}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-500">Recipients</p>
-                    <p className="font-medium text-gray-900">{totalRecipients.toLocaleString()} contacts</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-500">Schedule</p>
-                    <p className="font-medium text-gray-900">
-                      {formData.scheduleType === 'now' 
-                        ? 'Send Immediately' 
-                        : `${formData.scheduledDate} at ${formData.scheduledTime}`
-                      }
-                    </p>
-                  </div>
-                </div>
-              </div>
             </div>
           )}
         </div>
@@ -486,9 +585,7 @@ const CreateCampaign: React.FC = () => {
               ) : (
                 <>
                   <Send className="w-5 h-5" />
-                  <span>
-                    {formData.scheduleType === 'now' ? 'Send Now' : 'Schedule Campaign'}
-                  </span>
+                  <span>{formData.scheduleType === 'now' ? 'Send Now' : 'Schedule Campaign'}</span>
                 </>
               )}
             </button>
@@ -512,7 +609,7 @@ const CreateCampaign: React.FC = () => {
               text: b.text
             }))
           }}
-          sampleVariables={{}}
+          sampleVariables={formData.variableMapping}
           isModal
           onClose={() => setShowPreview(false)}
         />

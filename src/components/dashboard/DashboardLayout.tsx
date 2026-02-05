@@ -1,3 +1,5 @@
+// src/components/dashboard/DashboardLayout.tsx
+
 import React, { useState } from 'react';
 import { Outlet } from 'react-router-dom';
 import Sidebar from './Sidebar';
@@ -8,7 +10,7 @@ const DashboardLayout: React.FC = () => {
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 dark:bg-slate-950">
       {/* Sidebar - Desktop */}
       <div className="hidden lg:block">
         <Sidebar collapsed={sidebarCollapsed} setCollapsed={setSidebarCollapsed} />
@@ -17,10 +19,10 @@ const DashboardLayout: React.FC = () => {
       {/* Sidebar - Mobile Overlay */}
       {mobileSidebarOpen && (
         <>
-          <div 
-            className="fixed inset-0 bg-black/50 z-40 lg:hidden"
+          <div
+            className="fixed inset-0 bg-black/50 dark:bg-black/70 z-40 lg:hidden"
             onClick={() => setMobileSidebarOpen(false)}
-          ></div>
+          />
           <div className="fixed inset-y-0 left-0 z-50 lg:hidden">
             <Sidebar collapsed={false} setCollapsed={() => {}} />
           </div>
@@ -28,13 +30,13 @@ const DashboardLayout: React.FC = () => {
       )}
 
       {/* Top Bar */}
-      <TopBar 
-        onMenuClick={() => setMobileSidebarOpen(!mobileSidebarOpen)} 
+      <TopBar
+        onMenuClick={() => setMobileSidebarOpen(!mobileSidebarOpen)}
         sidebarCollapsed={sidebarCollapsed}
       />
 
       {/* Main Content */}
-      <main 
+      <main
         className={`pt-16 min-h-screen transition-all duration-300 ${
           sidebarCollapsed ? 'lg:pl-20' : 'lg:pl-64'
         }`}

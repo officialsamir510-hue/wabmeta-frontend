@@ -1,19 +1,34 @@
-import React, { useState } from 'react';
+// src/pages/Settings.tsx
+
+import React, { useState, useEffect } from 'react';
 import {
   Settings as SettingsIcon,
   MessageSquare,
   Globe,
   Bell,
   Shield,
-  Activity
+  Activity,
+  Loader2,
+  AlertCircle
 } from 'lucide-react';
 import GeneralSettings from '../components/settings/GeneralSettings';
 import ApiConfig from '../components/settings/ApiConfig';
 import BusinessProfile from '../components/settings/BusinessProfile';
 import WebhookLogs from '../components/settings/WebhookLogs';
+import NotificationSettings from '../components/settings/NotificationSettings';
+import SecuritySettings from '../components/settings/SecuritySettings';
+import { settings as settingsApi, team as teamApi } from '../services/api';
 
 const Settings: React.FC = () => {
   const [activeTab, setActiveTab] = useState('general');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  
+  // Data states
+  const [profile, setProfile] = useState<any>(null);
+  const [organization, setOrganization] = useState<any>(null);
+  const [apiKeys, setApiKeys] = useState<any[]>([]);
+  const [webhooks, setWebhooks] = useState<any[]>([]);
 
   const tabs = [
     { id: 'general', label: 'General', icon: Globe },
@@ -24,16 +39,179 @@ const Settings: React.FC = () => {
     { id: 'security', label: 'Security', icon: Shield },
   ];
 
+  // Fetch settings data
+  const fetchSettingsData = async () => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const [profileRes, orgRes] = await Promise.all([
+        settingsApi.getProfile(),
+        teamApi.getCurrent(),
+      ]);
+
+      console.log('📥 Settings Data:', {
+        profile: profileRes.data,
+        organization: orgRes.data,
+      });
+
+      setProfile(profileRes.data?.data || profileRes.data);
+      setOrganization(orgRes.data?.data || orgRes.data);
+
+      // Fetch API keys and webhooks if on those tabs
+      try {
+        const [apiKeysRes, webhooksRes] = await Promise.all([
+          settingsApi.getApiKeys(),
+          settingsApi.getWebhooks(),
+        ]);
+        setApiKeys(apiKeysRes.data?.data || apiKeysRes.data || []);
+        setWebhooks(webhooksRes.data?.data || webhooksRes.data || []);
+      } catch (err) {
+        // API keys/webhooks might not be implemented yet
+        console.log('API keys/webhooks not available');
+      }
+
+    } catch (err: any) {
+      console.error('❌ Failed to fetch settings:', err);
+      setError(err.response?.data?.message || 'Failed to load settings');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchSettingsData();
+  }, []);
+
+  // Update profile
+  const handleUpdateProfile = async (data: any) => {
+    try {
+      const response = await settingsApi.updateProfile(data);
+      setProfile(response.data?.data || response.data);
+      return { success: true };
+    } catch (err: any) {
+      throw err;
+    }
+  };
+
+  // Change password
+  const handleChangePassword = async (data: { currentPassword: string; newPassword: string }) => {
+    try {
+      await settingsApi.changePassword(data);
+      return { success: true };
+    } catch (err: any) {
+      throw err;
+    }
+  };
+
+  // Update organization
+  const handleUpdateOrganization = async (data: any) => {
+    if (!organization?.id) return;
+    
+    try {
+      const response = await teamApi.update(organization.id, data);
+      setOrganization(response.data?.data || response.data);
+      return { success: true };
+    } catch (err: any) {
+      throw err;
+    }
+  };
+
+  // API Keys handlers
+  const handleCreateApiKey = async (data: any) => {
+    try {
+      const response = await settingsApi.createApiKey(data);
+      setApiKeys([...apiKeys, response.data?.data || response.data]);
+      return response.data?.data || response.data;
+    } catch (err: any) {
+      throw err;
+    }
+  };
+
+  const handleDeleteApiKey = async (id: string) => {
+    try {
+      await settingsApi.deleteApiKey(id);
+      setApiKeys(apiKeys.filter(k => k.id !== id));
+    } catch (err: any) {
+      throw err;
+    }
+  };
+
+  // Webhook handlers
+  const handleCreateWebhook = async (data: any) => {
+    try {
+      const response = await settingsApi.createWebhook(data);
+      setWebhooks([...webhooks, response.data?.data || response.data]);
+      return response.data?.data || response.data;
+    } catch (err: any) {
+      throw err;
+    }
+  };
+
+  const handleUpdateWebhook = async (id: string, data: any) => {
+    try {
+      const response = await settingsApi.updateWebhook(id, data);
+      setWebhooks(webhooks.map(w => w.id === id ? (response.data?.data || response.data) : w));
+    } catch (err: any) {
+      throw err;
+    }
+  };
+
+  const handleDeleteWebhook = async (id: string) => {
+    try {
+      await settingsApi.deleteWebhook(id);
+      setWebhooks(webhooks.filter(w => w.id !== id));
+    } catch (err: any) {
+      throw err;
+    }
+  };
+
   const renderContent = () => {
+    if (loading) {
+      return (
+        <div className="flex items-center justify-center py-20">
+          <Loader2 className="w-8 h-8 text-primary-500 animate-spin" />
+        </div>
+      );
+    }
+
     switch (activeTab) {
       case 'general':
-        return <GeneralSettings />;
-      case 'api':
-        return <ApiConfig />;
+        return (
+          <GeneralSettings 
+            profile={profile}
+            onUpdate={handleUpdateProfile}
+          />
+        );
       case 'business':
-        return <BusinessProfile />;
+        return (
+          <BusinessProfile 
+            organization={organization}
+            onUpdate={handleUpdateOrganization}
+          />
+        );
+      case 'api':
+        return (
+          <ApiConfig 
+            apiKeys={apiKeys}
+            webhooks={webhooks}
+            onCreateApiKey={handleCreateApiKey}
+            onDeleteApiKey={handleDeleteApiKey}
+            onCreateWebhook={handleCreateWebhook}
+            onUpdateWebhook={handleUpdateWebhook}
+            onDeleteWebhook={handleDeleteWebhook}
+          />
+        );
       case 'logs':
         return <WebhookLogs />;
+      case 'notifications':
+        return <NotificationSettings />;
+      case 'security':
+        return (
+          <SecuritySettings 
+            onChangePassword={handleChangePassword}
+          />
+        );
       default:
         return (
           <div className="flex flex-col items-center justify-center py-20 text-center bg-white border border-gray-200 rounded-xl">
@@ -53,6 +231,18 @@ const Settings: React.FC = () => {
         <h1 className="text-2xl font-bold text-gray-900">Settings</h1>
         <p className="text-gray-500 mt-1">Manage your account preferences and API configuration</p>
       </div>
+
+      {/* Error Banner */}
+      {error && (
+        <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex items-start space-x-3">
+          <AlertCircle className="w-5 h-5 text-red-600 shrink-0" />
+          <div className="flex-1">
+            <p className="text-red-700 font-medium">Error</p>
+            <p className="text-red-600 text-sm">{error}</p>
+          </div>
+          <button onClick={() => setError(null)} className="text-red-400 hover:text-red-600">×</button>
+        </div>
+      )}
 
       <div className="flex flex-col lg:flex-row gap-6">
         {/* Sidebar */}
