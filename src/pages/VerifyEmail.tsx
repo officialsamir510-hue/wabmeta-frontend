@@ -1,21 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate, Link } from 'react-router-dom';
-import { 
-  RefreshCw, 
-  ShieldCheck, 
-  AlertCircle, 
-  CheckCircle2,
-  ArrowRight
-} from 'lucide-react';
+import { RefreshCw, ShieldCheck, AlertCircle, CheckCircle2, ArrowRight } from 'lucide-react';
 import AuthLayout from '../components/auth/AuthLayout';
 import Button from '../components/common/Button';
-import api from '../services/api';
-import OTPInput from '../components/auth/OTPInput'; // Ensure this path is correct
+import { auth } from '../services/api';
+import OTPInput from '../components/auth/OTPInput';
 
 const VerifyOTP: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const email = location.state?.email;
+  const email = location.state?.email as string | undefined;
 
   const [otp, setOtp] = useState('');
   const [loading, setLoading] = useState(false);
@@ -24,24 +18,18 @@ const VerifyOTP: React.FC = () => {
   const [success, setSuccess] = useState<string | null>(null);
   const [countdown, setCountdown] = useState(60);
 
-  // Redirect if no email
   useEffect(() => {
-    if (!email) {
-      navigate('/login');
-    }
+    if (!email) navigate('/login');
   }, [email, navigate]);
 
-  // Countdown Timer
   useEffect(() => {
-    let timer: NodeJS.Timeout;
-    if (countdown > 0) {
-      timer = setTimeout(() => setCountdown(countdown - 1), 1000);
-    }
+    let timer: any;
+    if (countdown > 0) timer = setTimeout(() => setCountdown((c) => c - 1), 1000);
     return () => clearTimeout(timer);
   }, [countdown]);
 
-  // Verify OTP
   const handleVerify = async () => {
+    if (!email) return;
     if (otp.length !== 6) {
       setError('Please enter a valid 6-digit OTP');
       return;
@@ -52,43 +40,54 @@ const VerifyOTP: React.FC = () => {
     setSuccess(null);
 
     try {
-      const res = await api.post('/auth/verify-otp', { email, otp });
+      const res = await auth.verifyOTP({ email, otp });
 
-      if (res.data.token) {
-        setSuccess('Verification successful! Redirecting...');
-        
-        localStorage.setItem('wabmeta_token', res.data.token);
-        localStorage.setItem('token', res.data.token);
-        
-        if (res.data.user) {
-          localStorage.setItem('wabmeta_user', JSON.stringify(res.data.user));
-        }
+      // sendSuccess wrapper => { success, message, data }
+      const payload = res.data?.data;
+      const tokens = payload?.tokens;
 
-        setTimeout(() => {
-          navigate('/dashboard');
-        }, 1500);
+      if (!tokens?.accessToken) {
+        throw new Error('Access token not received');
       }
+
+      // Store tokens in the keys your interceptor reads
+      localStorage.setItem('accessToken', tokens.accessToken);
+      localStorage.setItem('refreshToken', tokens.refreshToken);
+
+      // Backward-compat keys (optional)
+      localStorage.setItem('wabmeta_token', tokens.accessToken);
+      localStorage.setItem('token', tokens.accessToken);
+
+      if (payload?.user) localStorage.setItem('wabmeta_user', JSON.stringify(payload.user));
+      if (payload?.organization) localStorage.setItem('wabmeta_org', JSON.stringify(payload.organization));
+
+      setSuccess('Verification successful! Redirecting...');
+
+      setTimeout(() => {
+        navigate('/dashboard');
+      }, 800);
     } catch (err: any) {
       console.error('Verify Error:', err);
-      setError(err.response?.data?.message || 'Verification failed. Please try again.');
+      setError(err?.response?.data?.error || err?.response?.data?.message || 'Verification failed. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
-  // Resend OTP
   const handleResend = async () => {
+    if (!email) return;
+
     setResendLoading(true);
     setError(null);
     setSuccess(null);
 
     try {
-      await api.post('/auth/resend-otp', { email });
+      await auth.sendOTP({ email }); // ✅ correct endpoint
       setSuccess('New OTP sent successfully!');
       setCountdown(60);
-      setOtp(''); // Clear OTP input
+      setOtp('');
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Failed to resend OTP');
+      setError(err?.response?.data?.error || err?.response?.data?.message || 'Failed to resend OTP');
     } finally {
       setResendLoading(false);
     }
@@ -97,43 +96,38 @@ const VerifyOTP: React.FC = () => {
   return (
     <AuthLayout title="Verify Your Account" subtitle="">
       <div className="space-y-6">
-        
-        {/* Shield Icon */}
         <div className="flex justify-center py-4">
-          <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center animate-bounce-slow">
+          <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center">
             <ShieldCheck className="w-10 h-10 text-green-600" />
           </div>
         </div>
 
-        {/* Info Text */}
         <div className="text-center">
-          <p className="text-gray-600 mb-1">
-            We've sent a 6-digit verification code to
-          </p>
+          <p className="text-gray-600 mb-1">We've sent a 6-digit verification code to</p>
           <p className="font-semibold text-primary-600 text-lg bg-primary-50 py-1 px-3 rounded-lg inline-block">
             {email}
           </p>
         </div>
 
-        {/* Feedback Messages */}
         {error && (
-          <div className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-center space-x-2 text-red-600 text-sm animate-fade-in">
+          <div className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-center space-x-2 text-red-600 text-sm">
             <AlertCircle className="w-4 h-4 shrink-0" />
             <span>{error}</span>
           </div>
         )}
+
         {success && (
-          <div className="p-3 bg-green-50 border border-green-200 rounded-lg flex items-center space-x-2 text-green-700 text-sm animate-fade-in">
+          <div className="p-3 bg-green-50 border border-green-200 rounded-lg flex items-center space-x-2 text-green-700 text-sm">
             <CheckCircle2 className="w-4 h-4 shrink-0" />
             <span>{success}</span>
           </div>
         )}
 
-        {/* OTP Input Component */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-4 text-center">
             Enter verification code
           </label>
+
           <OTPInput
             length={6}
             value={otp}
@@ -142,11 +136,10 @@ const VerifyOTP: React.FC = () => {
               setError(null);
             }}
             error={!!error}
-            disabled={loading || !!success} // Disable on success or loading
+            disabled={loading || !!success}
           />
         </div>
 
-        {/* Verify Button */}
         <Button
           fullWidth
           onClick={handleVerify}
@@ -158,14 +151,15 @@ const VerifyOTP: React.FC = () => {
           Verify & Continue
         </Button>
 
-        {/* Resend Section */}
         <div className="text-center pt-4 border-t border-gray-100">
           <p className="text-sm text-gray-500 mb-3">Didn't receive the code?</p>
-          
+
           {countdown > 0 ? (
             <div className="flex items-center justify-center space-x-2 text-gray-500 text-sm">
               <RefreshCw className="w-4 h-4" />
-              <span>Resend available in <span className="font-bold text-primary-600">{countdown}s</span></span>
+              <span>
+                Resend available in <span className="font-bold text-primary-600">{countdown}s</span>
+              </span>
             </div>
           ) : (
             <button
@@ -188,17 +182,12 @@ const VerifyOTP: React.FC = () => {
           )}
         </div>
 
-        {/* Change Email Link */}
         <p className="text-center text-sm text-gray-500 mt-4">
           Wrong email address?{' '}
-          <Link 
-            to="/signup" 
-            className="font-semibold text-primary-600 hover:text-primary-500 hover:underline transition-colors"
-          >
+          <Link to="/signup" className="font-semibold text-primary-600 hover:underline">
             Change Email
           </Link>
         </p>
-
       </div>
     </AuthLayout>
   );
