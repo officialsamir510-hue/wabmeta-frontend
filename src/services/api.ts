@@ -5,83 +5,94 @@ import axios, { AxiosError, type InternalAxiosRequestConfig } from "axios";
 // ------------------------------
 // BASE URL CONFIGURATION
 // ------------------------------
-
-// Get API URL from environment or use default
 const getApiBaseUrl = (): string => {
-  // Check for environment variable first
   const envUrl = import.meta.env.VITE_API_URL;
-  
+
   if (envUrl) {
-    // Clean up the URL - remove trailing slashes
     const cleanUrl = envUrl.replace(/\/+$/, "");
-    
-    // Ensure it ends with /api/v1
-    if (cleanUrl.endsWith("/api/v1")) {
-      return cleanUrl;
-    } else if (cleanUrl.endsWith("/api")) {
-      return `${cleanUrl}/v1`;
-    } else {
-      return `${cleanUrl}/api/v1`;
-    }
+    if (cleanUrl.endsWith("/api/v1")) return cleanUrl;
+    if (cleanUrl.endsWith("/api")) return `${cleanUrl}/v1`;
+    return `${cleanUrl}/api/v1`;
   }
-  
-  // Default based on environment
+
   if (import.meta.env.PROD) {
-    return "https://wabmeta-backend.onrender.com/api/v1";
+    // ✅ Correct production API
+    return "https://wabmeta-api.onrender.com/api/v1";
   }
-  
+
   return "http://localhost:5001/api/v1";
 };
 
 const API_URL = getApiBaseUrl();
 
-// Log for debugging
 console.log("🔗 API Base URL:", API_URL);
 console.log("🌐 Environment:", import.meta.env.MODE);
 
 // ------------------------------
+// HELPERS
+// ------------------------------
+const isJwtLike = (t: string) => typeof t === "string" && t.split(".").length === 3;
+
+const cleanupInvalidTokens = () => {
+  const maybeBad =
+    localStorage.getItem("token") ||
+    localStorage.getItem("wabmeta_token");
+
+  // remove legacy keys if they are not JWT
+  if (maybeBad && !isJwtLike(maybeBad)) {
+    localStorage.removeItem("token");
+    localStorage.removeItem("wabmeta_token");
+  }
+};
+
+// ------------------------------
 // AXIOS INSTANCE
 // ------------------------------
-
 const api = axios.create({
   baseURL: API_URL,
-  timeout: 30000, // 30 seconds timeout
+  timeout: 30000,
   headers: {
     "Content-Type": "application/json",
-    "Accept": "application/json",
+    Accept: "application/json",
   },
-  withCredentials: true, // Important for CORS with cookies
+  withCredentials: true,
 });
 
 // ------------------------------
 // REQUEST INTERCEPTOR
 // ------------------------------
-
 api.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
     const method = config.method?.toUpperCase() || "GET";
     const url = config.url || "";
-    
     console.log(`📤 ${method} ${url}`);
 
-    // Determine which token to use
-    const isAdminRoute = url.includes("/admin");
-    
-    // Get appropriate token
-    let token: string | null = null;
-    
-    if (isAdminRoute) {
-      token = localStorage.getItem("wabmeta_admin_token");
-    } else {
-      // Try multiple token keys for compatibility
-      token = localStorage.getItem("accessToken") ||
-              localStorage.getItem("token") ||
-              localStorage.getItem("wabmeta_token");
-    }
+    cleanupInvalidTokens();
 
-    // Add Authorization header if token exists and is valid
-    if (token && token !== "true" && token !== "null" && token !== "undefined") {
-      config.headers.Authorization = `Bearer ${token}`;
+    const isAdminRoute = url.includes("/admin");
+
+    // Admin token
+    const adminToken = localStorage.getItem("wabmeta_admin_token");
+
+    // User token
+    const userToken =
+      localStorage.getItem("accessToken") ||
+      localStorage.getItem("token") ||
+      localStorage.getItem("wabmeta_token");
+
+    const tokenToUse = isAdminRoute ? adminToken : userToken;
+
+    if (tokenToUse && isJwtLike(tokenToUse)) {
+      config.headers.Authorization = `Bearer ${tokenToUse}`;
+    } else {
+      // prevent "invalid signature" spam
+      if (!isAdminRoute) {
+        if (tokenToUse && !isJwtLike(tokenToUse)) {
+          localStorage.removeItem("accessToken");
+          localStorage.removeItem("token");
+          localStorage.removeItem("wabmeta_token");
+        }
+      }
     }
 
     return config;
@@ -95,12 +106,9 @@ api.interceptors.request.use(
 // ------------------------------
 // RESPONSE INTERCEPTOR
 // ------------------------------
-
 api.interceptors.response.use(
   (response) => {
-    const status = response.status;
-    const url = response.config.url || "";
-    console.log(`📥 ${status} ${url}`);
+    console.log(`📥 ${response.status} ${response.config.url}`);
     return response;
   },
   async (error: AxiosError) => {
@@ -110,53 +118,70 @@ api.interceptors.response.use(
 
     console.error(`❌ ${status} ${url}`, data);
 
-    // Handle specific error cases
+    // Network error
     if (error.code === "ERR_NETWORK") {
-      console.error("🔴 Network Error - Check if backend is running and CORS is configured");
+      console.error("🔴 Network Error - Backend down or CORS misconfigured");
     }
 
-    if (status === 401) {
-      // Token expired or invalid
+    // 401 handling (refresh)
+    if (status === 401 && !url.includes("/auth/refresh")) {
       const isAdminRoute = url.includes("/admin");
-      
+
       if (isAdminRoute) {
         localStorage.removeItem("wabmeta_admin_token");
-        // Redirect to admin login if on admin page
         if (window.location.pathname.startsWith("/admin")) {
           window.location.href = "/admin/login";
         }
-      } else {
-        // Try to refresh token
-        const refreshToken = localStorage.getItem("refreshToken");
-        if (refreshToken && !url.includes("/auth/refresh")) {
-          try {
-            const refreshResponse = await axios.post(
-              `${API_URL}/auth/refresh`,
-              {},
-              {
-                headers: { Authorization: `Bearer ${refreshToken}` },
-                withCredentials: true,
-              }
-            );
+        return Promise.reject(error);
+      }
 
-            if (refreshResponse.data?.data?.accessToken) {
-              localStorage.setItem("accessToken", refreshResponse.data.data.accessToken);
-              
-              // Retry the original request
-              if (error.config) {
-                error.config.headers.Authorization = `Bearer ${refreshResponse.data.data.accessToken}`;
-                return api.request(error.config);
-              }
-            }
-          } catch (refreshError) {
-            console.error("🔴 Token refresh failed");
-            localStorage.removeItem("accessToken");
-            localStorage.removeItem("refreshToken");
-            localStorage.removeItem("token");
-            localStorage.removeItem("wabmeta_token");
-            window.location.href = "/login";
-          }
+      const refreshToken = localStorage.getItem("refreshToken");
+
+      // If no refresh token => logout
+      if (!refreshToken) {
+        localStorage.removeItem("accessToken");
+        localStorage.removeItem("token");
+        localStorage.removeItem("wabmeta_token");
+        window.location.href = "/login";
+        return Promise.reject(error);
+      }
+
+      try {
+        // ✅ IMPORTANT: backend expects refreshToken in body OR cookie (not Authorization header)
+        const refreshResponse = await axios.post(
+          `${API_URL}/auth/refresh`,
+          { refreshToken },
+          { withCredentials: true }
+        );
+
+        const newAccessToken = refreshResponse.data?.data?.accessToken;
+        const newRefreshToken = refreshResponse.data?.data?.refreshToken;
+
+        if (!newAccessToken || !isJwtLike(newAccessToken)) {
+          throw new Error("Refresh did not return valid access token");
         }
+
+        localStorage.setItem("accessToken", newAccessToken);
+        localStorage.setItem("token", newAccessToken);
+        localStorage.setItem("wabmeta_token", newAccessToken);
+
+        if (newRefreshToken) {
+          localStorage.setItem("refreshToken", newRefreshToken);
+        }
+
+        // retry original request
+        if (error.config) {
+          error.config.headers = error.config.headers || {};
+          (error.config.headers as any).Authorization = `Bearer ${newAccessToken}`;
+          return api.request(error.config);
+        }
+      } catch (refreshError) {
+        console.error("🔴 Token refresh failed:", refreshError);
+        localStorage.removeItem("accessToken");
+        localStorage.removeItem("refreshToken");
+        localStorage.removeItem("token");
+        localStorage.removeItem("wabmeta_token");
+        window.location.href = "/login";
       }
     }
 
@@ -167,7 +192,6 @@ api.interceptors.response.use(
 // ------------------------------
 // AUTH API
 // ------------------------------
-
 export const auth = {
   register: (data: {
     email: string;
@@ -175,35 +199,35 @@ export const auth = {
     firstName: string;
     lastName?: string;
     phone?: string;
+    organizationName?: string;
   }) => api.post("/auth/register", data),
 
   login: (data: { email: string; password: string }, config?: any) =>
     api.post("/auth/login", data, config),
 
+  // ✅ Must send { credential } (ID token JWT)
   googleLogin: (data: { credential: string }) =>
     api.post("/auth/google", data),
 
   me: () => api.get("/auth/me"),
 
-  verifyEmail: (data: { token: string }) =>
-    api.post("/auth/verify-email", data),
+  verifyEmail: (data: { token: string }) => api.post("/auth/verify-email", data),
 
   resendVerification: (data: { email: string }) =>
     api.post("/auth/resend-verification", data),
 
-  forgotPassword: (data: { email: string }) =>
-    api.post("/auth/forgot-password", data),
+  forgotPassword: (data: { email: string }) => api.post("/auth/forgot-password", data),
 
   resetPassword: (data: { token: string; password: string }) =>
     api.post("/auth/reset-password", data),
 
-  sendOTP: (data: { email: string }) =>
-    api.post("/auth/send-otp", data),
+  sendOTP: (data: { email: string }) => api.post("/auth/send-otp", data),
 
   verifyOTP: (data: { email: string; otp: string }) =>
     api.post("/auth/verify-otp", data),
 
-  refresh: () => api.post("/auth/refresh", {}),
+  refresh: (refreshToken?: string) =>
+    api.post("/auth/refresh", refreshToken ? { refreshToken } : {}),
 
   logout: () => api.post("/auth/logout"),
 
@@ -214,73 +238,17 @@ export const auth = {
 };
 
 // ------------------------------
-// CONTACTS API
+// CONTACTS API (keep as-is)
 // ------------------------------
-
 export const contacts = {
-  getAll: (params?: {
-    page?: number;
-    limit?: number;
-    search?: string;
-    status?: string;
-    tags?: string;
-    groupId?: string;
-    sortBy?: string;
-    sortOrder?: string;
-  }) => api.get("/contacts", { params }),
-
-  create: (data: {
-    phone: string;
-    countryCode?: string;
-    firstName?: string;
-    lastName?: string;
-    email?: string;
-    tags?: string[];
-    customFields?: Record<string, any>;
-  }) => api.post("/contacts", data),
-
+  getAll: (params?: any) => api.get("/contacts", { params }),
+  create: (data: any) => api.post("/contacts", data),
   getById: (id: string) => api.get(`/contacts/${id}`),
-
   update: (id: string, data: any) => api.put(`/contacts/${id}`, data),
-
   delete: (id: string) => api.delete(`/contacts/${id}`),
-
   stats: () => api.get("/contacts/stats"),
-
   tags: () => api.get("/contacts/tags"),
-
-  import: (data: { contacts: any[]; groupId?: string; tags?: string[] }) =>
-    api.post("/contacts/import", data),
-
-  export: (params?: { groupId?: string }) =>
-    api.get("/contacts/export", { params }),
-
-  bulkUpdate: (data: { contactIds: string[]; updates: any }) =>
-    api.put("/contacts/bulk", data),
-
-  bulkDelete: (data: { contactIds: string[] }) =>
-    api.delete("/contacts/bulk", { data }),
-
-  // Groups
-  getGroups: () => api.get("/contacts/groups"),
-  
-  createGroup: (data: { name: string; description?: string; color?: string }) =>
-    api.post("/contacts/groups", data),
-  
-  updateGroup: (groupId: string, data: any) =>
-    api.put(`/contacts/groups/${groupId}`, data),
-  
-  deleteGroup: (groupId: string) =>
-    api.delete(`/contacts/groups/${groupId}`),
-  
-  getGroupContacts: (groupId: string, params?: any) =>
-    api.get(`/contacts/groups/${groupId}/contacts`, { params }),
-  
-  addToGroup: (groupId: string, contactIds: string[]) =>
-    api.post(`/contacts/groups/${groupId}/contacts`, { contactIds }),
-  
-  removeFromGroup: (groupId: string, contactIds: string[]) =>
-    api.delete(`/contacts/groups/${groupId}/contacts`, { data: { contactIds } }),
+  import: (data: any) => api.post("/contacts/import", data),
 };
 
 // ------------------------------

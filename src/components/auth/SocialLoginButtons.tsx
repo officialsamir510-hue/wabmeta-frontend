@@ -18,9 +18,7 @@ const SocialLoginButtons: React.FC<SocialLoginButtonsProps> = ({ loading = false
       setIsLoading(true);
 
       const credential = credentialResponse?.credential;
-      if (!credential) {
-        throw new Error("Google credential not received");
-      }
+      if (!credential) throw new Error("Google credential not received");
 
       const response = await auth.googleLogin({ credential });
 
@@ -31,19 +29,19 @@ const SocialLoginButtons: React.FC<SocialLoginButtonsProps> = ({ loading = false
       const user = result?.user;
       const organization = result?.organization;
 
-      if (!accessToken || !user) {
-        console.error("Unexpected google login response:", response.data);
-        throw new Error("Invalid server response");
+      if (!accessToken || accessToken.split(".").length !== 3) {
+        console.error("Unexpected google response:", response.data);
+        throw new Error("Invalid access token");
       }
 
       localStorage.setItem("accessToken", accessToken);
       if (refreshToken) localStorage.setItem("refreshToken", refreshToken);
 
-      // optional compatibility keys
+      // optional compat keys
       localStorage.setItem("token", accessToken);
       localStorage.setItem("wabmeta_token", accessToken);
 
-      localStorage.setItem("wabmeta_user", JSON.stringify(user));
+      if (user) localStorage.setItem("wabmeta_user", JSON.stringify(user));
       if (organization) localStorage.setItem("wabmeta_org", JSON.stringify(organization));
 
       navigate("/dashboard");
@@ -57,7 +55,7 @@ const SocialLoginButtons: React.FC<SocialLoginButtonsProps> = ({ loading = false
 
   return (
     <div className="space-y-3">
-      <div className={`w-full ${isDisabled ? "opacity-60 pointer-events-none" : ""}`}>
+      <div className={isDisabled ? "opacity-60 pointer-events-none" : ""}>
         <GoogleLogin
           onSuccess={handleGoogleSuccess}
           onError={() => {
