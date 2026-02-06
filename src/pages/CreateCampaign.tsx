@@ -1,5 +1,5 @@
-import React, { useState, useMemo, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import React, { useState, useMemo, useEffect } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import {
   ArrowLeft,
   ArrowRight,
@@ -11,18 +11,23 @@ import {
   Clock,
   Loader2,
   Eye,
-  AlertCircle
-} from 'lucide-react';
+  AlertCircle,
+} from "lucide-react";
 
-import TemplateSelector from '../components/campaigns/TemplateSelector';
-import AudienceSelector from '../components/campaigns/AudienceSelector';
-import VariableMapper from '../components/campaigns/VariableMapper';
-import SchedulePicker from '../components/campaigns/SchedulePicker';
-import TemplatePreview from '../components/templates/TemplatePreview';
-import CsvAudienceUploader from '../components/campaigns/CsvAudienceUploader';
+import TemplateSelector from "../components/campaigns/TemplateSelector";
+import AudienceSelector from "../components/campaigns/AudienceSelector";
+import VariableMapper from "../components/campaigns/VariableMapper";
+import SchedulePicker from "../components/campaigns/SchedulePicker";
+import TemplatePreview from "../components/templates/TemplatePreview";
+import CsvAudienceUploader from "../components/campaigns/CsvAudienceUploader";
 
-import type { CampaignFormData } from '../types/campaign';
-import { templates as templateApi, contacts as contactApi, campaigns as campaignApi } from '../services/api';
+import type { CampaignFormData } from "../types/campaign";
+import {
+  templates as templateApi,
+  contacts as contactApi,
+  campaigns as campaignApi,
+  whatsapp as whatsappApi,
+} from "../services/api";
 
 // ============================================
 // TYPES
@@ -45,22 +50,28 @@ interface MappedContact {
   tags: string[];
 }
 
+interface WhatsAppAccount {
+  id: string;
+  phoneNumber?: string;
+  displayName?: string;
+  status?: string;
+  isDefault?: boolean;
+}
+
 // ============================================
 // HELPER FUNCTIONS
 // ============================================
 const extractVariablesFromBody = (bodyText: string): string[] => {
   if (!bodyText) return [];
   const matches = bodyText.match(/\{\{(\d+)\}\}/g) || [];
-  return [...new Set(matches.map((m: string) => m.replace(/[{}]/g, '')))].sort(
+  return [...new Set(matches.map((m: string) => m.replace(/[{}]/g, "")))].sort(
     (a, b) => Number(a) - Number(b)
   );
 };
 
 const parseApiResponse = <T,>(response: any, possibleKeys: string[]): T[] => {
-  // Direct array
   if (Array.isArray(response)) return response;
 
-  // Nested in response.data
   if (response?.data) {
     if (Array.isArray(response.data)) return response.data;
     for (const key of possibleKeys) {
@@ -68,13 +79,21 @@ const parseApiResponse = <T,>(response: any, possibleKeys: string[]): T[] => {
     }
   }
 
-  // Common backend format: { success, data: [...] }
   if (Array.isArray(response?.data)) return response.data;
   if (Array.isArray(response?.data?.data)) return response.data.data;
 
-  // Fallback
-  console.warn('Could not parse API response:', response);
+  console.warn("Could not parse API response:", response);
   return [];
+};
+
+const mapHeaderForPreview = (headerType: string) => {
+  const ht = String(headerType || "none").toLowerCase();
+  if (ht === "none" || ht === "null" || ht === "undefined") return { type: "none" as const };
+  if (ht === "text") return { type: "text" as const, text: "" };
+  if (ht === "image") return { type: "image" as const, mediaUrl: undefined };
+  if (ht === "video") return { type: "video" as const, mediaUrl: undefined };
+  if (ht === "document") return { type: "document" as const, mediaUrl: undefined };
+  return { type: "none" as const };
 };
 
 // ============================================
@@ -93,18 +112,22 @@ const CreateCampaign: React.FC = () => {
   const [loadingData, setLoadingData] = useState(true);
   const [apiError, setApiError] = useState<string | null>(null);
 
+  // ✅ WhatsApp accounts
+  const [waAccounts, setWaAccounts] = useState<WhatsAppAccount[]>([]);
+  const [selectedWaAccountId, setSelectedWaAccountId] = useState<string>("");
+
   // Form State
   const [formData, setFormData] = useState<CampaignFormData>({
-    name: '',
-    description: '',
-    templateId: '',
-    audienceType: 'all',
+    name: "",
+    description: "",
+    templateId: "",
+    audienceType: "all",
     selectedTags: [],
     selectedContacts: [],
     variableMapping: {},
-    scheduleType: 'now',
-    scheduledDate: '',
-    scheduledTime: ''
+    scheduleType: "now",
+    scheduledDate: "",
+    scheduledTime: "",
   });
 
   // ==========================================
@@ -116,46 +139,59 @@ const CreateCampaign: React.FC = () => {
       setApiError(null);
 
       try {
-        const [templatesRes, contactsRes] = await Promise.all([
+        const [templatesRes, contactsRes, waRes] = await Promise.all([
           templateApi.getAll(),
-          contactApi.getAll()
+          contactApi.getAll(),
+          whatsappApi.accounts(), // ✅ IMPORTANT
         ]);
 
-        // ✅ Parse Templates
-        const templatesArray = parseApiResponse<any>(templatesRes.data, ['templates', 'data', 'items']);
+        // ✅ Templates
+        const templatesArray = parseApiResponse<any>(templatesRes.data, ["templates", "data", "items"]);
         const mappedTemplates: MappedTemplate[] = templatesArray.map((t: any) => ({
           id: t._id || t.id,
-          name: t.name || 'Untitled',
-          category: (t.category || 'UTILITY').toLowerCase(),
-          language: t.language || 'en',
-          headerType: (t.headerType || 'NONE').toLowerCase(),
-          body: t.bodyText || t.body || '',
-          buttons: Array.isArray(t.buttons) ? t.buttons.map((b: any) => ({ text: b.text || '' })) : [],
-          variables: extractVariablesFromBody(t.bodyText || t.body || '')
+          name: t.name || "Untitled",
+          category: (t.category || "UTILITY").toLowerCase(),
+          language: t.language || "en",
+          headerType: (t.headerType || "NONE").toLowerCase(),
+          body: t.bodyText || t.body || "",
+          buttons: Array.isArray(t.buttons) ? t.buttons.map((b: any) => ({ text: b.text || "" })) : [],
+          variables: extractVariablesFromBody(t.bodyText || t.body || ""),
         }));
         setTemplates(mappedTemplates);
 
-        // ✅ Parse Contacts
-        const contactsArray = parseApiResponse<any>(contactsRes.data, ['contacts', 'data', 'items']);
+        // ✅ Contacts
+        const contactsArray = parseApiResponse<any>(contactsRes.data, ["contacts", "data", "items"]);
         const mappedContacts: MappedContact[] = contactsArray.map((c: any) => ({
           id: c._id || c.id,
-          name: `${c.firstName || ''} ${c.lastName || ''}`.trim() || c.phone || 'Unknown',
-          phone: c.phone || '',
-          tags: Array.isArray(c.tags) ? c.tags : []
+          name: `${c.firstName || ""} ${c.lastName || ""}`.trim() || c.phone || "Unknown",
+          phone: c.phone || "",
+          tags: Array.isArray(c.tags) ? c.tags : [],
         }));
         setContacts(mappedContacts);
 
-        // ✅ Extract Unique Tags
+        // ✅ Tags
         const tagsSet = new Set<string>();
         mappedContacts.forEach((c) => c.tags.forEach((tag: string) => tagsSet.add(tag)));
         setAvailableTags(Array.from(tagsSet));
 
+        // ✅ WhatsApp Accounts
+        const waArray = parseApiResponse<any>(waRes.data, ["accounts", "data", "items"]);
+        const mappedWa: WhatsAppAccount[] = (Array.isArray(waArray) ? waArray : []).map((a: any) => ({
+          id: a.id,
+          phoneNumber: a.phoneNumber,
+          displayName: a.displayName,
+          status: a.status,
+          isDefault: !!a.isDefault,
+        }));
+
+        setWaAccounts(mappedWa);
+
+        const def = mappedWa.find((a) => a.isDefault) || mappedWa[0];
+        if (def?.id) setSelectedWaAccountId(def.id);
       } catch (err: any) {
         console.error("❌ Failed to load data:", err);
         const errorMessage =
-          err.response?.data?.message ||
-          err.message ||
-          "Failed to load templates or contacts. Please refresh.";
+          err.response?.data?.message || err.message || "Failed to load templates/contacts/accounts. Please refresh.";
         setApiError(errorMessage);
       } finally {
         setLoadingData(false);
@@ -171,13 +207,13 @@ const CreateCampaign: React.FC = () => {
   const handleCsvImported = async (batchTag: string) => {
     try {
       const res = await contactApi.getAll({ tags: batchTag, limit: 10000 });
-      const importedArray = parseApiResponse<any>(res.data, ['contacts', 'data', 'items']);
+      const importedArray = parseApiResponse<any>(res.data, ["contacts", "data", "items"]);
 
       const importedContacts: MappedContact[] = importedArray.map((c: any) => ({
         id: c._id || c.id,
-        name: `${c.firstName || ''} ${c.lastName || ''}`.trim() || c.phone || 'Unknown',
-        phone: c.phone || '',
-        tags: Array.isArray(c.tags) ? c.tags : []
+        name: `${c.firstName || ""} ${c.lastName || ""}`.trim() || c.phone || "Unknown",
+        phone: c.phone || "",
+        tags: Array.isArray(c.tags) ? c.tags : [],
       }));
 
       setContacts((prev) => {
@@ -191,7 +227,7 @@ const CreateCampaign: React.FC = () => {
 
       setFormData((prev) => ({
         ...prev,
-        audienceType: 'tags',
+        audienceType: "tags",
         selectedTags: [batchTag],
         selectedContacts: [],
       }));
@@ -211,13 +247,11 @@ const CreateCampaign: React.FC = () => {
 
   const totalRecipients = useMemo(() => {
     switch (formData.audienceType) {
-      case 'all':
+      case "all":
         return contacts.length;
-      case 'tags':
-        return contacts.filter((c) =>
-          formData.selectedTags.some((tag) => c.tags.includes(tag))
-        ).length;
-      case 'manual':
+      case "tags":
+        return contacts.filter((c) => formData.selectedTags.some((tag) => c.tags.includes(tag))).length;
+      case "manual":
         return formData.selectedContacts.length;
       default:
         return 0;
@@ -228,10 +262,10 @@ const CreateCampaign: React.FC = () => {
   // STEPS CONFIG
   // ==========================================
   const steps = [
-    { number: 1, title: 'Template', icon: FileText },
-    { number: 2, title: 'Audience', icon: Users },
-    { number: 3, title: 'Variables', icon: Settings },
-    { number: 4, title: 'Schedule', icon: Clock },
+    { number: 1, title: "Template", icon: FileText },
+    { number: 2, title: "Audience", icon: Users },
+    { number: 3, title: "Variables", icon: Settings },
+    { number: 4, title: "Schedule", icon: Clock },
   ];
 
   // ==========================================
@@ -240,16 +274,15 @@ const CreateCampaign: React.FC = () => {
   const validateStep = (step: number): boolean => {
     switch (step) {
       case 1:
-        return !!formData.name.trim() && !!formData.templateId;
+        // ✅ require wa account
+        return !!formData.name.trim() && !!formData.templateId && !!selectedWaAccountId;
       case 2:
         return totalRecipients > 0;
       case 3:
         if (!selectedTemplate) return true;
-        return (selectedTemplate.variables || []).every(
-          (v: string) => formData.variableMapping[v]
-        );
+        return (selectedTemplate.variables || []).every((v: string) => formData.variableMapping[v]);
       case 4:
-        if (formData.scheduleType === 'later') {
+        if (formData.scheduleType === "later") {
           return !!formData.scheduledDate && !!formData.scheduledTime;
         }
         return true;
@@ -277,51 +310,61 @@ const CreateCampaign: React.FC = () => {
     setApiError(null);
 
     try {
+      if (!selectedWaAccountId) {
+        throw new Error("Please connect/select a WhatsApp account first.");
+      }
+
       let audienceContactIds: string[] = [];
 
-      // ✅ Populate contactIds based on type (Backend expects array of IDs)
-      if (formData.audienceType === 'all') {
+      if (formData.audienceType === "all") {
         audienceContactIds = contacts.map((c) => c.id);
-      } else if (formData.audienceType === 'tags') {
+      } else if (formData.audienceType === "tags") {
         audienceContactIds = contacts
           .filter((c) => formData.selectedTags.some((tag) => c.tags.includes(tag)))
           .map((c) => c.id);
-      } else if (formData.audienceType === 'manual') {
+      } else if (formData.audienceType === "manual") {
         audienceContactIds = formData.selectedContacts;
       }
 
-      // ✅ Validation
       if (audienceContactIds.length === 0) {
         throw new Error("No recipients selected. Please check your audience filters.");
       }
 
-      const payload = {
+      const payload: any = {
+        // ✅ REQUIRED by backend
+        whatsappAccountId: selectedWaAccountId,
+
         name: formData.name,
         description: formData.description || undefined,
         templateId: formData.templateId,
+
         audience: {
           type: formData.audienceType,
-          contactIds: audienceContactIds, // ✅ Sending IDs is critical
-          tags: formData.audienceType === 'tags' ? formData.selectedTags : undefined
+          contactIds: audienceContactIds,
+          tags: formData.audienceType === "tags" ? formData.selectedTags : undefined,
         },
+
         variables: Object.keys(formData.variableMapping).length > 0 ? formData.variableMapping : undefined,
-        schedule: formData.scheduleType === 'later'
-          ? { date: formData.scheduledDate, time: formData.scheduledTime }
-          : undefined
+
+        schedule:
+          formData.scheduleType === "later"
+            ? { date: formData.scheduledDate, time: formData.scheduledTime }
+            : undefined,
       };
 
       console.log("📤 Sending campaign payload:", payload);
 
       const response = await campaignApi.create(payload);
       console.log("✅ Campaign created:", response.data);
-      navigate('/dashboard/campaigns');
+
+      navigate("/dashboard/campaigns");
     } catch (error: any) {
       console.error("❌ Campaign creation error:", error);
       const errorMessage =
         error.response?.data?.message ||
         error.response?.data?.error?.message ||
         error.message ||
-        'Failed to create campaign';
+        "Failed to create campaign";
       setApiError(errorMessage);
     } finally {
       setSending(false);
@@ -341,6 +384,8 @@ const CreateCampaign: React.FC = () => {
       </div>
     );
   }
+
+  const hasConnectedWa = waAccounts.length > 0;
 
   // ==========================================
   // RENDER
@@ -398,20 +443,24 @@ const CreateCampaign: React.FC = () => {
                   <div
                     className={`w-10 h-10 rounded-full flex items-center justify-center font-semibold transition-all ${
                       step.number < currentStep
-                        ? 'bg-primary-500 text-white'
+                        ? "bg-primary-500 text-white"
                         : step.number === currentStep
-                          ? 'bg-primary-500 text-white ring-4 ring-primary-100'
-                          : 'bg-gray-200 text-gray-500'
+                        ? "bg-primary-500 text-white ring-4 ring-primary-100"
+                        : "bg-gray-200 text-gray-500"
                     }`}
                   >
                     {step.number < currentStep ? <Check className="w-5 h-5" /> : <step.icon className="w-5 h-5" />}
                   </div>
-                  <span className={`ml-3 font-medium hidden sm:inline ${step.number <= currentStep ? 'text-gray-900' : 'text-gray-500'}`}>
+                  <span
+                    className={`ml-3 font-medium hidden sm:inline ${
+                      step.number <= currentStep ? "text-gray-900" : "text-gray-500"
+                    }`}
+                  >
                     {step.title}
                   </span>
                 </div>
                 {index < steps.length - 1 && (
-                  <div className={`flex-1 h-1 mx-4 rounded ${step.number < currentStep ? 'bg-primary-500' : 'bg-gray-200'}`} />
+                  <div className={`flex-1 h-1 mx-4 rounded ${step.number < currentStep ? "bg-primary-500" : "bg-gray-200"}`} />
                 )}
               </React.Fragment>
             ))}
@@ -420,13 +469,45 @@ const CreateCampaign: React.FC = () => {
 
         {/* Step Content */}
         <div className="bg-white rounded-2xl border border-gray-200 p-6">
-
           {/* Step 1 */}
           {currentStep === 1 && (
             <div className="space-y-6 animate-fade-in">
               <div>
                 <h2 className="text-lg font-semibold text-gray-900 mb-1">Campaign Details</h2>
-                <p className="text-gray-500">Name your campaign and select a template</p>
+                <p className="text-gray-500">Name your campaign, select WhatsApp account & template</p>
+              </div>
+
+              {/* ✅ WhatsApp Account Selector */}
+              <div className="p-4 rounded-xl border border-gray-200 bg-gray-50">
+                <label className="block text-sm font-medium text-gray-700 mb-2">WhatsApp Account *</label>
+
+                {hasConnectedWa ? (
+                  <select
+                    value={selectedWaAccountId}
+                    onChange={(e) => setSelectedWaAccountId(e.target.value)}
+                    className="w-full px-4 py-2.5 border border-gray-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500"
+                  >
+                    {waAccounts.map((a) => (
+                      <option key={a.id} value={a.id}>
+                        {(a.displayName || "WhatsApp")} {a.phoneNumber ? `(${a.phoneNumber})` : ""}{" "}
+                        {a.isDefault ? "• Default" : ""}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <div className="bg-white rounded-xl border border-dashed border-gray-300 p-4">
+                    <p className="text-sm text-gray-700 font-medium">No WhatsApp account connected</p>
+                    <p className="text-sm text-gray-500 mt-1">
+                      Please connect WhatsApp (Embedded Signup) before creating a campaign.
+                    </p>
+                    <Link
+                      to="/dashboard"
+                      className="inline-block mt-3 text-primary-600 hover:underline font-medium text-sm"
+                    >
+                      Go to Dashboard → Connect WhatsApp
+                    </Link>
+                  </div>
+                )}
               </div>
 
               <div className="grid gap-4">
@@ -460,7 +541,7 @@ const CreateCampaign: React.FC = () => {
                     templates={templates}
                     selectedId={formData.templateId}
                     onSelect={(template) => setFormData({ ...formData, templateId: template.id })}
-                    onPreview={(template) => console.log('Preview:', template)}
+                    onPreview={(template) => console.log("Preview:", template)}
                   />
                 ) : (
                   <div className="text-center py-8 bg-gray-50 rounded-xl border border-dashed border-gray-300">
@@ -475,7 +556,7 @@ const CreateCampaign: React.FC = () => {
             </div>
           )}
 
-          {/* Step 2 (Audience) */}
+          {/* Step 2 */}
           {currentStep === 2 && (
             <div className="space-y-6 animate-fade-in">
               <div>
@@ -502,7 +583,6 @@ const CreateCampaign: React.FC = () => {
                 </div>
               )}
 
-              {/* ✅ CSV uploader always available */}
               <CsvAudienceUploader onImported={handleCsvImported} />
             </div>
           )}
@@ -542,8 +622,8 @@ const CreateCampaign: React.FC = () => {
               <SchedulePicker
                 scheduleType={formData.scheduleType}
                 onTypeChange={(type) => setFormData({ ...formData, scheduleType: type })}
-                scheduledDate={formData.scheduledDate || ''}
-                scheduledTime={formData.scheduledTime || ''}
+                scheduledDate={formData.scheduledDate || ""}
+                scheduledTime={formData.scheduledTime || ""}
                 onDateChange={(date) => setFormData({ ...formData, scheduledDate: date })}
                 onTimeChange={(time) => setFormData({ ...formData, scheduledTime: time })}
               />
@@ -585,7 +665,7 @@ const CreateCampaign: React.FC = () => {
               ) : (
                 <>
                   <Send className="w-5 h-5" />
-                  <span>{formData.scheduleType === 'now' ? 'Send Now' : 'Schedule Campaign'}</span>
+                  <span>{formData.scheduleType === "now" ? "Send Now" : "Schedule Campaign"}</span>
                 </>
               )}
             </button>
@@ -600,14 +680,14 @@ const CreateCampaign: React.FC = () => {
             name: selectedTemplate.name,
             category: selectedTemplate.category as any,
             language: selectedTemplate.language,
-            header: { type: selectedTemplate.headerType as any },
+            header: mapHeaderForPreview(selectedTemplate.headerType) as any,
             body: selectedTemplate.body,
-            footer: '',
+            footer: "",
             buttons: selectedTemplate.buttons.map((b: any, i: number) => ({
               id: String(i),
-              type: 'quick_reply' as const,
-              text: b.text
-            }))
+              type: "quick_reply" as const,
+              text: b.text,
+            })),
           }}
           sampleVariables={formData.variableMapping}
           isModal
