@@ -251,38 +251,53 @@ const Dashboard: React.FC = () => {
     { name: "Sun", delivered: 97, failed: 3 },
   ];
 
-  const handleMetaLogin = () => {
-    const appId = import.meta.env.VITE_META_APP_ID;
-    const redirectUri = `${window.location.origin}/meta-callback`;
+ const handleMetaLogin = () => {
+  const appId = import.meta.env.VITE_META_APP_ID;          // 881518987956566
+  const configId = import.meta.env.VITE_META_CONFIG_ID;    // 909621421506894
 
-    const authUrl = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${appId}&redirect_uri=${encodeURIComponent(
-      redirectUri
-    )}&response_type=code&scope=whatsapp_business_management,whatsapp_business_messaging,business_management`;
+  // ✅ Always use a fixed app url to avoid www/non-www mismatch
+  const appUrl = import.meta.env.VITE_APP_URL || window.location.origin; // https://wabmeta.com
+  const redirectUri = `${appUrl}/meta-callback`;
 
-    const width = 600;
-    const height = 700;
-    const left = (window.screen.width - width) / 2;
-    const top = (window.screen.height - height) / 2;
+  if (!appId) {
+    console.error("VITE_META_APP_ID missing");
+    return;
+  }
+  if (!configId) {
+    console.error("VITE_META_CONFIG_ID missing");
+    return;
+  }
 
-    window.open(
-      authUrl,
-      "MetaLogin",
-      `width=${width},height=${height},top=${top},left=${left}`
-    );
-  };
+  // ✅ CSRF protection state
+  const state =
+    (typeof crypto !== "undefined" && "randomUUID" in crypto)
+      ? crypto.randomUUID()
+      : `${Date.now()}_${Math.random().toString(16).slice(2)}`;
 
-  const handleSync = async () => {
-    try {
-      await refreshConnection();
-      // update global stats (throttled; force if you want)
-      await refreshStats(true);
-      // refresh this dashboard's cached data quickly
-      window.location.reload();
-    } catch (error) {
-      console.error("Failed to sync:", error);
-    }
-  };
+  sessionStorage.setItem("meta_oauth_state", state);
 
+  const params = new URLSearchParams({
+    client_id: appId,
+    redirect_uri: redirectUri,
+    state,
+    response_type: "code",
+    scope: "business_management,whatsapp_business_management,whatsapp_business_messaging",
+    config_id: configId,
+  });
+
+  const authUrl = `https://www.facebook.com/v19.0/dialog/oauth?${params.toString()}`;
+
+  const width = 600;
+  const height = 700;
+  const left = Math.max(0, (window.screen.width - width) / 2);
+  const top = Math.max(0, (window.screen.height - height) / 2);
+
+  window.open(
+    authUrl,
+    "MetaLogin",
+    `width=${width},height=${height},top=${top},left=${left},resizable=yes,scrollbars=yes`
+  );
+};
   // ✅ Loader only when no cache and first load
   if (loading && !hasCache()) {
     return (
