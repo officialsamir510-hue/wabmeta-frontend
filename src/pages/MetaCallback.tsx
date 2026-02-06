@@ -19,12 +19,12 @@ const MetaCallback: React.FC = () => {
         const error = searchParams.get('error');
         const errorDescription = searchParams.get('error_description');
 
-        // Check for OAuth errors
+        console.log('Callback params:', { code: code?.slice(0, 10), state: state?.slice(0, 10), error });
+
         if (error) {
           setStatus('error');
           setMessage(errorDescription || 'Authorization denied');
           
-          // Notify parent window if in popup
           if (window.opener) {
             window.opener.postMessage({
               type: 'META_OAUTH_ERROR',
@@ -38,15 +38,19 @@ const MetaCallback: React.FC = () => {
           return;
         }
 
-        // Check for code and state
         if (!code || !state) {
           setStatus('error');
           setMessage('Invalid callback parameters');
           return;
         }
 
-        // Send code to backend
-        const response = await fetch(`${import.meta.env.VITE_API_URL}/meta/auth/callback`, {
+        // ✅ IMPORTANT: Ensure correct API URL with version
+        const apiUrl = import.meta.env.VITE_API_URL || 'https://wabmeta-api.onrender.com/api/v1';
+        const callbackUrl = `${apiUrl}/meta/auth/callback`;
+        
+        console.log('Calling backend:', callbackUrl);
+
+        const response = await fetch(callbackUrl, {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('token')}`,
@@ -55,13 +59,20 @@ const MetaCallback: React.FC = () => {
           body: JSON.stringify({ code, state })
         });
 
+        console.log('Response status:', response.status);
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error('Backend error:', errorText);
+          throw new Error(`Backend error: ${response.status}`);
+        }
+
         const data = await response.json();
 
         if (data.success) {
           setStatus('success');
           setMessage('WhatsApp Business Account connected successfully!');
           
-          // Notify parent window if in popup
           if (window.opener) {
             window.opener.postMessage({
               type: 'META_OAUTH_SUCCESS',
@@ -72,33 +83,24 @@ const MetaCallback: React.FC = () => {
               window.close();
             }, 2000);
           } else {
-            // If not in popup, redirect to dashboard
             toast.success('WhatsApp connected successfully!');
             setTimeout(() => {
               navigate('/dashboard');
             }, 2000);
           }
         } else {
-          setStatus('error');
-          setMessage(data.error || 'Failed to connect WhatsApp account');
-          
-          if (window.opener) {
-            window.opener.postMessage({
-              type: 'META_OAUTH_ERROR',
-              error: data.error
-            }, window.location.origin);
-          }
+          throw new Error(data.error || 'Failed to connect');
         }
 
       } catch (error: any) {
         console.error('Callback error:', error);
         setStatus('error');
-        setMessage('An unexpected error occurred');
+        setMessage(error.message || 'An unexpected error occurred');
         
         if (window.opener) {
           window.opener.postMessage({
             type: 'META_OAUTH_ERROR',
-            error: 'Unexpected error occurred'
+            error: error.message
           }, window.location.origin);
         }
       }
@@ -111,7 +113,6 @@ const MetaCallback: React.FC = () => {
     <div className="min-h-screen bg-linear-to-br from-green-50 to-green-100 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full">
         <div className="text-center">
-          {/* Status Icon */}
           <div className="mb-6 flex justify-center">
             {status === 'processing' && (
               <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center">
@@ -130,40 +131,21 @@ const MetaCallback: React.FC = () => {
             )}
           </div>
 
-          {/* Title */}
           <h2 className="text-2xl font-bold text-gray-900 mb-2">
             {status === 'processing' && 'Connecting WhatsApp'}
             {status === 'success' && 'Connected!'}
             {status === 'error' && 'Connection Failed'}
           </h2>
 
-          {/* Message */}
-          <p className="text-gray-600 mb-6">
-            {message}
-          </p>
-
-          {/* Additional Info */}
-          {status === 'processing' && (
-            <p className="text-sm text-gray-500">
-              Please wait while we complete the connection...
-            </p>
-          )}
-
-          {status === 'success' && (
-            <p className="text-sm text-green-600">
-              Redirecting to dashboard...
-            </p>
-          )}
+          <p className="text-gray-600 mb-6">{message}</p>
 
           {status === 'error' && (
-            <div className="space-y-3 mt-6">
-              <button
-                onClick={() => navigate('/dashboard')}
-                className="w-full bg-gray-600 hover:bg-gray-700 text-white font-medium py-2 px-4 rounded-lg transition"
-              >
-                Back to Dashboard
-              </button>
-            </div>
+            <button
+              onClick={() => navigate('/dashboard')}
+              className="w-full bg-gray-600 hover:bg-gray-700 text-white font-medium py-2 px-4 rounded-lg transition"
+            >
+              Back to Dashboard
+            </button>
           )}
         </div>
       </div>
