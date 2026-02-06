@@ -17,7 +17,7 @@ import QuickActions from "../components/dashboard/QuickActions";
 import RecentActivity from "../components/dashboard/RecentActivity";
 import ChartCard from "../components/dashboard/ChartCard";
 import ConnectionStatus from "../components/dashboard/ConnectionStatus";
-import MetaConnectModal from "../components/dashboard/MetaConnectModal";
+import { MetaConnectModal } from "../components/dashboard/MetaConnectModal";
 import useMetaConnection from "../hooks/useMetaConnection";
 
 import { campaigns, contacts, inbox, billing } from "../services/api";

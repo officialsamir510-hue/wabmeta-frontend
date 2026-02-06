@@ -1,288 +1,203 @@
-import React, { useState, useEffect } from "react";
-import {
-  X,
-  MessageSquare,
-  ExternalLink,
-  CheckCircle2,
-  Loader2,
-  Shield,
-  Zap,
-  Building2,
-  AlertCircle,
-  Key,
-} from "lucide-react";
-import type { WhatsAppBusinessAccount } from "../../types/meta";
+// src/components/dashboard/MetaConnectModal.tsx
+
+import React, { useState } from 'react';
+import { X, AlertCircle, CheckCircle, Loader2 } from 'lucide-react';
+import { toast } from 'react-hot-toast';
 
 interface MetaConnectModalProps {
   isOpen: boolean;
   onClose: () => void;
-
-  // kept for compatibility with your existing parent code
-  onConnect: (accessToken: string, account: WhatsAppBusinessAccount) => void;
-
-  isConnecting?: boolean;
 }
 
-type Step = "intro" | "manual-setup" | "connecting" | "success" | "error";
+export const MetaConnectModal: React.FC<MetaConnectModalProps> = ({
+  isOpen,
+  onClose
+}) => {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
-const MetaConnectModal: React.FC<MetaConnectModalProps> = ({ isOpen, onClose, onConnect }) => {
-  const [step, setStep] = useState<Step>("intro");
-  const [error, setError] = useState<string | null>(null);
+  const handleConnectWhatsApp = async () => {
+    try {
+      setLoading(true);
+      setError('');
 
-  // Manual Setup Form State (UI only – backend doesn’t support it yet)
-  const [manualFormData, setManualFormData] = useState({
-    wabaId: "",
-    phoneNumberId: "",
-    accessToken: "",
-    businessName: "",
-    phoneNumber: "",
-  });
+      // Step 1: Get OAuth URL from backend
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/meta/auth/url`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Content-Type': 'application/json'
+        }
+      });
 
-  // ✅ Listen for OAuth success message from MetaCallback popup
-  useEffect(() => {
-    if (!isOpen) return;
+      if (!response.ok) {
+        throw new Error('Failed to get authorization URL');
+      }
 
-    const handleMessage = (event: MessageEvent) => {
-      // We expect message from same origin (your MetaCallback page)
-      if (event.origin !== window.location.origin) return;
+      const data = await response.json();
 
-      const data = event.data;
+      if (data.success && data.data.authUrl) {
+        // Step 2: Open OAuth URL in popup window
+        const width = 600;
+        const height = 700;
+        const left = window.screen.width / 2 - width / 2;
+        const top = window.screen.height / 2 - height / 2;
 
-      if (data?.type === "META_SUCCESS") {
-        // payload is backend response from /whatsapp/connect
-        const payload = data.payload;
+        const popup = window.open(
+          data.data.authUrl,
+          'MetaOAuth',
+          `width=${width},height=${height},top=${top},left=${left},toolbar=no,location=no,directories=no,status=no,menubar=no,scrollbars=no,resizable=no,copyhistory=no`
+        );
 
-        // Save connection marker for your UI/hooks
-        const connectionData = {
-          isConnected: true,
-          isConnecting: false,
-          lastSync: new Date().toISOString(),
-          payload,
+        // Step 3: Listen for callback message
+        const handleMessage = (event: MessageEvent) => {
+          // Security check - only accept messages from your domain
+          if (event.origin !== window.location.origin) {
+            return;
+          }
+
+          if (event.data.type === 'META_OAUTH_SUCCESS') {
+            popup?.close();
+            window.removeEventListener('message', handleMessage);
+            
+            toast.success('WhatsApp connected successfully!');
+            
+            // Refresh page or update state
+            setTimeout(() => {
+              window.location.reload();
+            }, 1500);
+            
+            onClose();
+          } else if (event.data.type === 'META_OAUTH_ERROR') {
+            popup?.close();
+            window.removeEventListener('message', handleMessage);
+            setError(event.data.error || 'Connection failed');
+            setLoading(false);
+          }
         };
 
-        localStorage.setItem("wabmeta_connection", JSON.stringify(connectionData));
-        localStorage.setItem("metaConnection", JSON.stringify(connectionData));
+        window.addEventListener('message', handleMessage);
 
-        setStep("success");
+        // Check if popup was blocked
+        if (!popup || popup.closed) {
+          setError('Please allow popups for this website');
+          setLoading(false);
+          window.removeEventListener('message', handleMessage);
+        }
 
-        // Call parent callback (access token is not returned to frontend in our backend flow)
-        onConnect("", {
-          id: payload?.data?.id || payload?.id || manualFormData.wabaId || "WABA",
-          name: payload?.data?.displayName || payload?.displayName || "WhatsApp Business",
-          phoneNumber: payload?.data?.phoneNumber || payload?.phoneNumber || "",
-          phoneNumberId: payload?.data?.phoneNumberId || payload?.phoneNumberId || "",
-          verificationStatus: "verified",
-          qualityRating: payload?.data?.qualityRating || payload?.qualityRating || "UNKNOWN",
-          messagingLimit: "N/A",
-        });
-
-        setTimeout(() => {
-          onClose();
-          // optional: reload to reflect connection status everywhere
-          window.location.reload();
-        }, 1200);
+      } else {
+        throw new Error(data.message || 'Invalid response from server');
       }
-    };
 
-    window.addEventListener("message", handleMessage);
-    return () => window.removeEventListener("message", handleMessage);
-  }, [isOpen, onClose, onConnect, manualFormData.wabaId]);
-
-  const handleMetaLogin = () => {
-    const appId = import.meta.env.VITE_META_APP_ID || "881518987956566";
-    const redirectUri = `${window.location.origin}/meta-callback`;
-
-    const authUrl =
-      `https://www.facebook.com/v18.0/dialog/oauth` +
-      `?client_id=${appId}` +
-      `&redirect_uri=${encodeURIComponent(redirectUri)}` +
-      `&response_type=code` +
-      `&scope=whatsapp_business_management,whatsapp_business_messaging,business_management`;
-
-    const width = 600;
-    const height = 700;
-    const left = (window.screen.width - width) / 2;
-    const top = (window.screen.height - height) / 2;
-
-    window.open(authUrl, "MetaLogin", `width=${width},height=${height},top=${top},left=${left}`);
-    setStep("connecting");
-  };
-
-  // ✅ Manual setup currently NOT supported by backend (clean contract)
-  const handleManualSetup = async () => {
-    setError(
-      "Manual setup is not supported in this version. Please use 'Continue with Facebook' OAuth connection."
-    );
-    setStep("error");
-  };
-
-  const handleRetry = () => {
-    setError(null);
-    setStep("intro");
-  };
-
-  const resetModal = () => {
-    setStep("intro");
-    setError(null);
-    setManualFormData({
-      wabaId: "",
-      phoneNumberId: "",
-      accessToken: "",
-      businessName: "",
-      phoneNumber: "",
-    });
-  };
-
-  const handleClose = () => {
-    onClose();
-    setTimeout(resetModal, 300);
+    } catch (err: any) {
+      console.error('Connect error:', err);
+      setError(err.message || 'Failed to connect WhatsApp');
+      setLoading(false);
+      toast.error('Failed to connect WhatsApp');
+    }
   };
 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={handleClose} />
-
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-hidden animate-fade-in">
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full max-h-[90vh] overflow-y-auto">
         {/* Header */}
-        <div className="relative bg-linear-to-r from-[#1877F2] to-[#0668E1] p-6 text-white">
-          <button onClick={handleClose} className="absolute top-4 right-4 p-2 hover:bg-white/20 rounded-lg transition-colors">
-            <X className="w-5 h-5" />
+        <div className="flex items-center justify-between p-6 border-b">
+          <h2 className="text-xl font-semibold text-gray-900">
+            Connect WhatsApp Business
+          </h2>
+          <button
+            onClick={onClose}
+            className="text-gray-400 hover:text-gray-600 transition"
+            disabled={loading}
+          >
+            <X size={24} />
           </button>
+        </div>
 
-          <div className="flex items-center space-x-4">
-            <div className="w-14 h-14 bg-white rounded-xl flex items-center justify-center shrink-0">
-              <svg viewBox="0 0 24 24" className="w-8 h-8" fill="#1877F2">
-                <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
-              </svg>
+        {/* Body */}
+        <div className="p-6 space-y-6">
+          {/* Requirements */}
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <div className="flex items-start gap-3">
+              <AlertCircle className="text-blue-600 mt-0.5" size={20} />
+              <div className="text-sm">
+                <p className="font-semibold text-blue-900 mb-2">Requirements:</p>
+                <ul className="space-y-1 text-blue-800">
+                  <li>• Meta Business Account</li>
+                  <li>• WhatsApp Business Account (WABA)</li>
+                  <li>• Verified Business Phone Number</li>
+                  <li>• Admin access to the Facebook Business Manager</li>
+                </ul>
+              </div>
             </div>
-            <div>
-              <h2 className="text-xl font-bold">Connect with Meta</h2>
-              <p className="text-white/80 text-sm">WhatsApp Business API</p>
+          </div>
+
+          {/* Error Message */}
+          {error && (
+            <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="text-red-600 mt-0.5" size={20} />
+                <div className="text-sm text-red-800">
+                  <p className="font-semibold mb-1">Connection Failed</p>
+                  <p>{error}</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Success Benefits */}
+          <div className="space-y-3">
+            <h3 className="font-medium text-gray-900">After connecting, you can:</h3>
+            <div className="space-y-2">
+              {[
+                'Send messages to your customers',
+                'Receive and reply to messages',
+                'Send bulk campaigns',
+                'Use message templates',
+                'Automate responses with chatbots'
+              ].map((benefit, index) => (
+                <div key={index} className="flex items-center gap-2 text-sm text-gray-700">
+                  <CheckCircle className="text-green-600" size={16} />
+                  <span>{benefit}</span>
+                </div>
+              ))}
             </div>
           </div>
         </div>
 
-        {/* Content */}
-        <div className="p-6 overflow-y-auto max-h-[calc(90vh-120px)]">
-          {/* Step: Intro */}
-          {step === "intro" && (
-            <div className="space-y-6">
-              <div className="text-center">
-                <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <MessageSquare className="w-10 h-10 text-green-600" />
-                </div>
-                <h3 className="text-xl font-bold text-gray-900 mb-2">Connect Your WhatsApp Business</h3>
-                <p className="text-gray-500">Link your WhatsApp Business Account to start sending messages.</p>
-              </div>
+        {/* Footer */}
+        <div className="p-6 border-t space-y-3">
+          <button
+            onClick={handleConnectWhatsApp}
+            disabled={loading}
+            className="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-3 px-4 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+          >
+            {loading ? (
+              <>
+                <Loader2 className="animate-spin" size={20} />
+                <span>Connecting...</span>
+              </>
+            ) : (
+              <>
+                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/>
+                </svg>
+                <span>Connect WhatsApp</span>
+              </>
+            )}
+          </button>
 
-              <div className="grid grid-cols-2 gap-3">
-                {[
-                  { icon: Zap, text: "Bulk Messaging" },
-                  { icon: MessageSquare, text: "Live Chat" },
-                  { icon: Shield, text: "Secure API" },
-                  { icon: Building2, text: "Business Verified" },
-                ].map((feature, index) => (
-                  <div key={index} className="flex items-center space-x-2 p-3 bg-gray-50 rounded-xl">
-                    <feature.icon className="w-5 h-5 text-primary-500" />
-                    <span className="text-sm font-medium text-gray-700">{feature.text}</span>
-                  </div>
-                ))}
-              </div>
-
-              <div className="space-y-3">
-                <button
-                  onClick={handleMetaLogin}
-                  className="w-full flex items-center justify-center space-x-3 py-4 bg-[#1877F2] hover:bg-[#166FE5] text-white font-semibold rounded-xl transition-all transform hover:scale-[1.02]"
-                >
-                  <span>Continue with Facebook</span>
-                  <ExternalLink className="w-4 h-4" />
-                </button>
-
-                <div className="flex items-center space-x-3">
-                  <div className="flex-1 h-px bg-gray-200"></div>
-                  <span className="text-sm text-gray-400">or</span>
-                  <div className="flex-1 h-px bg-gray-200"></div>
-                </div>
-
-                <button
-                  onClick={() => setStep("manual-setup")}
-                  className="w-full flex items-center justify-center space-x-2 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-xl transition-colors"
-                >
-                  <Key className="w-5 h-5" />
-                  <span>Manual Setup with API Keys</span>
-                </button>
-              </div>
-
-              <p className="text-xs text-center text-gray-500">
-                By connecting, you agree to Meta's Terms of Service and Privacy Policy
-              </p>
-            </div>
-          )}
-
-          {/* Step: Manual Setup (disabled) */}
-          {step === "manual-setup" && (
-            <div className="space-y-5">
-              <div className="text-center mb-4">
-                <h3 className="text-xl font-bold text-gray-900">Manual Setup</h3>
-                <p className="text-gray-500 text-sm">
-                  Manual setup is currently not supported. Use OAuth connection instead.
-                </p>
-              </div>
-
-              <div className="space-y-4 opacity-60 pointer-events-none">
-                <input className="w-full px-4 py-2 border rounded-xl" placeholder="Business Name" />
-                <input className="w-full px-4 py-2 border rounded-xl" placeholder="Phone Number" />
-                <input className="w-full px-4 py-2 border rounded-xl" placeholder="WABA ID" />
-                <input className="w-full px-4 py-2 border rounded-xl" placeholder="Phone Number ID" />
-                <input className="w-full px-4 py-2 border rounded-xl" placeholder="Access Token" />
-              </div>
-
-              <div className="flex space-x-3 pt-2">
-                <button onClick={() => setStep("intro")} className="flex-1 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl transition-colors">
-                  Back
-                </button>
-                <button onClick={handleManualSetup} className="flex-1 py-3 bg-primary-500 hover:bg-primary-600 text-white rounded-xl transition-colors">
-                  Connect
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Step: Connecting */}
-          {step === "connecting" && (
-            <div className="py-12 text-center">
-              <Loader2 className="w-10 h-10 text-blue-600 animate-spin mx-auto mb-4" />
-              <h3 className="text-xl font-bold text-gray-900">Connecting...</h3>
-              <p className="text-gray-500">Please complete the login in the popup window.</p>
-            </div>
-          )}
-
-          {/* Step: Success */}
-          {step === "success" && (
-            <div className="py-12 text-center">
-              <CheckCircle2 className="w-16 h-16 text-green-600 mx-auto mb-4" />
-              <h3 className="text-xl font-bold text-gray-900">Connected!</h3>
-              <p className="text-gray-500">Your WhatsApp account is now linked.</p>
-            </div>
-          )}
-
-          {/* Step: Error */}
-          {step === "error" && (
-            <div className="py-12 text-center">
-              <AlertCircle className="w-16 h-16 text-red-600 mx-auto mb-4" />
-              <h3 className="text-xl font-bold text-gray-900">Connection Failed</h3>
-              <p className="text-gray-500 mb-4">{error}</p>
-              <button onClick={handleRetry} className="px-6 py-2 bg-primary-500 text-white rounded-xl">
-                Try Again
-              </button>
-            </div>
-          )}
+          <button
+            onClick={onClose}
+            disabled={loading}
+            className="w-full text-gray-600 hover:text-gray-800 font-medium py-2 transition disabled:opacity-50"
+          >
+            Cancel
+          </button>
         </div>
       </div>
     </div>
   );
 };
-
-export default MetaConnectModal;
