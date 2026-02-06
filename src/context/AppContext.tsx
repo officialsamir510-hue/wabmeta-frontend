@@ -1,4 +1,12 @@
-import React, { createContext, useContext, useEffect, useMemo, useCallback, useState } from "react";
+import React, {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useCallback,
+  useRef,
+  useState,
+} from "react";
 import { contacts, inbox } from "../services/api";
 
 export interface UserType {
@@ -11,16 +19,25 @@ export interface UserType {
 export interface AppContextType {
   user: UserType | null;
   setUser: (user: UserType | null) => void;
+
   unreadCount: number;
   totalContacts: number;
-  refreshStats: () => Promise<void>;
+
+  // ✅ NEW
+  responseRate: number;
+
+  refreshStats: (force?: boolean) => Promise<void>;
 }
 
 const AppContext = createContext<AppContextType>({
   user: null,
-  setUser: async () => {},
+  setUser: () => {},
+
   unreadCount: 0,
   totalContacts: 0,
+
+  responseRate: 0,
+
   refreshStats: async () => {},
 });
 
@@ -29,6 +46,9 @@ const isJwtLike = (t: string) => typeof t === "string" && t.split(".").length ==
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [unreadCount, setUnreadCount] = useState(0);
   const [totalContacts, setTotalContacts] = useState(0);
+
+  // ✅ NEW
+  const [responseRate, setResponseRate] = useState(0);
 
   const [user, setUser] = useState<UserType | null>(() => {
     try {
@@ -47,8 +67,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   });
 
-  // ✅ Stable function reference (prevents useEffect loops)
-  const refreshStats = useCallback(async () => {
+  // ✅ Cooldown to avoid repeated requests
+  const lastStatsFetchRef = useRef(0);
+
+  const refreshStats = useCallback(async (force: boolean = false) => {
     try {
       const token =
         localStorage.getItem("accessToken") ||
@@ -58,17 +80,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       // If token missing or invalid, don't call APIs
       if (!token || !isJwtLike(token)) return;
 
-      // ✅ Parallel calls (faster)
+      const now = Date.now();
+      if (!force && now - lastStatsFetchRef.current < 30_000) {
+        // 30s TTL/cooldown
+        return;
+      }
+      lastStatsFetchRef.current = now;
+
+      // Parallel calls
       const [contactsRes, inboxStatsRes] = await Promise.all([
         contacts.stats(),
-        // Prefer inbox.stats (lighter than conversations list)
         inbox.stats ? inbox.stats() : Promise.resolve({ data: {} }),
       ]);
 
-      const contactsStats = contactsRes.data?.data;
-
-      // Try multiple possible fields (depends on your backend response)
+      const contactsStats = contactsRes.data?.data || {};
       const inboxStats = inboxStatsRes.data?.data || {};
+
+      // unread count (support multiple backends)
       const unread =
         inboxStats.unreadCount ??
         inboxStats.unread ??
@@ -76,23 +104,38 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         inboxStats.unreadTotal ??
         0;
 
+      // ✅ responseRate (support multiple shapes)
+      const rr =
+        inboxStats.responseRate ??
+        inboxStats.response_rate ??
+        inboxStats.avgResponseRate ??
+        inboxStats.averageResponseRate ??
+        0;
+
       setTotalContacts(Number(contactsStats?.total || 0));
       setUnreadCount(Number(unread || 0));
+      setResponseRate(Number(rr || 0));
     } catch (error) {
       console.error("Failed to update global stats", error);
-      // ✅ Important: no infinite loading here; just keep old values
+      // keep old values
     }
   }, []);
 
   // Initial load once
   useEffect(() => {
-    refreshStats();
+    refreshStats(true); // force first time
   }, [refreshStats]);
 
-  // ✅ Memoize context value to avoid unnecessary re-renders
   const value = useMemo(
-    () => ({ user, setUser, unreadCount, totalContacts, refreshStats }),
-    [user, unreadCount, totalContacts, refreshStats]
+    () => ({
+      user,
+      setUser,
+      unreadCount,
+      totalContacts,
+      responseRate,
+      refreshStats,
+    }),
+    [user, unreadCount, totalContacts, responseRate, refreshStats]
   );
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

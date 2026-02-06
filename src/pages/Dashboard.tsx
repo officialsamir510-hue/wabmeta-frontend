@@ -1,3 +1,5 @@
+// src/pages/Dashboard.tsx
+
 import React, { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
@@ -20,25 +22,25 @@ import ConnectionStatus from "../components/dashboard/ConnectionStatus";
 import MetaConnectModal from "../components/dashboard/MetaConnectModal";
 import useMetaConnection from "../hooks/useMetaConnection";
 
-import { campaigns, contacts, inbox, billing } from "../services/api";
+import { campaigns, billing } from "../services/api";
+import { useApp } from "../context/AppContext";
 
 type StatsData = {
-  contacts: number;
   messagesSent: number;
   deliveryRate: number;
-  responseRate: number;
 };
 
-const CACHE_KEY = "wabmeta_dashboard_cache_v1";
+const CACHE_KEY = "wabmeta_dashboard_cache_v2";
 
 const Dashboard: React.FC = () => {
   const { connection, startConnection, refreshConnection } = useMetaConnection();
 
+  // ✅ from global context (no duplicate API calls here)
+  const { totalContacts, responseRate, refreshStats } = useApp();
+
   const [statsData, setStatsData] = useState<StatsData>({
-    contacts: 0,
     messagesSent: 0,
     deliveryRate: 0,
-    responseRate: 0,
   });
 
   const [activeCampaigns, setActiveCampaigns] = useState<any[]>([]);
@@ -54,14 +56,24 @@ const Dashboard: React.FC = () => {
     return Math.round((sent / total) * 100);
   };
 
+  const hasCache = () => {
+    try {
+      return !!localStorage.getItem(CACHE_KEY);
+    } catch {
+      return false;
+    }
+  };
+
   // ✅ Load cached data immediately (instant UI)
   useEffect(() => {
     try {
       const cachedRaw = localStorage.getItem(CACHE_KEY);
       if (cachedRaw) {
         const cached = JSON.parse(cachedRaw);
+
         if (cached?.statsData) setStatsData(cached.statsData);
-        if (Array.isArray(cached?.activeCampaigns)) setActiveCampaigns(cached.activeCampaigns);
+        if (Array.isArray(cached?.activeCampaigns))
+          setActiveCampaigns(cached.activeCampaigns);
         if (cached?.billingUsage !== undefined) setBillingUsage(cached.billingUsage);
 
         // If we have cache, don't block UI with full loader
@@ -78,53 +90,51 @@ const Dashboard: React.FC = () => {
 
     const fetchDashboardData = async () => {
       try {
-        // If no cache, show loader
-        const hasCache = !!localStorage.getItem(CACHE_KEY);
-        if (!hasCache && isMounted) setLoading(true);
+        if (!hasCache() && isMounted) setLoading(true);
 
+        // ✅ only fetch what Dashboard truly needs
         const results = await Promise.allSettled([
-          contacts.stats(),
           campaigns.stats(),
-          inbox.stats(),
           campaigns.getAll({ page: 1, limit: 5 }),
           billing.getUsage(),
         ]);
 
         if (!isMounted) return;
 
-        const [contactsStatsRes, campaignsStatsRes, inboxStatsRes, campaignsListRes, billingUsageRes] =
-          results;
-
-        const contactsStats =
-          contactsStatsRes.status === "fulfilled" ? contactsStatsRes.value.data?.data : null;
+        const [campaignsStatsRes, campaignsListRes, billingUsageRes] = results;
 
         const campStats =
-          campaignsStatsRes.status === "fulfilled" ? campaignsStatsRes.value.data?.data : null;
-
-        const inStats =
-          inboxStatsRes.status === "fulfilled" ? inboxStatsRes.value.data?.data : null;
+          campaignsStatsRes.status === "fulfilled"
+            ? campaignsStatsRes.value.data?.data
+            : null;
 
         const list =
-          campaignsListRes.status === "fulfilled" ? campaignsListRes.value.data?.data : [];
+          campaignsListRes.status === "fulfilled"
+            ? campaignsListRes.value.data?.data
+            : [];
 
         const usage =
-          billingUsageRes.status === "fulfilled" ? billingUsageRes.value.data?.data : null;
+          billingUsageRes.status === "fulfilled"
+            ? billingUsageRes.value.data?.data
+            : null;
 
         const totalSent = campStats?.totalMessagesSent || 0;
         const totalDelivered = campStats?.totalMessagesDelivered || 0;
-        const deliveryRate = totalSent > 0 ? Math.round((totalDelivered / totalSent) * 100) : 0;
+
+        const deliveryRate =
+          totalSent > 0 ? Math.round((totalDelivered / totalSent) * 100) : 0;
 
         const nextStatsData: StatsData = {
-          contacts: contactsStats?.total || 0,
           messagesSent: totalSent,
           deliveryRate,
-          responseRate: inStats?.responseRate || 0,
         };
 
         const active = (Array.isArray(list) ? list : [])
           .filter((c: any) =>
             c?.status
-              ? ["RUNNING", "SCHEDULED", "COMPLETED"].includes(String(c.status).toUpperCase())
+              ? ["RUNNING", "SCHEDULED", "COMPLETED"].includes(
+                  String(c.status).toUpperCase()
+                )
               : false
           )
           .slice(0, 5)
@@ -152,6 +162,10 @@ const Dashboard: React.FC = () => {
             ts: Date.now(),
           })
         );
+
+        // ✅ optional: refresh global stats once (throttled in context)
+        // this keeps contacts/responseRate fresh without duplicating calls often
+        refreshStats(false);
       } catch (error) {
         console.error("Dashboard Data Error:", error);
       } finally {
@@ -164,7 +178,7 @@ const Dashboard: React.FC = () => {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [refreshStats]);
 
   // ✅ Logic to determine if credits are low
   const lowCredits = useMemo(() => {
@@ -199,7 +213,7 @@ const Dashboard: React.FC = () => {
       },
       {
         title: "Active Contacts",
-        value: (statsData.contacts || 0).toLocaleString(),
+        value: (totalContacts || 0).toLocaleString(),
         change: 0,
         icon: Users,
         iconColor: "text-purple-600",
@@ -207,14 +221,14 @@ const Dashboard: React.FC = () => {
       },
       {
         title: "Response Rate",
-        value: `${statsData.responseRate || 0}%`,
+        value: `${responseRate || 0}%`,
         change: 0,
         icon: MessageSquare,
         iconColor: "text-orange-600",
         iconBg: "bg-orange-100",
       },
     ],
-    [statsData]
+    [statsData, totalContacts, responseRate]
   );
 
   const messageData = [
@@ -250,14 +264,19 @@ const Dashboard: React.FC = () => {
     const left = (window.screen.width - width) / 2;
     const top = (window.screen.height - height) / 2;
 
-    window.open(authUrl, "MetaLogin", `width=${width},height=${height},top=${top},left=${left}`);
+    window.open(
+      authUrl,
+      "MetaLogin",
+      `width=${width},height=${height},top=${top},left=${left}`
+    );
   };
 
   const handleSync = async () => {
     try {
       await refreshConnection();
-      // refresh dashboard data too
-      // (optional) you can call fetch again by reloading cache key or create a local refresh function
+      // update global stats (throttled; force if you want)
+      await refreshStats(true);
+      // refresh this dashboard's cached data quickly
       window.location.reload();
     } catch (error) {
       console.error("Failed to sync:", error);
@@ -265,7 +284,7 @@ const Dashboard: React.FC = () => {
   };
 
   // ✅ Loader only when no cache and first load
-  if (loading && !localStorage.getItem(CACHE_KEY)) {
+  if (loading && !hasCache()) {
     return (
       <div className="flex items-center justify-center h-screen">
         <div className="text-center">
@@ -282,7 +301,9 @@ const Dashboard: React.FC = () => {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Good morning!</h1>
-          <p className="text-gray-500 mt-1">Here's what's happening with your business today.</p>
+          <p className="text-gray-500 mt-1">
+            Here's what's happening with your business today.
+          </p>
         </div>
         <div className="flex items-center space-x-3">
           <button
@@ -314,9 +335,12 @@ const Dashboard: React.FC = () => {
                 <Zap className="w-8 h-8 text-blue-600" />
               </div>
               <div>
-                <h3 className="text-xl font-bold text-gray-900">Connect WhatsApp Business</h3>
+                <h3 className="text-xl font-bold text-gray-900">
+                  Connect WhatsApp Business
+                </h3>
                 <p className="text-gray-600 max-w-lg mt-1 text-sm md:text-base">
-                  Link your account to start sending automated campaigns and manage customer chats directly from WabMeta.
+                  Link your account to start sending automated campaigns and
+                  manage customer chats directly from WabMeta.
                 </p>
               </div>
             </div>
@@ -350,7 +374,8 @@ const Dashboard: React.FC = () => {
             <div>
               <p className="font-medium text-amber-800">Low message credits</p>
               <p className="text-sm text-amber-600">
-                You have {lowCredits.remaining} credits remaining. Recharge to continue sending messages.
+                You have {lowCredits.remaining} credits remaining. Recharge to
+                continue sending messages.
               </p>
             </div>
           </div>
@@ -432,7 +457,7 @@ const Dashboard: React.FC = () => {
                       }`}
                     >
                       {campaign.status === "running" && (
-                        <span className="w-1.5 h-1.5 bg-green-500 rounded-full mr-1.5 animate-pulse"></span>
+                        <span className="w-1.5 h-1.5 bg-green-500 rounded-full mr-1.5 animate-pulse" />
                       )}
                       {campaign.status.charAt(0).toUpperCase() + campaign.status.slice(1)}
                     </span>
