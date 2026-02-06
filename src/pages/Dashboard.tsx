@@ -1,6 +1,4 @@
-// src/pages/Dashboard.tsx
-
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   Send,
@@ -22,12 +20,13 @@ import ConnectionStatus from "../components/dashboard/ConnectionStatus";
 import MetaConnectModal from "../components/dashboard/MetaConnectModal";
 import useMetaConnection from "../hooks/useMetaConnection";
 
-import { campaigns, billing } from "../services/api";
-import { useApp } from "../context/AppContext";
+import { campaigns, contacts, inbox, billing } from "../services/api";
 
 type StatsData = {
+  contacts: number;
   messagesSent: number;
   deliveryRate: number;
+  responseRate: number;
 };
 
 const CACHE_KEY = "wabmeta_dashboard_cache_v2";
@@ -35,33 +34,28 @@ const CACHE_KEY = "wabmeta_dashboard_cache_v2";
 const Dashboard: React.FC = () => {
   const { connection, startConnection, refreshConnection } = useMetaConnection();
 
-  // ✅ from global context (no duplicate API calls here)
-  const { totalContacts, responseRate, refreshStats } = useApp();
-
   const [statsData, setStatsData] = useState<StatsData>({
+    contacts: 0,
     messagesSent: 0,
     deliveryRate: 0,
+    responseRate: 0,
   });
 
   const [activeCampaigns, setActiveCampaigns] = useState<any[]>([]);
   const [billingUsage, setBillingUsage] = useState<any>(null);
 
-  // ✅ only for first-time load without cache
+  // Full screen loader only when nothing cached yet
   const [loading, setLoading] = useState(true);
+  // Small refresh state for button / background refresh
+  const [refreshing, setRefreshing] = useState(false);
 
   const [showManualModal, setShowManualModal] = useState(false);
+
+  const hasCacheRef = useRef(false);
 
   const calculateProgress = (total: number = 0, sent: number = 0) => {
     if (!total) return 0;
     return Math.round((sent / total) * 100);
-  };
-
-  const hasCache = () => {
-    try {
-      return !!localStorage.getItem(CACHE_KEY);
-    } catch {
-      return false;
-    }
   };
 
   // ✅ Load cached data immediately (instant UI)
@@ -70,13 +64,11 @@ const Dashboard: React.FC = () => {
       const cachedRaw = localStorage.getItem(CACHE_KEY);
       if (cachedRaw) {
         const cached = JSON.parse(cachedRaw);
-
         if (cached?.statsData) setStatsData(cached.statsData);
-        if (Array.isArray(cached?.activeCampaigns))
-          setActiveCampaigns(cached.activeCampaigns);
+        if (Array.isArray(cached?.activeCampaigns)) setActiveCampaigns(cached.activeCampaigns);
         if (cached?.billingUsage !== undefined) setBillingUsage(cached.billingUsage);
 
-        // If we have cache, don't block UI with full loader
+        hasCacheRef.current = true;
         setLoading(false);
       }
     } catch {
@@ -84,103 +76,170 @@ const Dashboard: React.FC = () => {
     }
   }, []);
 
-  // ✅ Fetch fresh data (won't block UI if cache exists)
+  // ✅ Fetch dashboard data (safe even if one API fails)
+  const fetchDashboardData = useCallback(async (opts?: { showFullLoader?: boolean }) => {
+    const showFullLoader = opts?.showFullLoader ?? !hasCacheRef.current;
+
+    if (showFullLoader) setLoading(true);
+    else setRefreshing(true);
+
+    try {
+      const results = await Promise.allSettled([
+        contacts.stats(),
+        campaigns.stats(),
+        inbox.stats(),
+        campaigns.getAll({ page: 1, limit: 5 }),
+        billing.getUsage(),
+      ]);
+
+      const [contactsStatsRes, campaignsStatsRes, inboxStatsRes, campaignsListRes, billingUsageRes] =
+        results;
+
+      const contactsStats =
+        contactsStatsRes.status === "fulfilled" ? contactsStatsRes.value.data?.data : null;
+
+      const campStats =
+        campaignsStatsRes.status === "fulfilled" ? campaignsStatsRes.value.data?.data : null;
+
+      const inStats = inboxStatsRes.status === "fulfilled" ? inboxStatsRes.value.data?.data : null;
+
+      const list =
+        campaignsListRes.status === "fulfilled" ? campaignsListRes.value.data?.data : [];
+
+      const usage =
+        billingUsageRes.status === "fulfilled" ? billingUsageRes.value.data?.data : null;
+
+      const totalSent = campStats?.totalMessagesSent || 0;
+      const totalDelivered = campStats?.totalMessagesDelivered || 0;
+      const deliveryRate = totalSent > 0 ? Math.round((totalDelivered / totalSent) * 100) : 0;
+
+      const nextStatsData: StatsData = {
+        contacts: contactsStats?.total || 0,
+        messagesSent: totalSent,
+        deliveryRate,
+        responseRate: inStats?.responseRate || 0,
+      };
+
+      const active = (Array.isArray(list) ? list : [])
+        .filter((c: any) =>
+          c?.status
+            ? ["RUNNING", "SCHEDULED", "COMPLETED"].includes(String(c.status).toUpperCase())
+            : false
+        )
+        .slice(0, 5)
+        .map((c: any) => ({
+          id: c.id,
+          name: c.name || "Untitled Campaign",
+          status: String(c.status || "unknown").toLowerCase(),
+          sent: c.sentCount || 0,
+          delivered: c.deliveredCount || 0,
+          opened: c.readCount || 0,
+          progress: calculateProgress(c.totalContacts || 0, c.sentCount || 0),
+        }));
+
+      setStatsData(nextStatsData);
+      setActiveCampaigns(active);
+      setBillingUsage(usage);
+
+      // ✅ Cache saved
+      localStorage.setItem(
+        CACHE_KEY,
+        JSON.stringify({
+          statsData: nextStatsData,
+          activeCampaigns: active,
+          billingUsage: usage,
+          ts: Date.now(),
+        })
+      );
+
+      hasCacheRef.current = true;
+    } catch (error) {
+      console.error("Dashboard Data Error:", error);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
+
+  // Initial fetch on mount
   useEffect(() => {
-    let isMounted = true;
+    fetchDashboardData({ showFullLoader: !hasCacheRef.current });
+  }, [fetchDashboardData]);
 
-    const fetchDashboardData = async () => {
-      try {
-        if (!hasCache() && isMounted) setLoading(true);
+  // ✅ Listen for Meta popup success and refresh data (no reload)
+  useEffect(() => {
+    const handleMessage = async (event: MessageEvent) => {
+      // security: only accept from our own origin
+      if (event.origin !== window.location.origin) return;
 
-        // ✅ only fetch what Dashboard truly needs
-        const results = await Promise.allSettled([
-          campaigns.stats(),
-          campaigns.getAll({ page: 1, limit: 5 }),
-          billing.getUsage(),
-        ]);
-
-        if (!isMounted) return;
-
-        const [campaignsStatsRes, campaignsListRes, billingUsageRes] = results;
-
-        const campStats =
-          campaignsStatsRes.status === "fulfilled"
-            ? campaignsStatsRes.value.data?.data
-            : null;
-
-        const list =
-          campaignsListRes.status === "fulfilled"
-            ? campaignsListRes.value.data?.data
-            : [];
-
-        const usage =
-          billingUsageRes.status === "fulfilled"
-            ? billingUsageRes.value.data?.data
-            : null;
-
-        const totalSent = campStats?.totalMessagesSent || 0;
-        const totalDelivered = campStats?.totalMessagesDelivered || 0;
-
-        const deliveryRate =
-          totalSent > 0 ? Math.round((totalDelivered / totalSent) * 100) : 0;
-
-        const nextStatsData: StatsData = {
-          messagesSent: totalSent,
-          deliveryRate,
-        };
-
-        const active = (Array.isArray(list) ? list : [])
-          .filter((c: any) =>
-            c?.status
-              ? ["RUNNING", "SCHEDULED", "COMPLETED"].includes(
-                  String(c.status).toUpperCase()
-                )
-              : false
-          )
-          .slice(0, 5)
-          .map((c: any) => ({
-            id: c.id,
-            name: c.name || "Untitled Campaign",
-            status: String(c.status || "unknown").toLowerCase(),
-            sent: c.sentCount || 0,
-            delivered: c.deliveredCount || 0,
-            opened: c.readCount || 0,
-            progress: calculateProgress(c.totalContacts || 0, c.sentCount || 0),
-          }));
-
-        setStatsData(nextStatsData);
-        setActiveCampaigns(active);
-        setBillingUsage(usage);
-
-        // ✅ Save cache
-        localStorage.setItem(
-          CACHE_KEY,
-          JSON.stringify({
-            statsData: nextStatsData,
-            activeCampaigns: active,
-            billingUsage: usage,
-            ts: Date.now(),
-          })
-        );
-
-        // ✅ optional: refresh global stats once (throttled in context)
-        // this keeps contacts/responseRate fresh without duplicating calls often
-        refreshStats(false);
-      } catch (error) {
-        console.error("Dashboard Data Error:", error);
-      } finally {
-        if (isMounted) setLoading(false);
+      if (event.data?.type === "META_SUCCESS") {
+        try {
+          await refreshConnection();
+        } catch {}
+        fetchDashboardData({ showFullLoader: false });
       }
     };
 
-    fetchDashboardData();
+    window.addEventListener("message", handleMessage);
+    return () => window.removeEventListener("message", handleMessage);
+  }, [fetchDashboardData, refreshConnection]);
 
-    return () => {
-      isMounted = false;
-    };
-  }, [refreshStats]);
+  // ✅ v19 Embedded Signup OAuth URL
+  const handleMetaLogin = () => {
+    const appId = import.meta.env.VITE_META_APP_ID;
+    const configId = import.meta.env.VITE_META_CONFIG_ID;
+    const appUrl = (import.meta.env.VITE_APP_URL || window.location.origin).replace(/\/+$/, "");
+    const redirectUri = `${appUrl}/meta-callback`;
 
-  // ✅ Logic to determine if credits are low
+    if (!appId || !configId) {
+      console.error("Missing VITE_META_APP_ID or VITE_META_CONFIG_ID");
+      return;
+    }
+
+    const state =
+      (typeof crypto !== "undefined" && "randomUUID" in crypto)
+        ? crypto.randomUUID()
+        : `${Date.now()}_${Math.random().toString(16).slice(2)}`;
+
+    sessionStorage.setItem("meta_oauth_state", state);
+
+    const params = new URLSearchParams({
+      client_id: appId,
+      redirect_uri: redirectUri,
+      state,
+      response_type: "code",
+      scope: "business_management,whatsapp_business_management,whatsapp_business_messaging",
+      config_id: configId,
+    });
+
+    const authUrl = `https://www.facebook.com/v19.0/dialog/oauth?${params.toString()}`;
+
+    const width = 600;
+    const height = 700;
+    const left = Math.max(0, (window.screen.width - width) / 2);
+    const top = Math.max(0, (window.screen.height - height) / 2);
+
+    window.open(
+      authUrl,
+      "MetaLogin",
+      `width=${width},height=${height},top=${top},left=${left},resizable=yes,scrollbars=yes`
+    );
+  };
+
+  // ✅ FIXED: handleSync is defined
+  const handleSync = async () => {
+    try {
+      setRefreshing(true);
+      await refreshConnection();
+      await fetchDashboardData({ showFullLoader: false });
+    } catch (error) {
+      console.error("Failed to sync:", error);
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  // ✅ Credits low banner
   const lowCredits = useMemo(() => {
     const msg = billingUsage?.messages;
     if (!msg || !msg.limit || msg.limit <= 0) return { show: false, remaining: 0 };
@@ -213,7 +272,7 @@ const Dashboard: React.FC = () => {
       },
       {
         title: "Active Contacts",
-        value: (totalContacts || 0).toLocaleString(),
+        value: (statsData.contacts || 0).toLocaleString(),
         change: 0,
         icon: Users,
         iconColor: "text-purple-600",
@@ -221,16 +280,17 @@ const Dashboard: React.FC = () => {
       },
       {
         title: "Response Rate",
-        value: `${responseRate || 0}%`,
+        value: `${statsData.responseRate || 0}%`,
         change: 0,
         icon: MessageSquare,
         iconColor: "text-orange-600",
         iconBg: "bg-orange-100",
       },
     ],
-    [statsData, totalContacts, responseRate]
+    [statsData]
   );
 
+  // Mock chart data
   const messageData = [
     { name: "Mon", messages: 2400 },
     { name: "Tue", messages: 1398 },
@@ -251,55 +311,8 @@ const Dashboard: React.FC = () => {
     { name: "Sun", delivered: 97, failed: 3 },
   ];
 
- const handleMetaLogin = () => {
-  const appId = import.meta.env.VITE_META_APP_ID;          // 881518987956566
-  const configId = import.meta.env.VITE_META_CONFIG_ID;    // 909621421506894
-
-  // ✅ Always use a fixed app url to avoid www/non-www mismatch
-  const appUrl = import.meta.env.VITE_APP_URL || window.location.origin; // https://wabmeta.com
-  const redirectUri = `${appUrl}/meta-callback`;
-
-  if (!appId) {
-    console.error("VITE_META_APP_ID missing");
-    return;
-  }
-  if (!configId) {
-    console.error("VITE_META_CONFIG_ID missing");
-    return;
-  }
-
-  // ✅ CSRF protection state
-  const state =
-    (typeof crypto !== "undefined" && "randomUUID" in crypto)
-      ? crypto.randomUUID()
-      : `${Date.now()}_${Math.random().toString(16).slice(2)}`;
-
-  sessionStorage.setItem("meta_oauth_state", state);
-
-  const params = new URLSearchParams({
-    client_id: appId,
-    redirect_uri: redirectUri,
-    state,
-    response_type: "code",
-    scope: "business_management,whatsapp_business_management,whatsapp_business_messaging",
-    config_id: configId,
-  });
-
-  const authUrl = `https://www.facebook.com/v19.0/dialog/oauth?${params.toString()}`;
-
-  const width = 600;
-  const height = 700;
-  const left = Math.max(0, (window.screen.width - width) / 2);
-  const top = Math.max(0, (window.screen.height - height) / 2);
-
-  window.open(
-    authUrl,
-    "MetaLogin",
-    `width=${width},height=${height},top=${top},left=${left},resizable=yes,scrollbars=yes`
-  );
-};
-  // ✅ Loader only when no cache and first load
-  if (loading && !hasCache()) {
+  // Full screen loader only on very first load without cache
+  if (loading && !hasCacheRef.current) {
     return (
       <div className="flex items-center justify-center h-screen">
         <div className="text-center">
@@ -316,17 +329,17 @@ const Dashboard: React.FC = () => {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Good morning!</h1>
-          <p className="text-gray-500 mt-1">
-            Here's what's happening with your business today.
-          </p>
+          <p className="text-gray-500 mt-1">Here's what's happening with your business today.</p>
         </div>
+
         <div className="flex items-center space-x-3">
           <button
             onClick={handleSync}
             className="p-2 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors"
-            title="Refresh Connection"
+            title="Refresh"
+            disabled={refreshing}
           >
-            <RefreshCw className="w-5 h-5 text-gray-600" />
+            <RefreshCw className={`w-5 h-5 text-gray-600 ${refreshing ? "animate-spin" : ""}`} />
           </button>
 
           <Link
@@ -350,12 +363,9 @@ const Dashboard: React.FC = () => {
                 <Zap className="w-8 h-8 text-blue-600" />
               </div>
               <div>
-                <h3 className="text-xl font-bold text-gray-900">
-                  Connect WhatsApp Business
-                </h3>
+                <h3 className="text-xl font-bold text-gray-900">Connect WhatsApp Business</h3>
                 <p className="text-gray-600 max-w-lg mt-1 text-sm md:text-base">
-                  Link your account to start sending automated campaigns and
-                  manage customer chats directly from WabMeta.
+                  Link your account to start sending automated campaigns and manage customer chats directly from WabMeta.
                 </p>
               </div>
             </div>
@@ -389,8 +399,7 @@ const Dashboard: React.FC = () => {
             <div>
               <p className="font-medium text-amber-800">Low message credits</p>
               <p className="text-sm text-amber-600">
-                You have {lowCredits.remaining} credits remaining. Recharge to
-                continue sending messages.
+                You have {lowCredits.remaining} credits remaining. Recharge to continue sending messages.
               </p>
             </div>
           </div>
@@ -455,6 +464,7 @@ const Dashboard: React.FC = () => {
                 <th className="pb-3 text-sm font-medium text-gray-500">Progress</th>
               </tr>
             </thead>
+
             <tbody className="divide-y divide-gray-100">
               {activeCampaigns.map((campaign) => (
                 <tr key={campaign.id} className="hover:bg-gray-50 transition-colors">
@@ -472,7 +482,7 @@ const Dashboard: React.FC = () => {
                       }`}
                     >
                       {campaign.status === "running" && (
-                        <span className="w-1.5 h-1.5 bg-green-500 rounded-full mr-1.5 animate-pulse" />
+                        <span className="w-1.5 h-1.5 bg-green-500 rounded-full mr-1.5 animate-pulse"></span>
                       )}
                       {campaign.status.charAt(0).toUpperCase() + campaign.status.slice(1)}
                     </span>
