@@ -303,7 +303,7 @@ const CreateCampaign: React.FC = () => {
   };
 
   // ==========================================
-  // SUBMIT CAMPAIGN
+  // SUBMIT CAMPAIGN (UPDATED)
   // ==========================================
   const handleSend = async () => {
     setSending(true);
@@ -316,6 +316,7 @@ const CreateCampaign: React.FC = () => {
 
       let audienceContactIds: string[] = [];
 
+      // Determine contact IDs based on audience selection
       if (formData.audienceType === "all") {
         audienceContactIds = contacts.map((c) => c.id);
       } else if (formData.audienceType === "tags") {
@@ -330,26 +331,39 @@ const CreateCampaign: React.FC = () => {
         throw new Error("No recipients selected. Please check your audience filters.");
       }
 
-      const payload: any = {
-        // ✅ REQUIRED by backend
-        whatsappAccountId: selectedWaAccountId,
+      // ✅ Prepare scheduledAt date in ISO format if applicable
+      const scheduledAt =
+        formData.scheduleType === "later"
+          ? new Date(`${formData.scheduledDate}T${formData.scheduledTime}:00`).toISOString()
+          : undefined;
 
-        name: formData.name,
-        description: formData.description || undefined,
+      // ✅ Construct the payload matching the backend expectations
+      // Backend expects: contactIds at root level, simple structure
+      const payload: any = {
+        whatsappAccountId: selectedWaAccountId,
+        name: formData.name.trim(),
+        description: formData.description?.trim() || undefined,
         templateId: formData.templateId,
 
-        audience: {
-          type: formData.audienceType,
-          contactIds: audienceContactIds,
-          tags: formData.audienceType === "tags" ? formData.selectedTags : undefined,
-        },
+        // ✅ IMPORTANT: contactIds at root
+        contactIds: audienceContactIds,
 
-        variables: Object.keys(formData.variableMapping).length > 0 ? formData.variableMapping : undefined,
-
-        schedule:
-          formData.scheduleType === "later"
-            ? { date: formData.scheduledDate, time: formData.scheduledTime }
+        // Optional: Send filter metadata for future reference
+        audienceFilter:
+          formData.audienceType === "tags"
+            ? { tags: formData.selectedTags }
+            : formData.audienceType === "all"
+            ? { all: true }
             : undefined,
+
+        // ✅ variable mapping
+        variableMapping:
+          Object.keys(formData.variableMapping).length > 0
+            ? formData.variableMapping
+            : undefined,
+
+        // ✅ scheduledAt (ISO string)
+        scheduledAt,
       };
 
       console.log("📤 Sending campaign payload:", payload);
