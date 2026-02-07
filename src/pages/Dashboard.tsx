@@ -32,7 +32,8 @@ type StatsData = {
 const CACHE_KEY = "wabmeta_dashboard_cache_v2";
 
 const Dashboard: React.FC = () => {
-  const { connection, startConnection, refreshConnection } = useMetaConnection();
+  // ✅ startConnection removed (we’ll use modal + refreshConnection)
+  const { connection, refreshConnection } = useMetaConnection();
 
   const [statsData, setStatsData] = useState<StatsData>({
     contacts: 0,
@@ -44,9 +45,7 @@ const Dashboard: React.FC = () => {
   const [activeCampaigns, setActiveCampaigns] = useState<any[]>([]);
   const [billingUsage, setBillingUsage] = useState<any>(null);
 
-  // Full screen loader only when nothing cached yet
   const [loading, setLoading] = useState(true);
-  // Small refresh state for button / background refresh
   const [refreshing, setRefreshing] = useState(false);
 
   const [showManualModal, setShowManualModal] = useState(false);
@@ -58,7 +57,7 @@ const Dashboard: React.FC = () => {
     return Math.round((sent / total) * 100);
   };
 
-  // ✅ Load cached data immediately (instant UI)
+  // ✅ Load cached data immediately
   useEffect(() => {
     try {
       const cachedRaw = localStorage.getItem(CACHE_KEY);
@@ -76,7 +75,6 @@ const Dashboard: React.FC = () => {
     }
   }, []);
 
-  // ✅ Fetch dashboard data (safe even if one API fails)
   const fetchDashboardData = useCallback(async (opts?: { showFullLoader?: boolean }) => {
     const showFullLoader = opts?.showFullLoader ?? !hasCacheRef.current;
 
@@ -141,7 +139,6 @@ const Dashboard: React.FC = () => {
       setActiveCampaigns(active);
       setBillingUsage(usage);
 
-      // ✅ Cache saved
       localStorage.setItem(
         CACHE_KEY,
         JSON.stringify({
@@ -161,72 +158,19 @@ const Dashboard: React.FC = () => {
     }
   }, []);
 
-  // Initial fetch on mount
   useEffect(() => {
     fetchDashboardData({ showFullLoader: !hasCacheRef.current });
   }, [fetchDashboardData]);
 
-  // ✅ Listen for Meta popup success and refresh data (no reload)
+  // ✅ IMPORTANT: on page load, fetch connection status once
   useEffect(() => {
-    const handleMessage = async (event: MessageEvent) => {
-      // security: only accept from our own origin
-      if (event.origin !== window.location.origin) return;
-
-      if (event.data?.type === "META_SUCCESS") {
-        try {
-          await refreshConnection();
-        } catch {}
-        fetchDashboardData({ showFullLoader: false });
-      }
-    };
-
-    window.addEventListener("message", handleMessage);
-    return () => window.removeEventListener("message", handleMessage);
-  }, [fetchDashboardData, refreshConnection]);
-
-  // ✅ v19 Embedded Signup OAuth URL
-  const handleMetaLogin = () => {
-    const appId = import.meta.env.VITE_META_APP_ID;
-    const configId = import.meta.env.VITE_META_CONFIG_ID;
-    const appUrl = (import.meta.env.VITE_APP_URL || window.location.origin).replace(/\/+$/, "");
-    const redirectUri = `${appUrl}/meta-callback`;
-
-    if (!appId || !configId) {
-      console.error("Missing VITE_META_APP_ID or VITE_META_CONFIG_ID");
-      return;
+    try {
+      refreshConnection();
+    } catch {
+      // ignore connection errors
     }
+  }, [refreshConnection]);
 
-    const state =
-      (typeof crypto !== "undefined" && "randomUUID" in crypto)
-        ? crypto.randomUUID()
-        : `${Date.now()}_${Math.random().toString(16).slice(2)}`;
-
-    sessionStorage.setItem("meta_oauth_state", state);
-
-    const params = new URLSearchParams({
-      client_id: appId,
-      redirect_uri: redirectUri,
-      state,
-      response_type: "code",
-      scope: "business_management,whatsapp_business_management,whatsapp_business_messaging",
-      config_id: configId,
-    });
-
-    const authUrl = `https://www.facebook.com/v19.0/dialog/oauth?${params.toString()}`;
-
-    const width = 600;
-    const height = 700;
-    const left = Math.max(0, (window.screen.width - width) / 2);
-    const top = Math.max(0, (window.screen.height - height) / 2);
-
-    window.open(
-      authUrl,
-      "MetaLogin",
-      `width=${width},height=${height},top=${top},left=${left},resizable=yes,scrollbars=yes`
-    );
-  };
-
-  // ✅ FIXED: handleSync is defined
   const handleSync = async () => {
     try {
       setRefreshing(true);
@@ -239,7 +183,6 @@ const Dashboard: React.FC = () => {
     }
   };
 
-  // ✅ Credits low banner
   const lowCredits = useMemo(() => {
     const msg = billingUsage?.messages;
     if (!msg || !msg.limit || msg.limit <= 0) return { show: false, remaining: 0 };
@@ -290,7 +233,6 @@ const Dashboard: React.FC = () => {
     [statsData]
   );
 
-  // Mock chart data
   const messageData = [
     { name: "Mon", messages: 2400 },
     { name: "Tue", messages: 1398 },
@@ -311,7 +253,6 @@ const Dashboard: React.FC = () => {
     { name: "Sun", delivered: 97, failed: 3 },
   ];
 
-  // Full screen loader only on very first load without cache
   if (loading && !hasCacheRef.current) {
     return (
       <div className="flex items-center justify-center h-screen">
@@ -370,12 +311,13 @@ const Dashboard: React.FC = () => {
               </div>
             </div>
 
+            {/* ✅ Both buttons open same modal (single working flow) */}
             <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
               <button
-                onClick={handleMetaLogin}
+                onClick={() => setShowManualModal(true)}
                 className="flex items-center justify-center gap-2 px-6 py-3 bg-[#1877F2] hover:bg-[#166FE5] text-white font-semibold rounded-xl shadow-lg shadow-blue-500/30 transition-all transform hover:scale-105 active:scale-95 whitespace-nowrap"
               >
-                Connect with Facebook
+                Connect with Meta
               </button>
 
               <button
@@ -439,96 +381,20 @@ const Dashboard: React.FC = () => {
         />
       </div>
 
-      {/* Active Campaigns Table */}
-      <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-lg font-semibold text-gray-900">Active Campaigns</h2>
-          <Link
-            to="/dashboard/campaigns"
-            className="flex items-center space-x-1 text-sm text-primary-600 hover:text-primary-700 font-medium"
-          >
-            <span>View all</span>
-            <ArrowRight className="w-4 h-4" />
-          </Link>
-        </div>
-
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="text-left border-b border-gray-100">
-                <th className="pb-3 text-sm font-medium text-gray-500">Campaign Name</th>
-                <th className="pb-3 text-sm font-medium text-gray-500">Status</th>
-                <th className="pb-3 text-sm font-medium text-gray-500">Sent</th>
-                <th className="pb-3 text-sm font-medium text-gray-500">Delivered</th>
-                <th className="pb-3 text-sm font-medium text-gray-500">Opened</th>
-                <th className="pb-3 text-sm font-medium text-gray-500">Progress</th>
-              </tr>
-            </thead>
-
-            <tbody className="divide-y divide-gray-100">
-              {activeCampaigns.map((campaign) => (
-                <tr key={campaign.id} className="hover:bg-gray-50 transition-colors">
-                  <td className="py-4">
-                    <p className="font-medium text-gray-900">{campaign.name}</p>
-                  </td>
-                  <td className="py-4">
-                    <span
-                      className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${
-                        campaign.status === "running"
-                          ? "bg-green-100 text-green-700"
-                          : campaign.status === "scheduled"
-                          ? "bg-blue-100 text-blue-700"
-                          : "bg-gray-100 text-gray-700"
-                      }`}
-                    >
-                      {campaign.status === "running" && (
-                        <span className="w-1.5 h-1.5 bg-green-500 rounded-full mr-1.5 animate-pulse"></span>
-                      )}
-                      {campaign.status.charAt(0).toUpperCase() + campaign.status.slice(1)}
-                    </span>
-                  </td>
-                  <td className="py-4 text-gray-600">{campaign.sent.toLocaleString()}</td>
-                  <td className="py-4 text-gray-600">{campaign.delivered.toLocaleString()}</td>
-                  <td className="py-4 text-gray-600">{campaign.opened.toLocaleString()}</td>
-                  <td className="py-4">
-                    <div className="flex items-center space-x-2">
-                      <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
-                        <div
-                          className="h-full bg-primary-500 rounded-full transition-all"
-                          style={{ width: `${campaign.progress}%` }}
-                        />
-                      </div>
-                      <span className="text-sm text-gray-600 w-10">{campaign.progress}%</span>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-
-              {activeCampaigns.length === 0 && (
-                <tr>
-                  <td colSpan={6} className="py-8 text-center text-gray-500">
-                    No active campaigns found. Create one to get started!
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
       {/* Bottom Grid */}
       <div className="grid lg:grid-cols-2 gap-6">
         <QuickActions />
         <RecentActivity />
       </div>
 
-      {/* Manual Setup Modal */}
+      {/* ✅ Meta Connect Modal */}
       <MetaConnectModal
         isOpen={showManualModal}
         onClose={() => setShowManualModal(false)}
-        onConnect={() => {
-          startConnection();
-          setShowManualModal(false);
+        onConnect={async () => {
+          // ✅ refresh status & dashboard without full reload
+          await refreshConnection();
+          await fetchDashboardData({ showFullLoader: false });
         }}
       />
     </div>
