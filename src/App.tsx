@@ -122,7 +122,12 @@ function App() {
             <Route path="/" element={<RouteSuspense><Landing /></RouteSuspense>} />
 
             {/* Meta Callback (not lazy) */}
-            <Route path="/meta-callback" element={<MetaCallback />} />
+            <Route path="/meta/callback" element={<MetaCallback />} />
+
+            {/* ✅ Legal Pages - TOP LEVEL (Not nested inside dashboard) */}
+            <Route path="/privacy" element={<Privacy />} />
+            <Route path="/terms" element={<Terms />} />
+            <Route path="/data-deletion" element={<DataDeletion />} />
 
             {/* ===== Auth Routes ===== */}
             <Route path="/login" element={<RouteSuspense><Login /></RouteSuspense>} />
@@ -172,10 +177,6 @@ function App() {
               <Route path="campaigns" element={<Campaigns />} />
               <Route path="campaigns/new" element={<CreateCampaign />} />
               <Route path="campaigns/:id" element={<CampaignDetails />} />
-              <Route path="/privacy" element={<Privacy />} />
-              <Route path="/terms" element={<Terms />} />
-              <Route path="/data-deletion" element={<DataDeletion />} />
-              
 
               {/* Protected Features */}
               <Route
