@@ -39,7 +39,6 @@ const CampaignDetails = React.lazy(() => import("./pages/CampaignDetails"));
 const Inbox = React.lazy(() => import("./pages/Inbox"));
 const ChatbotList = React.lazy(() => import("./pages/ChatbotList"));
 const ChatbotBuilder = React.lazy(() => import("./pages/ChatbotBuilder"));
-const Team = React.lazy(() => import("./pages/Team"));
 const Settings = React.lazy(() => import("./pages/Settings"));
 const Reports = React.lazy(() => import("./pages/Reports"));
 const Billing = React.lazy(() => import("./pages/Billing"));
