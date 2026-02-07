@@ -1,5 +1,4 @@
 // src/components/dashboard/MetaConnectModal.tsx
-
 import React, { useEffect, useRef, useState } from "react";
 import { X, AlertCircle, CheckCircle, Loader2 } from "lucide-react";
 import { toast } from "react-hot-toast";
@@ -7,20 +6,14 @@ import { toast } from "react-hot-toast";
 interface MetaConnectModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onConnect?: () => void; // ✅ added
+  onConnect?: () => void | Promise<void>;
 }
 
-export const MetaConnectModal: React.FC<MetaConnectModalProps> = ({
-  isOpen,
-  onClose,
-  onConnect,
-}) => {
+export const MetaConnectModal: React.FC<MetaConnectModalProps> = ({ isOpen, onClose, onConnect }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-
   const popupRef = useRef<Window | null>(null);
 
-  // Cleanup if modal closes
   useEffect(() => {
     if (!isOpen) {
       popupRef.current?.close();
@@ -43,14 +36,9 @@ export const MetaConnectModal: React.FC<MetaConnectModalProps> = ({
         },
       });
 
-      if (!response.ok) {
-        throw new Error("Failed to get authorization URL");
-      }
-
       const data = await response.json();
-
-      if (!(data?.success && data?.data?.authUrl)) {
-        throw new Error(data?.error || data?.message || "Invalid response from server");
+      if (!response.ok || !data?.success || !data?.data?.authUrl) {
+        throw new Error(data?.error || data?.message || "Failed to get authorization URL");
       }
 
       const width = 600;
@@ -61,7 +49,7 @@ export const MetaConnectModal: React.FC<MetaConnectModalProps> = ({
       const popup = window.open(
         data.data.authUrl,
         "MetaOAuth",
-        `width=${width},height=${height},top=${top},left=${left},toolbar=no,location=no,directories=no,status=no,menubar=no,scrollbars=yes,resizable=yes`
+        `width=${width},height=${height},top=${top},left=${left},scrollbars=yes,resizable=yes`
       );
 
       popupRef.current = popup;
@@ -76,11 +64,10 @@ export const MetaConnectModal: React.FC<MetaConnectModalProps> = ({
         if (event.origin !== window.location.origin) return;
 
         const type = event.data?.type;
+        const ok = type === "META_OAUTH_SUCCESS" || type === "META_SUCCESS";
+        const fail = type === "META_OAUTH_ERROR" || type === "META_ERROR";
 
-        const isSuccess = type === "META_OAUTH_SUCCESS" || type === "META_SUCCESS";
-        const isError = type === "META_OAUTH_ERROR" || type === "META_ERROR";
-
-        if (isSuccess) {
+        if (ok) {
           window.removeEventListener("message", handleMessage);
           popupRef.current?.close();
           popupRef.current = null;
@@ -89,23 +76,17 @@ export const MetaConnectModal: React.FC<MetaConnectModalProps> = ({
           setLoading(false);
           onClose();
 
-          // ✅ trigger parent refresh (no reload)
-          if (onConnect) {
-            try {
-              await onConnect();
-            } catch {}
-          }
+          if (onConnect) await onConnect();
           return;
         }
 
-        if (isError) {
+        if (fail) {
           window.removeEventListener("message", handleMessage);
           popupRef.current?.close();
           popupRef.current = null;
 
           setError(event.data?.error || "Connection failed");
           setLoading(false);
-          return;
         }
       };
 
@@ -125,11 +106,7 @@ export const MetaConnectModal: React.FC<MetaConnectModalProps> = ({
       <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between p-6 border-b">
           <h2 className="text-xl font-semibold text-gray-900">Connect WhatsApp Business</h2>
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 transition"
-            disabled={loading}
-          >
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition" disabled={loading}>
             <X size={24} />
           </button>
         </div>
@@ -144,7 +121,7 @@ export const MetaConnectModal: React.FC<MetaConnectModalProps> = ({
                   <li>• Meta Business Account</li>
                   <li>• WhatsApp Business Account (WABA)</li>
                   <li>• Verified Business Phone Number</li>
-                  <li>• Admin access to the Business Manager</li>
+                  <li>• Admin access to Business Manager</li>
                 </ul>
               </div>
             </div>
@@ -162,22 +139,19 @@ export const MetaConnectModal: React.FC<MetaConnectModalProps> = ({
             </div>
           )}
 
-          <div className="space-y-3">
-            <h3 className="font-medium text-gray-900">After connecting, you can:</h3>
-            <div className="space-y-2">
-              {[
-                "Send messages to your customers",
-                "Receive and reply to messages",
-                "Send bulk campaigns",
-                "Use message templates",
-                "Automate responses with chatbots",
-              ].map((benefit, index) => (
-                <div key={index} className="flex items-center gap-2 text-sm text-gray-700">
-                  <CheckCircle className="text-green-600" size={16} />
-                  <span>{benefit}</span>
-                </div>
-              ))}
-            </div>
+          <div className="space-y-2 text-sm text-gray-700">
+            {[
+              "Send messages to your customers",
+              "Receive and reply to messages",
+              "Send bulk campaigns",
+              "Use message templates",
+              "Automate responses with chatbots",
+            ].map((b, i) => (
+              <div key={i} className="flex items-center gap-2">
+                <CheckCircle className="text-green-600" size={16} />
+                <span>{b}</span>
+              </div>
+            ))}
           </div>
         </div>
 
@@ -185,7 +159,7 @@ export const MetaConnectModal: React.FC<MetaConnectModalProps> = ({
           <button
             onClick={handleConnectWhatsApp}
             disabled={loading}
-            className="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-3 px-4 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            className="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-3 px-4 rounded-lg transition disabled:opacity-50 flex items-center justify-center gap-2"
           >
             {loading ? (
               <>

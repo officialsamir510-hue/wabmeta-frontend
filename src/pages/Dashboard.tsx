@@ -32,7 +32,7 @@ type StatsData = {
 const CACHE_KEY = "wabmeta_dashboard_cache_v2";
 
 const Dashboard: React.FC = () => {
-  const { connection, refreshConnection } = useMetaConnection();
+  const { connection, refreshConnection, disconnect } = useMetaConnection();
 
   const [statsData, setStatsData] = useState<StatsData>({
     contacts: 0,
@@ -46,6 +46,7 @@ const Dashboard: React.FC = () => {
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [disconnecting, setDisconnecting] = useState(false);
 
   const [showConnectModal, setShowConnectModal] = useState(false);
   const hasCacheRef = useRef(false);
@@ -55,7 +56,6 @@ const Dashboard: React.FC = () => {
     return Math.round((sent / total) * 100);
   };
 
-  // load cache
   useEffect(() => {
     try {
       const cachedRaw = localStorage.getItem(CACHE_KEY);
@@ -73,7 +73,6 @@ const Dashboard: React.FC = () => {
 
   const fetchDashboardData = useCallback(async (opts?: { showFullLoader?: boolean }) => {
     const showFullLoader = opts?.showFullLoader ?? !hasCacheRef.current;
-
     if (showFullLoader) setLoading(true);
     else setRefreshing(true);
 
@@ -165,6 +164,17 @@ const Dashboard: React.FC = () => {
       await fetchDashboardData({ showFullLoader: false });
     } finally {
       setRefreshing(false);
+    }
+  };
+
+  const handleDisconnect = async () => {
+    try {
+      setDisconnecting(true);
+      await disconnect(); // calls backend + clears local state
+      await refreshConnection();
+      await fetchDashboardData({ showFullLoader: false });
+    } finally {
+      setDisconnecting(false);
     }
   };
 
@@ -280,7 +290,7 @@ const Dashboard: React.FC = () => {
 
       {/* Connection Status */}
       {connection.isConnected ? (
-        <ConnectionStatus connection={connection} />
+        <ConnectionStatus connection={connection} onDisconnect={handleDisconnect} disconnectLoading={disconnecting} />
       ) : (
         <div className="bg-linear-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-2xl p-6 shadow-sm">
           <div className="flex flex-col md:flex-row items-center justify-between gap-6">
@@ -296,7 +306,6 @@ const Dashboard: React.FC = () => {
               </div>
             </div>
 
-            {/* ✅ single flow */}
             <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
               <button
                 onClick={() => setShowConnectModal(true)}
