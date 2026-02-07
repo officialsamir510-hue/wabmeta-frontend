@@ -12,6 +12,9 @@ import LoadingScreen from "./components/common/LoadingScreen";
 import { usePlanAccess } from "./hooks/usePlanAccess";
 import MetaCallback from "./pages/MetaCallback";
 import { ThemeProvider } from "./context/ThemeContext";
+import Privacy from './pages/Privacy';
+import Terms from './pages/Terms';
+import DataDeletion from './pages/DataDeletion';
 
 
 // Lazy Load Pages
@@ -169,6 +172,9 @@ function App() {
               <Route path="campaigns" element={<Campaigns />} />
               <Route path="campaigns/new" element={<CreateCampaign />} />
               <Route path="campaigns/:id" element={<CampaignDetails />} />
+              <Route path="/privacy" element={<Privacy />} />
+              <Route path="/terms" element={<Terms />} />
+              <Route path="/data-deletion" element={<DataDeletion />} />
               
 
               {/* Protected Features */}

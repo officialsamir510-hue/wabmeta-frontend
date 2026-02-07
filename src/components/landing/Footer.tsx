@@ -1,3 +1,5 @@
+// src/components/landing/Footer.tsx
+
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { 
@@ -9,7 +11,8 @@ import {
   Linkedin,
   Instagram,
   Youtube,
-  ArrowRight
+  ArrowRight,
+  Trash2
 } from 'lucide-react';
 import Logo from '../common/Logo';
 
@@ -36,21 +39,23 @@ const Footer: React.FC = () => {
       { name: 'Webinars', href: '/webinars' },
       { name: 'Partners', href: '/partners' },
     ],
+    // ✅ UPDATED: Added Data Deletion link (required for Meta compliance)
     legal: [
       { name: 'Privacy Policy', href: '/privacy' },
       { name: 'Terms of Service', href: '/terms' },
       { name: 'Cookie Policy', href: '/cookies' },
+      { name: 'Data Deletion', href: '/data-deletion' }, // ✅ IMPORTANT for Meta
       { name: 'GDPR', href: '/gdpr' },
       { name: 'Security', href: '/security' },
     ],
   };
 
   const socialLinks = [
-    { icon: Facebook, href: '#', label: 'Facebook' },
-    { icon: Twitter, href: '#', label: 'Twitter' },
-    { icon: Linkedin, href: '#', label: 'LinkedIn' },
-    { icon: Instagram, href: '#', label: 'Instagram' },
-    { icon: Youtube, href: '#', label: 'YouTube' },
+    { icon: Facebook, href: 'https://facebook.com/wabmeta', label: 'Facebook' },
+    { icon: Twitter, href: 'https://twitter.com/wabmeta', label: 'Twitter' },
+    { icon: Linkedin, href: 'https://linkedin.com/company/wabmeta', label: 'LinkedIn' },
+    { icon: Instagram, href: 'https://instagram.com/wabmeta', label: 'Instagram' },
+    { icon: Youtube, href: 'https://youtube.com/@wabmeta', label: 'YouTube' },
   ];
 
   return (
@@ -178,7 +183,7 @@ const Footer: React.FC = () => {
             </ul>
           </div>
 
-          {/* Legal Links */}
+          {/* Legal Links - ✅ INCLUDES DATA DELETION */}
           <div>
             <h4 className="text-white font-semibold mb-4">Legal</h4>
             <ul className="space-y-3">
@@ -186,14 +191,43 @@ const Footer: React.FC = () => {
                 <li key={link.name}>
                   <Link 
                     to={link.href} 
-                    className="text-gray-400 hover:text-primary-400 transition-colors inline-flex items-center group"
+                    className={`text-gray-400 hover:text-primary-400 transition-colors inline-flex items-center group ${
+                      link.name === 'Data Deletion' ? 'font-medium' : ''
+                    }`}
                   >
+                    {/* Special icon for Data Deletion */}
+                    {link.name === 'Data Deletion' && (
+                      <Trash2 className="w-3 h-3 mr-1 text-red-400" />
+                    )}
                     <span>{link.name}</span>
                     <ArrowRight className="w-3 h-3 ml-1 opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all" />
                   </Link>
                 </li>
               ))}
             </ul>
+          </div>
+        </div>
+
+        {/* ✅ Data Rights Notice */}
+        <div className="mt-12 p-4 bg-gray-800/50 rounded-xl border border-gray-700">
+          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+            <div className="flex items-start space-x-3">
+              <div className="w-10 h-10 bg-red-500/20 rounded-lg flex items-center justify-center shrink-0">
+                <Trash2 className="w-5 h-5 text-red-400" />
+              </div>
+              <div>
+                <h5 className="text-white font-medium">Your Data, Your Control</h5>
+                <p className="text-gray-400 text-sm">
+                  You can request deletion of your data at any time. We comply with GDPR and Meta's data policies.
+                </p>
+              </div>
+            </div>
+            <Link 
+              to="/data-deletion"
+              className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white text-sm font-medium rounded-lg transition-colors whitespace-nowrap"
+            >
+              Request Data Deletion
+            </Link>
           </div>
         </div>
       </div>
@@ -207,12 +241,29 @@ const Footer: React.FC = () => {
               © {new Date().getFullYear()} WabMeta. All rights reserved.
             </p>
 
+            {/* Quick Legal Links */}
+            <div className="flex items-center space-x-4 text-sm text-gray-500">
+              <Link to="/privacy" className="hover:text-gray-300 transition-colors">
+                Privacy
+              </Link>
+              <span>•</span>
+              <Link to="/terms" className="hover:text-gray-300 transition-colors">
+                Terms
+              </Link>
+              <span>•</span>
+              <Link to="/data-deletion" className="hover:text-gray-300 transition-colors">
+                Data Deletion
+              </Link>
+            </div>
+
             {/* Social Links */}
             <div className="flex items-center space-x-3">
               {socialLinks.map((social) => (
                 <a
                   key={social.label}
                   href={social.href}
+                  target="_blank"
+                  rel="noopener noreferrer"
                   aria-label={social.label}
                   className="w-10 h-10 bg-gray-800 hover:bg-primary-500 rounded-lg flex items-center justify-center transition-all hover:scale-110"
                 >
