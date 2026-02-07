@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import React, { useEffect, useMemo, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import {
   Plus,
   Upload,
@@ -10,243 +10,287 @@ import {
   Clock,
   RefreshCw,
   AlertCircle,
-  Loader2
-} from 'lucide-react';
-import ContactFilters from '../components/contacts/ContactFilters';
-import ContactsTable from '../components/contacts/ContactsTable';
-import BulkActions from '../components/contacts/BulkActions';
-import AddContactModal from '../components/contacts/AddContactModal';
-import api from '../services/api';
-import { useApp } from '../context/AppContext';
+  Loader2,
+} from "lucide-react";
 
-// ✅ UI Contact Interface (keep id:number for your table)
-// ✅ add apiId for backend
+import ContactFilters from "../components/contacts/ContactFilters";
+import ContactsTable from "../components/contacts/ContactsTable";
+import BulkActions from "../components/contacts/BulkActions";
+import AddContactModal from "../components/contacts/AddContactModal";
+import api from "../services/api";
+import { useApp } from "../context/AppContext";
+
 interface Contact {
-  id: number;              // UI id (for selection/table)
-  apiId: string;           // backend Contact.id (cuid)
+  id: string; // ✅ backend cuid
   firstName: string;
   lastName: string;
   phone: string;
   email: string;
   company: string;
   address: string;
-  status: 'active' | 'inactive' | 'pending';
+  status: "active" | "inactive" | "pending";
   tags: string[];
   notes: string;
   lastContacted: string;
   createdAt: string;
 }
 
+type ContactsMeta = {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+};
+
+type ContactStatsApi = {
+  total: number;
+  active: number;
+  blocked: number;
+  unsubscribed: number;
+  recentlyAdded: number;
+  withMessages: number;
+};
+
 const Contacts: React.FC = () => {
   const navigate = useNavigate();
   const { refreshStats } = useApp();
 
   const [contacts, setContacts] = useState<Contact[]>([]);
+  const [meta, setMeta] = useState<ContactsMeta>({ page: 1, limit: 20, total: 0, totalPages: 1 });
+  const [statsApi, setStatsApi] = useState<ContactStatsApi | null>(null);
+
   const [loading, setLoading] = useState(true);
+  const [loadingStats, setLoadingStats] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedContacts, setSelectedContacts] = useState<number[]>([]);
+
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedContacts, setSelectedContacts] = useState<string[]>([]);
+
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingContact, setEditingContact] = useState<Contact | null>(null);
-  const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 10;
 
-  // ✅ Token check
+  // server-side pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 20;
+
+  // ✅ Token check + initial fetch
   useEffect(() => {
     const token =
-      localStorage.getItem('accessToken') ||
-      localStorage.getItem('token') ||
-      localStorage.getItem('wabmeta_token');
+      localStorage.getItem("accessToken") ||
+      localStorage.getItem("token") ||
+      localStorage.getItem("wabmeta_token");
 
     if (!token) {
-      navigate('/login');
+      navigate("/login");
       return;
     }
-    fetchContacts();
+
+    void fetchAll();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [navigate]);
 
-  // ✅ Fetch Real Data from API
-  const fetchContacts = async () => {
-    setLoading(true);
-    setError(null);
-
-    try {
-      const response = await api.get('/contacts'); // baseURL already /api/v1
-
-      // ✅ Correct: backend returns contacts array in response.data.data
-      const contactsData = Array.isArray(response.data?.data) ? response.data.data : [];
-
-      const mappedContacts: Contact[] = contactsData.map((contact: any, index: number) => {
-        const cf = contact.customFields || {};
-
-        // Backend status: ACTIVE | BLOCKED | UNSUBSCRIBED
-        const uiStatus: Contact['status'] =
-          String(contact.status || 'ACTIVE').toUpperCase() === 'ACTIVE' ? 'active' : 'inactive';
-
-        return {
-          id: index + 1,
-          apiId: contact.id, // cuid string
-
-          firstName: contact.firstName || '',
-          lastName: contact.lastName || '',
-          phone: contact.phone || '',
-          email: contact.email || '',
-
-          company: cf.company || '',
-          address: cf.address || '',
-          notes: cf.notes || '',
-
-          status: uiStatus,
-          tags: Array.isArray(contact.tags) ? contact.tags : [],
-
-          lastContacted: contact.lastMessageAt ? new Date(contact.lastMessageAt).toLocaleString() : 'Never',
-          createdAt: contact.createdAt || new Date().toISOString(),
-        };
-      });
-
-      setContacts(mappedContacts);
-      refreshStats();
-    } catch (err: any) {
-      console.error('Error fetching contacts:', err);
-      setError(err.response?.data?.message || 'Failed to load contacts');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Stats calculation based on REAL data
-  const stats = [
-    { label: 'Total Contacts', value: contacts.length, icon: Users, color: 'bg-blue-100 text-blue-600' },
-    { label: 'Active', value: contacts.filter(c => c.status === 'active').length, icon: UserCheck, color: 'bg-green-100 text-green-600' },
-    { label: 'Inactive', value: contacts.filter(c => c.status === 'inactive').length, icon: UserX, color: 'bg-red-100 text-red-600' },
-    { label: 'Pending', value: contacts.filter(c => c.status === 'pending').length, icon: Clock, color: 'bg-yellow-100 text-yellow-600' },
-  ];
-
-  // Filter Logic
-  const filteredContacts = contacts.filter(contact => {
-    const searchLower = searchQuery.toLowerCase();
-    return (
-      contact.firstName.toLowerCase().includes(searchLower) ||
-      contact.lastName.toLowerCase().includes(searchLower) ||
-      contact.email.toLowerCase().includes(searchLower) ||
-      contact.phone.includes(searchQuery) ||
-      contact.company.toLowerCase().includes(searchLower)
-    );
-  });
-
-  // Pagination Logic
-  const totalPages = Math.ceil(filteredContacts.length / itemsPerPage);
-  const paginatedContacts = filteredContacts.slice(
-    (currentPage - 1) * itemsPerPage,
-    currentPage * itemsPerPage
-  );
+  // ✅ Refetch list when page/search changes
+  useEffect(() => {
+    void fetchContacts();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentPage, searchQuery]);
 
   useEffect(() => {
     setCurrentPage(1);
   }, [searchQuery]);
 
-  const handleSelectContact = (id: number) => {
-    setSelectedContacts(prev =>
-      prev.includes(id) ? prev.filter(cid => cid !== id) : [...prev, id]
-    );
+  const fetchAll = async () => {
+    await Promise.allSettled([fetchStats(), fetchContacts()]);
+    refreshStats();
+  };
+
+  const fetchStats = async () => {
+    setLoadingStats(true);
+    try {
+      const res = await api.get("/contacts/stats");
+      const data = res.data?.data;
+      setStatsApi(data || null);
+    } catch (err) {
+      // stats fail shouldn't block UI
+    } finally {
+      setLoadingStats(false);
+    }
+  };
+
+  const fetchContacts = async () => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const res = await api.get("/contacts", {
+        params: {
+          page: currentPage,
+          limit: itemsPerPage,
+          search: searchQuery || undefined,
+          sortBy: "createdAt",
+          sortOrder: "desc",
+        },
+      });
+
+      const contactsData = Array.isArray(res.data?.data) ? res.data.data : [];
+      const metaData = res.data?.meta;
+
+      if (metaData) {
+        setMeta({
+          page: metaData.page,
+          limit: metaData.limit,
+          total: metaData.total,
+          totalPages: metaData.totalPages,
+        });
+      }
+
+      const mappedContacts: Contact[] = contactsData.map((contact: any) => {
+        const cf = contact.customFields || {};
+
+        const backendStatus = String(contact.status || "ACTIVE").toUpperCase();
+        const uiStatus: Contact["status"] =
+          backendStatus === "ACTIVE" ? "active" : backendStatus ? "inactive" : "pending";
+
+        const phoneDisplay =
+          contact.fullPhone ||
+          (contact.countryCode ? `${contact.countryCode}${contact.phone}` : contact.phone) ||
+          "";
+
+        return {
+          id: contact.id,
+          firstName: contact.firstName || "",
+          lastName: contact.lastName || "",
+          phone: phoneDisplay,
+          email: contact.email || "",
+          company: cf.company || "",
+          address: cf.address || "",
+          notes: cf.notes || "",
+          status: uiStatus,
+          tags: Array.isArray(contact.tags) ? contact.tags : [],
+          lastContacted: contact.lastMessageAt ? new Date(contact.lastMessageAt).toLocaleString() : "Never",
+          createdAt: contact.createdAt || new Date().toISOString(),
+        };
+      });
+
+      setContacts(mappedContacts);
+      setSelectedContacts([]); // clear selection on page/search change
+    } catch (err: any) {
+      console.error("Error fetching contacts:", err);
+      setError(err.response?.data?.error || err.response?.data?.message || "Failed to load contacts");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ✅ Stats cards: use /contacts/stats (real totals)
+  const stats = useMemo(() => {
+    const total = statsApi?.total ?? meta.total ?? 0;
+    const active = statsApi?.active ?? 0;
+    const inactive = (statsApi?.blocked ?? 0) + (statsApi?.unsubscribed ?? 0);
+    const pending = 0;
+
+    return [
+      { label: "Total Contacts", value: loadingStats ? "…" : total, icon: Users, color: "bg-blue-100 text-blue-600" },
+      { label: "Active", value: loadingStats ? "…" : active, icon: UserCheck, color: "bg-green-100 text-green-600" },
+      { label: "Inactive", value: loadingStats ? "…" : inactive, icon: UserX, color: "bg-red-100 text-red-600" },
+      { label: "Pending", value: loadingStats ? "…" : pending, icon: Clock, color: "bg-yellow-100 text-yellow-600" },
+    ];
+  }, [statsApi, meta.total, loadingStats]);
+
+  const handleSelectContact = (id: string) => {
+    setSelectedContacts((prev) => (prev.includes(id) ? prev.filter((cid) => cid !== id) : [...prev, id]));
   };
 
   const handleSelectAll = () => {
-    if (selectedContacts.length === paginatedContacts.length) {
-      setSelectedContacts([]);
-    } else {
-      setSelectedContacts(paginatedContacts.map(c => c.id));
-    }
+    if (selectedContacts.length === contacts.length) setSelectedContacts([]);
+    else setSelectedContacts(contacts.map((c) => c.id));
   };
 
   // ✅ Create/Update contact (backend compatible)
   const handleSaveContact = async (contactData: Partial<Contact>) => {
     try {
       const payload: any = {
-        firstName: contactData.firstName || '',
-        lastName: contactData.lastName || '',
-        email: contactData.email || null,
+        firstName: contactData.firstName || null,
+        lastName: contactData.lastName || null,
+        email: contactData.email ? contactData.email : null,
         tags: contactData.tags || [],
-        // backend expects digits only phone; we keep same UI
-        phone: (contactData.phone || '').replace(/\D/g, ''),
-        countryCode: '+91',
+        phone: String(contactData.phone || "").replace(/\D/g, ""), // digits only
+        countryCode: "+91",
         customFields: {
-          company: contactData.company || '',
-          address: contactData.address || '',
-          notes: contactData.notes || '',
-        }
+          company: contactData.company || "",
+          address: contactData.address || "",
+          notes: contactData.notes || "",
+        },
       };
 
       if (editingContact) {
-        await api.put(`/contacts/${editingContact.apiId}`, payload);
+        await api.put(`/contacts/${editingContact.id}`, payload);
       } else {
-        await api.post('/contacts', payload);
+        await api.post(`/contacts`, payload);
       }
 
+      await fetchStats();
       await fetchContacts();
       setShowAddModal(false);
       setEditingContact(null);
+      refreshStats();
     } catch (err: any) {
-      alert(err.response?.data?.message || 'Failed to save contact');
+      alert(err.response?.data?.error || err.response?.data?.message || "Failed to save contact");
     }
   };
 
   // ✅ Delete contact
-  const handleDeleteContact = async (id: number) => {
-    if (!window.confirm('Are you sure?')) return;
-
-    const contact = contacts.find(c => c.id === id);
-    if (!contact) return;
+  const handleDeleteContact = async (id: string) => {
+    if (!window.confirm("Are you sure?")) return;
 
     try {
-      await api.delete(`/contacts/${contact.apiId}`);
+      await api.delete(`/contacts/${id}`);
+      await fetchStats();
       await fetchContacts();
+      refreshStats();
     } catch (err: any) {
-      alert(err.response?.data?.message || 'Failed to delete contact');
+      alert(err.response?.data?.error || err.response?.data?.message || "Failed to delete contact");
     }
   };
 
-  // ✅ Bulk delete (backend expects { contactIds: [] })
+  // ✅ Bulk delete
   const handleBulkAction = async (action: string) => {
     if (selectedContacts.length === 0) return;
 
     try {
-      if (action === 'delete') {
+      if (action === "delete") {
         if (!window.confirm(`Delete ${selectedContacts.length} contacts?`)) return;
 
-        const realIds = selectedContacts
-          .map(id => contacts.find(c => c.id === id)?.apiId)
-          .filter(Boolean);
-
-        await api.delete('/contacts/bulk', { data: { contactIds: realIds } });
+        await api.delete("/contacts/bulk", { data: { contactIds: selectedContacts } });
+        await fetchStats();
         await fetchContacts();
         setSelectedContacts([]);
+        refreshStats();
       }
     } catch (err: any) {
-      alert(err.response?.data?.message || 'Bulk action failed');
+      alert(err.response?.data?.error || err.response?.data?.message || "Bulk action failed");
     }
   };
 
-  // Export CSV (simple)
-  const handleExportAll = () => {
-    const headers = ['Name', 'Phone', 'Email', 'Company', 'Status'];
-    const rows = contacts.map(c => [
-      `${c.firstName} ${c.lastName}`.trim(),
-      c.phone,
-      c.email,
-      c.company,
-      c.status
-    ]);
+  // ✅ Export via backend endpoint (better than client-side)
+  const handleExportAll = async () => {
+    try {
+      const res = await api.get("/contacts/export", { responseType: "blob" });
+      const blob = new Blob([res.data], { type: "text/csv" });
+      const url = window.URL.createObjectURL(blob);
 
-    const csvContent = [headers, ...rows].map(row => row.join(',')).join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'contacts.csv';
-    a.click();
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "contacts.csv";
+      a.click();
+
+      window.URL.revokeObjectURL(url);
+    } catch (err: any) {
+      alert("Export failed");
+    }
   };
+
+  const totalPages = meta.totalPages || 1;
 
   if (loading) {
     return (
@@ -262,21 +306,46 @@ const Contacts: React.FC = () => {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Contacts</h1>
-          <p className="text-gray-500 mt-1">Manage your contact list</p>
+          <p className="text-gray-500 mt-1">
+            Manage your contact list{" "}
+            <span className="text-gray-400">
+              (Showing {contacts.length} of {meta.total})
+            </span>
+          </p>
         </div>
+
         <div className="flex items-center space-x-3">
-          <button onClick={fetchContacts} className="p-2.5 bg-gray-100 rounded-xl hover:bg-gray-200 text-gray-700">
+          <button
+            onClick={fetchAll}
+            className="p-2.5 bg-gray-100 rounded-xl hover:bg-gray-200 text-gray-700"
+            title="Refresh"
+          >
             <RefreshCw className="w-4 h-4" />
           </button>
-          <Link to="/dashboard/contacts/import" className="flex items-center space-x-2 px-4 py-2.5 bg-gray-100 rounded-xl hover:bg-gray-200 text-gray-700 font-medium">
+
+          <Link
+            to="/dashboard/contacts/import"
+            className="flex items-center space-x-2 px-4 py-2.5 bg-gray-100 rounded-xl hover:bg-gray-200 text-gray-700 font-medium"
+          >
             <Upload className="w-4 h-4" />
             <span>Import</span>
           </Link>
-          <button onClick={handleExportAll} className="flex items-center space-x-2 px-4 py-2.5 bg-gray-100 rounded-xl hover:bg-gray-200 text-gray-700 font-medium">
+
+          <button
+            onClick={handleExportAll}
+            className="flex items-center space-x-2 px-4 py-2.5 bg-gray-100 rounded-xl hover:bg-gray-200 text-gray-700 font-medium"
+          >
             <Download className="w-4 h-4" />
             <span>Export</span>
           </button>
-          <button onClick={() => { setEditingContact(null); setShowAddModal(true); }} className="flex items-center space-x-2 px-4 py-2.5 bg-primary-500 hover:bg-primary-600 text-white font-medium rounded-xl">
+
+          <button
+            onClick={() => {
+              setEditingContact(null);
+              setShowAddModal(true);
+            }}
+            className="flex items-center space-x-2 px-4 py-2.5 bg-primary-500 hover:bg-primary-600 text-white font-medium rounded-xl"
+          >
             <Plus className="w-4 h-4" />
             <span>Add Contact</span>
           </button>
@@ -288,7 +357,9 @@ const Contacts: React.FC = () => {
         <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex items-center space-x-3 text-red-700">
           <AlertCircle className="w-5 h-5" />
           <p>{error}</p>
-          <button onClick={fetchContacts} className="underline ml-auto">Retry</button>
+          <button onClick={fetchAll} className="underline ml-auto">
+            Retry
+          </button>
         </div>
       )}
 
@@ -299,7 +370,7 @@ const Contacts: React.FC = () => {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-500">{stat.label}</p>
-                <p className="text-2xl font-bold text-gray-900 mt-1">{stat.value}</p>
+                <p className="text-2xl font-bold text-gray-900 mt-1">{stat.value as any}</p>
               </div>
               <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${stat.color}`}>
                 <stat.icon className="w-6 h-6" />
@@ -322,7 +393,7 @@ const Contacts: React.FC = () => {
       )}
 
       {/* Empty State */}
-      {contacts.length === 0 && !loading && !error && (
+      {meta.total === 0 && !error && (
         <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
           <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
             <Users className="w-8 h-8 text-gray-400" />
@@ -338,11 +409,14 @@ const Contacts: React.FC = () => {
       {/* Table */}
       {contacts.length > 0 && (
         <ContactsTable
-          contacts={paginatedContacts}
+          contacts={contacts}
           selectedContacts={selectedContacts}
           onSelectContact={handleSelectContact}
           onSelectAll={handleSelectAll}
-          onEdit={(c) => { setEditingContact(c); setShowAddModal(true); }}
+          onEdit={(c) => {
+            setEditingContact(c);
+            setShowAddModal(true);
+          }}
           onDelete={handleDeleteContact}
         />
       )}
@@ -350,18 +424,20 @@ const Contacts: React.FC = () => {
       {/* Pagination */}
       {totalPages > 1 && (
         <div className="flex justify-between items-center bg-white p-4 rounded-xl border border-gray-200">
-          <span className="text-sm text-gray-500">Page {currentPage} of {totalPages}</span>
+          <span className="text-sm text-gray-500">
+            Page {meta.page} of {totalPages}
+          </span>
           <div className="flex gap-2">
             <button
-              disabled={currentPage === 1}
-              onClick={() => setCurrentPage(prev => prev - 1)}
+              disabled={meta.page === 1}
+              onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
               className="px-3 py-1 border rounded hover:bg-gray-50 disabled:opacity-50"
             >
               Prev
             </button>
             <button
-              disabled={currentPage === totalPages}
-              onClick={() => setCurrentPage(prev => prev + 1)}
+              disabled={meta.page === totalPages}
+              onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
               className="px-3 py-1 border rounded hover:bg-gray-50 disabled:opacity-50"
             >
               Next
@@ -373,7 +449,10 @@ const Contacts: React.FC = () => {
       {/* Modal */}
       <AddContactModal
         isOpen={showAddModal}
-        onClose={() => { setShowAddModal(false); setEditingContact(null); }}
+        onClose={() => {
+          setShowAddModal(false);
+          setEditingContact(null);
+        }}
         onSave={handleSaveContact}
         editContact={editingContact}
       />
