@@ -217,7 +217,6 @@ function App() {
               />
 
               {/* Management */}
-              <Route path="team" element={<Team />} />
               <Route path="settings" element={<Settings />} />
               <Route path="billing" element={<Billing />} />
               <Route path="profile" element={<Profile />} />
