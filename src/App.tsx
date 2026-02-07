@@ -12,6 +12,8 @@ import LoadingScreen from "./components/common/LoadingScreen";
 import { usePlanAccess } from "./hooks/usePlanAccess";
 import MetaCallback from "./pages/MetaCallback";
 import { ThemeProvider } from "./context/ThemeContext";
+import Terms from './pages/Terms';
+import Privacy from "./pages/Privacy";
 
 // Lazy Load Pages
 const Landing = React.lazy(() => import("./pages/Landing"));
@@ -169,6 +171,8 @@ function App() {
               <Route path="campaigns" element={<Campaigns />} />
               <Route path="campaigns/new" element={<CreateCampaign />} />
               <Route path="campaigns/:id" element={<CampaignDetails />} />
+              <Route path="/privacy" element={<Privacy />} />
+              <Route path="/terms" element={<Terms />} />
 
               {/* Protected Features */}
               <Route
