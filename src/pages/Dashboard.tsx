@@ -1,3 +1,4 @@
+// src/pages/Dashboard.tsx
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import {
@@ -19,7 +20,6 @@ import ChartCard from "../components/dashboard/ChartCard";
 import ConnectionStatus from "../components/dashboard/ConnectionStatus";
 import { MetaConnectModal } from "../components/dashboard/MetaConnectModal";
 import useMetaConnection from "../hooks/useMetaConnection";
-
 import { campaigns, contacts, inbox, billing } from "../services/api";
 
 type StatsData = {
@@ -32,7 +32,6 @@ type StatsData = {
 const CACHE_KEY = "wabmeta_dashboard_cache_v2";
 
 const Dashboard: React.FC = () => {
-  // ✅ startConnection removed (we’ll use modal + refreshConnection)
   const { connection, refreshConnection } = useMetaConnection();
 
   const [statsData, setStatsData] = useState<StatsData>({
@@ -48,8 +47,7 @@ const Dashboard: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  const [showManualModal, setShowManualModal] = useState(false);
-
+  const [showConnectModal, setShowConnectModal] = useState(false);
   const hasCacheRef = useRef(false);
 
   const calculateProgress = (total: number = 0, sent: number = 0) => {
@@ -57,7 +55,7 @@ const Dashboard: React.FC = () => {
     return Math.round((sent / total) * 100);
   };
 
-  // ✅ Load cached data immediately
+  // load cache
   useEffect(() => {
     try {
       const cachedRaw = localStorage.getItem(CACHE_KEY);
@@ -70,9 +68,7 @@ const Dashboard: React.FC = () => {
         hasCacheRef.current = true;
         setLoading(false);
       }
-    } catch {
-      // ignore cache errors
-    }
+    } catch {}
   }, []);
 
   const fetchDashboardData = useCallback(async (opts?: { showFullLoader?: boolean }) => {
@@ -162,22 +158,11 @@ const Dashboard: React.FC = () => {
     fetchDashboardData({ showFullLoader: !hasCacheRef.current });
   }, [fetchDashboardData]);
 
-  // ✅ IMPORTANT: on page load, fetch connection status once
-  useEffect(() => {
-    try {
-      refreshConnection();
-    } catch {
-      // ignore connection errors
-    }
-  }, [refreshConnection]);
-
   const handleSync = async () => {
     try {
       setRefreshing(true);
       await refreshConnection();
       await fetchDashboardData({ showFullLoader: false });
-    } catch (error) {
-      console.error("Failed to sync:", error);
     } finally {
       setRefreshing(false);
     }
@@ -311,17 +296,17 @@ const Dashboard: React.FC = () => {
               </div>
             </div>
 
-            {/* ✅ Both buttons open same modal (single working flow) */}
+            {/* ✅ single flow */}
             <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
               <button
-                onClick={() => setShowManualModal(true)}
+                onClick={() => setShowConnectModal(true)}
                 className="flex items-center justify-center gap-2 px-6 py-3 bg-[#1877F2] hover:bg-[#166FE5] text-white font-semibold rounded-xl shadow-lg shadow-blue-500/30 transition-all transform hover:scale-105 active:scale-95 whitespace-nowrap"
               >
                 Connect with Meta
               </button>
 
               <button
-                onClick={() => setShowManualModal(true)}
+                onClick={() => setShowConnectModal(true)}
                 className="px-6 py-3 bg-white border-2 border-gray-200 text-gray-700 font-semibold rounded-xl hover:bg-gray-50 transition-all active:scale-95"
               >
                 Manual Setup
@@ -364,21 +349,8 @@ const Dashboard: React.FC = () => {
 
       {/* Charts Row */}
       <div className="grid lg:grid-cols-2 gap-6">
-        <ChartCard
-          title="Messages Overview"
-          subtitle="Total messages sent this week"
-          type="area"
-          data={messageData}
-          dataKey="messages"
-        />
-        <ChartCard
-          title="Delivery Performance"
-          subtitle="Message delivery rate"
-          type="bar"
-          data={deliveryData}
-          dataKey="delivered"
-          color="#10B981"
-        />
+        <ChartCard title="Messages Overview" subtitle="Total messages sent this week" type="area" data={messageData} dataKey="messages" />
+        <ChartCard title="Delivery Performance" subtitle="Message delivery rate" type="bar" data={deliveryData} dataKey="delivered" color="#10B981" />
       </div>
 
       {/* Bottom Grid */}
@@ -387,12 +359,11 @@ const Dashboard: React.FC = () => {
         <RecentActivity />
       </div>
 
-      {/* ✅ Meta Connect Modal */}
+      {/* Connect Modal */}
       <MetaConnectModal
-        isOpen={showManualModal}
-        onClose={() => setShowManualModal(false)}
+        isOpen={showConnectModal}
+        onClose={() => setShowConnectModal(false)}
         onConnect={async () => {
-          // ✅ refresh status & dashboard without full reload
           await refreshConnection();
           await fetchDashboardData({ showFullLoader: false });
         }}
