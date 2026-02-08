@@ -15,18 +15,11 @@ import {
   Loader2,
   AlertCircle,
   CheckCircle,
-  Wifi,
   Plus,
   Trash2,
-  HelpCircle,
 } from 'lucide-react';
 import { templates as templateApi } from '../services/api';
-import { useWhatsAppConnection } from '../hooks/useWhatsAppConnection';
-import NoWhatsAppConnected from '../components/common/NoWhatsAppConnected';
 import TemplatePreview from '../components/templates/TemplatePreview';
-import VariableManager from '../components/templates/VariableManager';
-import ButtonBuilder from '../components/templates/ButtonBuilder';
-import MediaUploader from '../components/templates/MediaUploader';
 import type { TemplateFormData, HeaderType, TemplateCategory } from '../types/template';
 
 // ============================================
@@ -40,11 +33,6 @@ interface TemplateButton {
   phoneNumber?: string;
 }
 
-interface Variable {
-  index: number;
-  example: string;
-}
-
 // ============================================
 // COMPONENT
 // ============================================
@@ -52,9 +40,6 @@ const CreateTemplate: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const duplicateFrom = location.state?.duplicateFrom;
-  
-  // WhatsApp Connection
-  const { isConnected, isLoading: connectionLoading, defaultAccount } = useWhatsAppConnection();
   
   const [saving, setSaving] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
@@ -338,7 +323,6 @@ const CreateTemplate: React.FC = () => {
     value: TemplateFormData[K]
   ) => {
     setFormData(prev => ({ ...prev, [key]: value }));
-    // Clear error for this field
     if (errors[key]) {
       setErrors(prev => {
         const newErrors = { ...prev };
@@ -352,52 +336,6 @@ const CreateTemplate: React.FC = () => {
     setApiError(null);
     setSuccessMessage(null);
   };
-
-  // ==========================================
-  // LOADING STATES
-  // ==========================================
-  
-  // Check WhatsApp connection loading
-  if (connectionLoading) {
-    return (
-      <div className="min-h-[60vh] flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto mb-4"></div>
-          <p className="text-gray-600 dark:text-gray-400">Checking WhatsApp connection...</p>
-        </div>
-      </div>
-    );
-  }
-
-  // No WhatsApp connected
-  if (!isConnected) {
-    return (
-      <div className="space-y-6">
-        <div className="flex items-center gap-4">
-          <Link 
-            to="/dashboard/templates" 
-            className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
-          >
-            <ArrowLeft className="w-5 h-5" />
-          </Link>
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-              {duplicateFrom ? 'Duplicate Template' : 'Create Template'}
-            </h1>
-            <p className="text-gray-500 dark:text-gray-400 mt-1">
-              Create a new message template for WhatsApp Business
-            </p>
-          </div>
-        </div>
-
-        <NoWhatsAppConnected
-          title="WhatsApp Account Required"
-          description="You need to connect a WhatsApp Business account before creating templates. Templates are required for sending proactive messages to customers outside the 24-hour messaging window."
-          variant="full-page"
-        />
-      </div>
-    );
-  }
 
   // ==========================================
   // RENDER
@@ -419,18 +357,9 @@ const CreateTemplate: React.FC = () => {
                 <h1 className="text-xl font-bold text-gray-900 dark:text-white">
                   {duplicateFrom ? 'Duplicate Template' : 'Create Template'}
                 </h1>
-                <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
-                  <span>Design your WhatsApp message template</span>
-                  {defaultAccount && (
-                    <>
-                      <span>•</span>
-                      <span className="flex items-center text-green-600 dark:text-green-400">
-                        <Wifi className="w-3 h-3 mr-1" />
-                        {defaultAccount.displayName || defaultAccount.phoneNumber}
-                      </span>
-                    </>
-                  )}
-                </div>
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  Design your WhatsApp message template
+                </p>
               </div>
             </div>
             

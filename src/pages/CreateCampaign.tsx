@@ -14,7 +14,6 @@ import {
   Loader2,
   Eye,
   AlertCircle,
-  Wifi,
 } from "lucide-react";
 
 import TemplateSelector from "../components/campaigns/TemplateSelector";
@@ -23,14 +22,13 @@ import VariableMapper from "../components/campaigns/VariableMapper";
 import SchedulePicker from "../components/campaigns/SchedulePicker";
 import TemplatePreview from "../components/templates/TemplatePreview";
 import CsvAudienceUploader from "../components/campaigns/CsvAudienceUploader";
-import NoWhatsAppConnected from "../components/common/NoWhatsAppConnected";
 
-import { useWhatsAppConnection } from "../hooks/useWhatsAppConnection";
 import type { CampaignFormData } from "../types/campaign";
 import {
   templates as templateApi,
   contacts as contactApi,
   campaigns as campaignApi,
+  whatsapp as whatsappApi,
 } from "../services/api";
 
 // ============================================
@@ -92,14 +90,25 @@ const mapHeaderForPreview = (headerType: string) => {
   return { type: "none" as const };
 };
 
+const getConnectedWhatsAppAccountId = async (): Promise<string> => {
+  const res = await whatsappApi.accounts();
+  const accounts = res.data?.data || res.data || [];
+
+  const connected =
+    (Array.isArray(accounts) &&
+      (accounts.find((a: any) => a.status === "CONNECTED" && a.isDefault) ||
+        accounts.find((a: any) => a.status === "CONNECTED"))) ||
+    null;
+
+  if (!connected?.id) throw new Error("No connected WhatsApp account found.");
+  return connected.id;
+};
+
 // ============================================
 // COMPONENT
 // ============================================
 const CreateCampaign: React.FC = () => {
   const navigate = useNavigate();
-  
-  // ✅ WhatsApp Connection Hook
-  const { isConnected, isLoading: connectionLoading, defaultAccount } = useWhatsAppConnection();
   
   const [currentStep, setCurrentStep] = useState(1);
   const [sending, setSending] = useState(false);
@@ -127,12 +136,10 @@ const CreateCampaign: React.FC = () => {
   });
 
   // ==========================================
-  // FETCH DATA ON MOUNT (only if connected)
+  // FETCH DATA ON MOUNT
   // ==========================================
   useEffect(() => {
     const fetchData = async () => {
-      if (!isConnected) return;
-      
       setLoadingData(true);
       setApiError(null);
 
@@ -181,10 +188,8 @@ const CreateCampaign: React.FC = () => {
       }
     };
 
-    if (isConnected) {
-      fetchData();
-    }
-  }, [isConnected]);
+    fetchData();
+  }, []);
 
   // ==========================================
   // CSV IMPORT HANDLER
@@ -294,9 +299,7 @@ const CreateCampaign: React.FC = () => {
     setApiError(null);
 
     try {
-      if (!defaultAccount) {
-        throw new Error("No WhatsApp account available.");
-      }
+      const whatsappAccountId = await getConnectedWhatsAppAccountId();
 
       let audienceContactIds: string[] = [];
 
@@ -322,7 +325,7 @@ const CreateCampaign: React.FC = () => {
           : undefined;
 
       const payload: any = {
-        whatsappAccountId: defaultAccount.id,
+        whatsappAccountId,
         name: formData.name.trim(),
         description: formData.description?.trim() || undefined,
         templateId: formData.templateId,
@@ -360,51 +363,8 @@ const CreateCampaign: React.FC = () => {
   };
 
   // ==========================================
-  // LOADING STATES
+  // LOADING STATE
   // ==========================================
-  
-  // Check WhatsApp connection loading
-  if (connectionLoading) {
-    return (
-      <div className="min-h-[60vh] flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto mb-4"></div>
-          <p className="text-gray-600 dark:text-gray-400">Checking WhatsApp connection...</p>
-        </div>
-      </div>
-    );
-  }
-
-  // No WhatsApp connected
-  if (!isConnected) {
-    return (
-      <div className="space-y-6">
-        <div className="flex items-center gap-4">
-          <Link 
-            to="/dashboard/campaigns" 
-            className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
-          >
-            <ArrowLeft className="w-5 h-5" />
-          </Link>
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Create Campaign</h1>
-            <p className="text-gray-500 dark:text-gray-400 mt-1">
-              Send bulk messages to your contacts
-            </p>
-          </div>
-        </div>
-
-        <NoWhatsAppConnected
-          title="WhatsApp Account Required"
-          description="You need to connect a WhatsApp Business account before creating campaigns. Campaigns use approved message templates to send bulk messages to your contacts."
-          variant="full-page"
-          actionLabel="Connect WhatsApp Account"
-        />
-      </div>
-    );
-  }
-
-  // Loading templates/contacts
   if (loadingData) {
     return (
       <div className="flex items-center justify-center h-screen bg-gray-50 dark:bg-gray-900">
@@ -434,18 +394,9 @@ const CreateCampaign: React.FC = () => {
               </Link>
               <div>
                 <h1 className="text-xl font-bold text-gray-900 dark:text-white">Create Campaign</h1>
-                <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
-                  <span>Step {currentStep} of 4</span>
-                  {defaultAccount && (
-                    <>
-                      <span>•</span>
-                      <span className="flex items-center text-green-600 dark:text-green-400">
-                        <Wifi className="w-3 h-3 mr-1" />
-                        {defaultAccount.displayName || defaultAccount.phoneNumber}
-                      </span>
-                    </>
-                  )}
-                </div>
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  Step {currentStep} of 4
+                </p>
               </div>
             </div>
 
@@ -536,15 +487,11 @@ const CreateCampaign: React.FC = () => {
                 </label>
                 <div className="flex items-center space-x-3">
                   <div className="w-10 h-10 bg-green-100 dark:bg-green-900 rounded-full flex items-center justify-center">
-                    <Wifi className="w-5 h-5 text-green-600 dark:text-green-400" />
+                    <Check className="w-5 h-5 text-green-600 dark:text-green-400" />
                   </div>
                   <div>
-                    <p className="font-medium text-gray-900 dark:text-white">
-                      {defaultAccount?.displayName || "WhatsApp Business"}
-                    </p>
-                    <p className="text-sm text-gray-500 dark:text-gray-400">
-                      {defaultAccount?.phoneNumber || "Connected"}
-                    </p>
+                    <p className="font-medium text-gray-900 dark:text-white">WhatsApp Account</p>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Auto-selected (default connected)</p>
                   </div>
                 </div>
               </div>

@@ -10,7 +10,6 @@ import {
   FileText,
   Image,
   Video,
-  MoreVertical,
   Edit,
   Trash2,
   Copy,
@@ -19,21 +18,17 @@ import {
   XCircle,
   Clock,
   AlertCircle,
-  Wifi,
   LayoutGrid,
   List,
   Loader2,
 } from 'lucide-react';
-import { templates } from '../services/api';
-import { useWhatsAppConnection } from '../hooks/useWhatsAppConnection';
-import NoWhatsAppConnected from '../components/common/NoWhatsAppConnected';
+import { templates, whatsapp } from '../services/api';
 import TemplateCard from '../components/templates/TemplateCard';
 import TemplatePreview from '../components/templates/TemplatePreview';
 import type { Template, TemplateCategory, TemplateStatus } from '../types/template';
 
 const Templates: React.FC = () => {
   const navigate = useNavigate();
-  const { isConnected, isLoading: connectionLoading, defaultAccount } = useWhatsAppConnection();
 
   const [templateList, setTemplateList] = useState<Template[]>([]);
   const [loading, setLoading] = useState(true);
@@ -107,8 +102,6 @@ const Templates: React.FC = () => {
 
   // Fetch templates
   const fetchTemplates = async () => {
-    if (!isConnected) return;
-
     try {
       setLoading(true);
       setError(null);
@@ -132,13 +125,26 @@ const Templates: React.FC = () => {
 
   // Sync templates from Meta
   const handleSyncTemplates = async () => {
-    if (!defaultAccount) return;
-
     try {
       setSyncing(true);
       setError(null);
 
-      await templates.sync(defaultAccount.id);
+      // Find a connected WhatsApp account only when user clicks Sync
+      const accountsRes = await whatsapp.accounts();
+      const accounts = accountsRes.data?.data || accountsRes.data || [];
+
+      const connected =
+        (Array.isArray(accounts) &&
+          (accounts.find((a: any) => a.status === 'CONNECTED' && a.isDefault) ||
+           accounts.find((a: any) => a.status === 'CONNECTED'))) ||
+        null;
+
+      if (!connected) {
+        setError('No connected WhatsApp account found. Please connect WhatsApp to sync templates.');
+        return;
+      }
+
+      await templates.sync(connected.id);
       await fetchTemplates();
     } catch (err: any) {
       console.error('Error syncing templates:', err);
@@ -171,23 +177,23 @@ const Templates: React.FC = () => {
     });
   };
 
+  // Initial fetch
   useEffect(() => {
-    if (isConnected) {
-      fetchTemplates();
-    }
-  }, [isConnected]);
+    fetchTemplates();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
+  // Fetch on filter/search change
   useEffect(() => {
     const debounceTimer = setTimeout(() => {
-      if (isConnected) {
-        fetchTemplates();
-      }
+      fetchTemplates();
     }, 300);
 
     return () => clearTimeout(debounceTimer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchQuery, statusFilter, categoryFilter]);
 
-  // Filter templates
+  // Filter templates (client-side filtering for already fetched data)
   const filteredTemplates = templateList.filter((template) => {
     const matchesSearch =
       !searchQuery ||
@@ -290,57 +296,15 @@ const Templates: React.FC = () => {
     }
   };
 
-  // Loading state for connection check
-  if (connectionLoading) {
-    return (
-      <div className="min-h-[60vh] flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto mb-4"></div>
-          <p className="text-gray-600 dark:text-gray-400">Checking WhatsApp connection...</p>
-        </div>
-      </div>
-    );
-  }
-
-  // No WhatsApp connected
-  if (!isConnected) {
-    return (
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Message Templates</h1>
-            <p className="text-gray-500 dark:text-gray-400 mt-1">
-              Create and manage your WhatsApp message templates
-            </p>
-          </div>
-        </div>
-
-        <NoWhatsAppConnected
-          title="WhatsApp Account Required"
-          description="Connect your WhatsApp Business account to create and manage message templates. Templates are required for sending proactive messages to customers."
-          variant="full-page"
-        />
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Message Templates</h1>
-          <div className="flex items-center gap-3 mt-1">
-            <p className="text-gray-500 dark:text-gray-400">
-              Create and manage your WhatsApp message templates
-            </p>
-            {defaultAccount && (
-              <span className="inline-flex items-center text-sm text-green-600 dark:text-green-400">
-                <Wifi className="w-3 h-3 mr-1" />
-                {defaultAccount.displayName || defaultAccount.phoneNumber}
-              </span>
-            )}
-          </div>
+          <p className="text-gray-500 dark:text-gray-400 mt-1">
+            Create and manage your WhatsApp message templates
+          </p>
         </div>
         <div className="flex items-center gap-3">
           <button
