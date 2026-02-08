@@ -14,11 +14,9 @@ import {
   ChevronDown,
   Zap,
   Loader2,
-  AlertCircle,
   CheckCircle,
   Clock,
   Send,
-  Paperclip,
   X
 } from 'lucide-react';
 import MessageBubble from './MessageBubble';
@@ -29,13 +27,13 @@ import type { Conversation, Message, QuickReply } from '../../types/chat';
 interface ChatWindowProps {
   conversation: Conversation;
   messages: Message[];
-  onSendMessage: (content: string, type: 'text' | 'image' | 'document' | 'audio' | 'video', mediaUrl?: string) => void;
+  onSendMessage: (content: string, type?: 'text' | 'image' | 'document') => void;
   onToggleInfo: () => void;
   showInfo: boolean;
-  loading?: boolean;  // ✅ Added
-  sending?: boolean;  // ✅ Added
-  onLoadMore?: () => void; // ✅ Added for pagination
-  hasMore?: boolean; // ✅ Added for pagination
+  loading?: boolean;
+  sending?: boolean;
+  onLoadMore?: () => void;
+  hasMore?: boolean;
 }
 
 const ChatWindow: React.FC<ChatWindowProps> = ({
@@ -56,7 +54,6 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
-  const loadMoreTriggerRef = useRef<HTMLDivElement>(null);
 
   // Quick replies data
   const quickReplies: QuickReply[] = [
@@ -99,18 +96,18 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
     }
   };
 
-  // Handle send message
-  const handleSend = (content: string, type: 'text' | 'image' | 'document' | 'audio' | 'video' = 'text', mediaUrl?: string) => {
-    if (sending || (!content.trim() && !mediaUrl)) return;
+  // Handle send message (simplified signature to match parent)
+  const handleSend = (content: string) => {
+    if (sending || !content.trim()) return;
     
-    onSendMessage(content, type, mediaUrl);
+    onSendMessage(content);
     setReplyTo(null);
     setShowQuickReplies(false);
   };
 
   // Handle quick reply selection
   const handleQuickReplySelect = (reply: QuickReply) => {
-    handleSend(reply.message, 'text');
+    handleSend(reply.message);
     setShowQuickReplies(false);
   };
 
@@ -122,14 +119,13 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
   // Handle copy message
   const handleCopy = (content: string) => {
     navigator.clipboard.writeText(content);
-    // You can add a toast notification here
   };
 
   const { contact } = conversation;
 
   // Group messages by date
   const groupedMessages = messages.reduce((groups: { date: string; messages: Message[] }[], message) => {
-    const messageDate = new Date(message.createdAt || message.timestamp);
+    const messageDate = new Date(message.timestamp || Date.now());
     const today = new Date();
     const yesterday = new Date(today);
     yesterday.setDate(yesterday.getDate() - 1);
@@ -158,9 +154,9 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
     return groups;
   }, []);
 
-  // Check if window is open (24-hour window)
-  const isWindowOpen = conversation.isWindowOpen !== false;
-  const windowExpiresAt = conversation.windowExpiresAt ? new Date(conversation.windowExpiresAt) : null;
+  // Check if window is open (24-hour window) - simplified
+  const isWindowOpen = (conversation as any).isWindowOpen !== false;
+  const windowExpiresAt = (conversation as any).windowExpiresAt ? new Date((conversation as any).windowExpiresAt) : null;
   const windowExpired = windowExpiresAt ? windowExpiresAt < new Date() : false;
 
   return (
@@ -174,29 +170,20 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
           {contact.avatar ? (
             <img
               src={contact.avatar}
-              alt={contact.fullName || contact.name}
+              alt={contact.name}
               className="w-10 h-10 rounded-full object-cover"
             />
           ) : (
-            <div className="w-10 h-10 bg-linear-to-br from-primary-500 to-primary-600 rounded-full flex items-center justify-center text-white font-semibold">
-              {(contact.fullName || contact.name || 'U').charAt(0).toUpperCase()}
+            <div className="w-10 h-10 bg-linear-to-br from-green-500 to-green-600 rounded-full flex items-center justify-center text-white font-semibold">
+              {(contact.name || 'U').charAt(0).toUpperCase()}
             </div>
           )}
           <div>
             <h3 className="font-semibold text-gray-900">
-              {contact.fullName || contact.name || contact.phone}
+              {contact.name || contact.phone}
             </h3>
             <p className="text-xs text-gray-500">
-              {contact.isOnline ? (
-                <span className="flex items-center">
-                  <span className="w-2 h-2 bg-green-500 rounded-full mr-1"></span>
-                  Online
-                </span>
-              ) : contact.lastSeen ? (
-                `Last seen ${contact.lastSeen}`
-              ) : (
-                contact.phone
-              )}
+              {contact.lastSeen || contact.phone}
             </p>
           </div>
         </div>
@@ -223,7 +210,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
           <button
             onClick={onToggleInfo}
             className={`p-2 rounded-full transition-colors ${
-              showInfo ? 'bg-primary-100 text-primary-600' : 'hover:bg-gray-100 text-gray-600'
+              showInfo ? 'bg-green-100 text-green-600' : 'hover:bg-gray-100 text-gray-600'
             }`}
             title="Contact Info"
           >
@@ -289,7 +276,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
         {/* Loading State */}
         {loading && messages.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full">
-            <Loader2 className="w-8 h-8 text-primary-500 animate-spin mb-4" />
+            <Loader2 className="w-8 h-8 text-green-500 animate-spin mb-4" />
             <p className="text-gray-500">Loading messages...</p>
           </div>
         ) : messages.length === 0 ? (
@@ -370,7 +357,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
             onClick={() => setShowQuickReplies(!showQuickReplies)}
             className={`absolute -top-12 left-4 flex items-center space-x-1 px-3 py-1.5 rounded-full text-sm font-medium transition-all ${
               showQuickReplies 
-                ? 'bg-primary-500 text-white shadow-lg' 
+                ? 'bg-green-500 text-white shadow-lg' 
                 : 'bg-white text-gray-700 hover:bg-gray-100 shadow'
             }`}
           >
@@ -391,7 +378,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
         {replyTo && (
           <div className="px-4 py-2 bg-gray-100 border-t border-gray-200 flex items-center justify-between">
             <div className="flex items-center space-x-2">
-              <div className="w-1 h-10 bg-primary-500 rounded"></div>
+              <div className="w-1 h-10 bg-green-500 rounded"></div>
               <div>
                 <p className="text-xs text-gray-500">Replying to</p>
                 <p className="text-sm text-gray-700 line-clamp-1">
@@ -411,24 +398,14 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
         {/* Main Chat Input */}
         <ChatInput
           onSend={handleSend}
-          replyTo={replyTo}
-          onCancelReply={() => setReplyTo(null)}
           disabled={!isWindowOpen || windowExpired || sending}
-          sending={sending}
-          placeholder={
-            !isWindowOpen || windowExpired
-              ? "Can't send messages - window expired"
-              : sending
-              ? "Sending..."
-              : "Type a message"
-          }
         />
 
         {/* Sending Overlay */}
         {sending && (
-          <div className="absolute inset-0 bg-white/50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-white/50 flex items-center justify-center pointer-events-none">
             <div className="flex items-center space-x-2 bg-white px-4 py-2 rounded-lg shadow-lg">
-              <Loader2 className="w-5 h-5 text-primary-500 animate-spin" />
+              <Loader2 className="w-5 h-5 text-green-500 animate-spin" />
               <span className="text-sm text-gray-600">Sending message...</span>
             </div>
           </div>
