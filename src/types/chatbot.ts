@@ -1,35 +1,61 @@
-import type { Node, Edge } from 'reactflow';
+// src/types/chatbot.ts
 
-export type NodeType = 'start' | 'message' | 'button' | 'condition' | 'action';
-
-export interface ChatbotNodeData {
-  label: string;
-  content?: string;
-  options?: string[];
-  variable?: string;
-  condition?: {
-    field: string;
-    operator: string;
-    value: string;
+export interface FlowNode {
+  id: string;
+  type: 'start' | 'message' | 'button' | 'condition' | 'delay' | 'action';
+  position: { x: number; y: number };
+  data: {
+    label?: string;
+    message?: string;
+    buttons?: Array<{
+      id: string;
+      text: string;
+      type: 'reply' | 'url' | 'phone';
+      value?: string;
+    }>;
+    condition?: {
+      type: 'keyword' | 'contains' | 'exact' | 'regex';
+      value: string;
+    };
+    delay?: number;
+    action?: {
+      type: 'assign' | 'tag' | 'webhook' | 'variable';
+      value: string;
+    };
   };
-  actionType?: string;
 }
 
-export type ChatbotNode = Node<ChatbotNodeData>;
+export interface FlowEdge {
+  id: string;
+  source: string;
+  target: string;
+  sourceHandle?: string;
+  targetHandle?: string;
+  label?: string;
+}
+
+export interface FlowData {
+  nodes: FlowNode[];
+  edges: FlowEdge[];
+}
 
 export interface Chatbot {
   id: string;
   name: string;
-  description?: string;
-  status: 'active' | 'inactive' | 'draft';
-  nodes: ChatbotNode[];
-  edges: Edge[];
-  triggers: string[];
+  description: string | null;
+  flowData: FlowData;
+  triggerKeywords: string[];
+  isDefault: boolean;
+  welcomeMessage: string | null;
+  fallbackMessage: string | null;
+  status: 'DRAFT' | 'ACTIVE' | 'PAUSED';
   createdAt: string;
   updatedAt: string;
-  analytics: {
-    triggered: number;
-    completed: number;
-    dropped: number;
-  };
+}
+
+export interface ChatbotStats {
+  totalConversations: number;
+  messagesHandled: number;
+  fallbackTriggered: number;
+  avgResponseTime: number;
 }

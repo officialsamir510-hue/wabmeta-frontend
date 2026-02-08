@@ -1,7 +1,7 @@
 // src/pages/CreateTemplate.tsx
 
-import React, { useState, useMemo } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import React, { useState, useMemo, useEffect } from 'react';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import {
   ArrowLeft,
   Save,
@@ -14,14 +14,20 @@ import {
   Type,
   Loader2,
   AlertCircle,
-  CheckCircle
+  CheckCircle,
+  Wifi,
+  Plus,
+  Trash2,
+  HelpCircle,
 } from 'lucide-react';
+import { templates as templateApi } from '../services/api';
+import { useWhatsAppConnection } from '../hooks/useWhatsAppConnection';
+import NoWhatsAppConnected from '../components/common/NoWhatsAppConnected';
 import TemplatePreview from '../components/templates/TemplatePreview';
 import VariableManager from '../components/templates/VariableManager';
 import ButtonBuilder from '../components/templates/ButtonBuilder';
 import MediaUploader from '../components/templates/MediaUploader';
 import type { TemplateFormData, HeaderType, TemplateCategory } from '../types/template';
-import { templates as templateApi } from '../services/api';
 
 // ============================================
 // TYPES
@@ -34,26 +40,37 @@ interface TemplateButton {
   phoneNumber?: string;
 }
 
+interface Variable {
+  index: number;
+  example: string;
+}
+
 // ============================================
 // COMPONENT
 // ============================================
 const CreateTemplate: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
+  const duplicateFrom = location.state?.duplicateFrom;
+  
+  // WhatsApp Connection
+  const { isConnected, isLoading: connectionLoading, defaultAccount } = useWhatsAppConnection();
+  
   const [saving, setSaving] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const [activeTab, setActiveTab] = useState<'content' | 'buttons' | 'settings'>('content');
   const [apiError, setApiError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-  // Form State
+  // Form State - Initialize from duplicate if exists
   const [formData, setFormData] = useState<TemplateFormData>({
-    name: '',
-    category: 'utility',
-    language: 'en',
-    header: { type: 'none' },
-    body: '',
-    footer: '',
-    buttons: []
+    name: duplicateFrom ? `${duplicateFrom.name}_copy` : '',
+    category: (duplicateFrom?.category?.toLowerCase() as TemplateCategory) || 'utility',
+    language: duplicateFrom?.language || 'en',
+    header: duplicateFrom?.header || { type: 'none' },
+    body: duplicateFrom?.body || '',
+    footer: duplicateFrom?.footer || '',
+    buttons: duplicateFrom?.buttons || []
   });
 
   const [sampleVariables, setSampleVariables] = useState<Record<string, string>>({});
@@ -68,6 +85,17 @@ const CreateTemplate: React.FC = () => {
     const unique = [...new Set(matches.map(m => m.replace(/[{}]/g, '')))];
     return unique.sort((a, b) => Number(a) - Number(b));
   }, [formData.body, formData.header.text]);
+
+  // Auto-update sample variables when body text changes
+  useEffect(() => {
+    setSampleVariables(prev => {
+      const newVars: Record<string, string> = {};
+      extractedVariables.forEach(v => {
+        newVars[v] = prev[v] || '';
+      });
+      return newVars;
+    });
+  }, [extractedVariables]);
 
   // ==========================================
   // CONSTANTS
@@ -88,6 +116,8 @@ const CreateTemplate: React.FC = () => {
 
   const languages = [
     { value: 'en', label: 'English' },
+    { value: 'en_US', label: 'English (US)' },
+    { value: 'en_GB', label: 'English (UK)' },
     { value: 'hi', label: 'Hindi' },
     { value: 'ta', label: 'Tamil' },
     { value: 'te', label: 'Telugu' },
@@ -97,6 +127,11 @@ const CreateTemplate: React.FC = () => {
     { value: 'kn', label: 'Kannada' },
     { value: 'ml', label: 'Malayalam' },
     { value: 'pa', label: 'Punjabi' },
+    { value: 'es', label: 'Spanish' },
+    { value: 'pt_BR', label: 'Portuguese (Brazil)' },
+    { value: 'ar', label: 'Arabic' },
+    { value: 'fr', label: 'French' },
+    { value: 'de', label: 'German' },
   ];
 
   // ==========================================
@@ -194,7 +229,7 @@ const CreateTemplate: React.FC = () => {
     setSaving(true);
 
     try {
-      // ✅ Map buttons to backend format
+      // Map buttons to backend format
       const mappedButtons = formData.buttons
         .filter(btn => btn.text.trim())
         .map(btn => {
@@ -220,23 +255,23 @@ const CreateTemplate: React.FC = () => {
         })
         .filter(Boolean);
 
-      // ✅ Map variables with examples
+      // Map variables with examples
       const mappedVariables = extractedVariables.map((v) => ({
         index: parseInt(v),
         type: 'text' as const,
         example: sampleVariables[v]?.trim() || 'example'
       }));
 
-      // ✅ Build payload matching backend schema exactly
+      // Build payload
       const payload: Record<string, any> = {
         name: formData.name.trim(),
         language: formData.language,
-        category: formData.category.toUpperCase(), // MARKETING, UTILITY, AUTHENTICATION
-        headerType: formData.header.type.toUpperCase(), // NONE, TEXT, IMAGE, VIDEO, DOCUMENT
+        category: formData.category.toUpperCase(),
+        headerType: formData.header.type.toUpperCase(),
         bodyText: formData.body.trim(),
       };
 
-      // Optional fields - only include if they have values
+      // Optional fields
       if (formData.header.type === 'text' && formData.header.text?.trim()) {
         payload.headerContent = formData.header.text.trim();
       } else if (['image', 'video', 'document'].includes(formData.header.type) && formData.header.mediaUrl) {
@@ -262,28 +297,23 @@ const CreateTemplate: React.FC = () => {
       
       console.log("✅ Template created:", response.data);
       
-      setSuccessMessage('Template created successfully!');
+      setSuccessMessage('Template created successfully! It will be reviewed by Meta.');
       
       // Navigate after short delay
       setTimeout(() => {
         navigate('/dashboard/templates');
-      }, 1000);
+      }, 1500);
 
     } catch (error: any) {
       console.error("❌ Template creation error:", error);
-      console.error("Error response:", error.response?.data);
       
       // Extract detailed error message
       let errorMessage = 'Failed to create template. Please try again.';
       const errorData = error.response?.data;
       
       if (errorData?.error?.issues && Array.isArray(errorData.error.issues)) {
-        // Zod validation errors
         errorMessage = errorData.error.issues
-          .map((issue: any) => {
-            const path = issue.path?.join('.') || 'field';
-            return `${path}: ${issue.message}`;
-          })
+          .map((issue: any) => `${issue.path?.join('.') || 'field'}: ${issue.message}`)
           .join('\n');
       } else if (errorData?.error?.message) {
         errorMessage = errorData.error.message;
@@ -324,41 +354,93 @@ const CreateTemplate: React.FC = () => {
   };
 
   // ==========================================
+  // LOADING STATES
+  // ==========================================
+  
+  // Check WhatsApp connection loading
+  if (connectionLoading) {
+    return (
+      <div className="min-h-[60vh] flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto mb-4"></div>
+          <p className="text-gray-600 dark:text-gray-400">Checking WhatsApp connection...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // No WhatsApp connected
+  if (!isConnected) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center gap-4">
+          <Link 
+            to="/dashboard/templates" 
+            className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
+          >
+            <ArrowLeft className="w-5 h-5" />
+          </Link>
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+              {duplicateFrom ? 'Duplicate Template' : 'Create Template'}
+            </h1>
+            <p className="text-gray-500 dark:text-gray-400 mt-1">
+              Create a new message template for WhatsApp Business
+            </p>
+          </div>
+        </div>
+
+        <NoWhatsAppConnected
+          title="WhatsApp Account Required"
+          description="You need to connect a WhatsApp Business account before creating templates. Templates are required for sending proactive messages to customers outside the 24-hour messaging window."
+          variant="full-page"
+        />
+      </div>
+    );
+  }
+
+  // ==========================================
   // RENDER
   // ==========================================
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       {/* Header */}
-      <div className="bg-white border-b border-gray-200 sticky top-16 z-20">
+      <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 sticky top-16 z-20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center space-x-4">
               <Link
                 to="/dashboard/templates"
-                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
               >
-                <ArrowLeft className="w-5 h-5 text-gray-600" />
+                <ArrowLeft className="w-5 h-5 text-gray-600 dark:text-gray-400" />
               </Link>
               <div>
-                <h1 className="text-xl font-bold text-gray-900">Create Template</h1>
-                <p className="text-sm text-gray-500">Design your WhatsApp message template</p>
+                <h1 className="text-xl font-bold text-gray-900 dark:text-white">
+                  {duplicateFrom ? 'Duplicate Template' : 'Create Template'}
+                </h1>
+                <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
+                  <span>Design your WhatsApp message template</span>
+                  {defaultAccount && (
+                    <>
+                      <span>•</span>
+                      <span className="flex items-center text-green-600 dark:text-green-400">
+                        <Wifi className="w-3 h-3 mr-1" />
+                        {defaultAccount.displayName || defaultAccount.phoneNumber}
+                      </span>
+                    </>
+                  )}
+                </div>
               </div>
             </div>
             
             <div className="flex items-center space-x-3">
               <button
                 onClick={() => setShowPreview(true)}
-                className="flex items-center space-x-2 px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-xl transition-colors"
+                className="flex items-center space-x-2 px-4 py-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-xl transition-colors"
               >
                 <Eye className="w-5 h-5" />
                 <span className="hidden sm:inline">Preview</span>
-              </button>
-              <button
-                onClick={() => handleSubmit(true)}
-                disabled={saving}
-                className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-xl transition-colors disabled:opacity-50"
-              >
-                Save Draft
               </button>
               <button
                 onClick={() => handleSubmit(false)}
@@ -385,33 +467,47 @@ const CreateTemplate: React.FC = () => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         {/* Success Message */}
         {successMessage && (
-          <div className="mb-6 bg-green-50 border border-green-200 rounded-xl p-4 flex items-start space-x-3 animate-fade-in">
-            <CheckCircle className="w-5 h-5 text-green-600 shrink-0 mt-0.5" />
+          <div className="mb-6 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-xl p-4 flex items-start space-x-3 animate-fade-in">
+            <CheckCircle className="w-5 h-5 text-green-600 dark:text-green-400 shrink-0 mt-0.5" />
             <div className="flex-1">
-              <p className="text-green-800 font-medium">{successMessage}</p>
+              <p className="text-green-800 dark:text-green-200 font-medium">{successMessage}</p>
             </div>
-            <button onClick={clearMessages} className="text-green-400 hover:text-green-600">×</button>
+            <button onClick={clearMessages} className="text-green-400 hover:text-green-600 dark:hover:text-green-200">×</button>
           </div>
         )}
 
         {/* API Error Banner */}
         {apiError && (
-          <div className="mb-6 bg-red-50 border border-red-200 rounded-xl p-4 flex items-start space-x-3 animate-fade-in">
-            <AlertCircle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
+          <div className="mb-6 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-4 flex items-start space-x-3 animate-fade-in">
+            <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
             <div className="flex-1">
-              <h3 className="text-sm font-medium text-red-800">Submission Failed</h3>
-              <pre className="text-sm text-red-600 mt-1 whitespace-pre-wrap font-sans">{apiError}</pre>
+              <h3 className="text-sm font-medium text-red-800 dark:text-red-200">Submission Failed</h3>
+              <pre className="text-sm text-red-600 dark:text-red-400 mt-1 whitespace-pre-wrap font-sans">{apiError}</pre>
             </div>
-            <button onClick={clearMessages} className="text-red-400 hover:text-red-600">×</button>
+            <button onClick={clearMessages} className="text-red-400 hover:text-red-600 dark:hover:text-red-200">×</button>
           </div>
         )}
+
+        {/* Info Box */}
+        <div className="mb-6 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl p-4 flex items-start">
+          <Info className="w-5 h-5 text-blue-600 dark:text-blue-400 mr-3 mt-0.5 shrink-0" />
+          <div>
+            <p className="text-blue-800 dark:text-blue-200 font-medium">Template Guidelines</p>
+            <ul className="text-blue-700 dark:text-blue-300 text-sm mt-1 space-y-1 list-disc list-inside">
+              <li>Templates must be approved by Meta before use (usually 24-48 hours)</li>
+              <li>Use variables like {"{{1}}"}, {"{{2}}"} for dynamic content</li>
+              <li>Marketing templates require opt-in from recipients</li>
+              <li>Avoid promotional content in Utility templates</li>
+            </ul>
+          </div>
+        </div>
 
         <div className="grid lg:grid-cols-2 gap-6">
           {/* Left: Form */}
           <div className="space-y-6">
             {/* Tabs */}
-            <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
-              <div className="flex border-b border-gray-200">
+            <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+              <div className="flex border-b border-gray-200 dark:border-gray-700">
                 {[
                   { id: 'content', label: 'Content' },
                   { id: 'buttons', label: 'Buttons' },
@@ -422,8 +518,8 @@ const CreateTemplate: React.FC = () => {
                     onClick={() => setActiveTab(tab.id as any)}
                     className={`flex-1 px-4 py-3 text-sm font-medium transition-colors ${
                       activeTab === tab.id
-                        ? 'text-primary-600 bg-primary-50 border-b-2 border-primary-500'
-                        : 'text-gray-600 hover:text-gray-900'
+                        ? 'text-primary-600 dark:text-primary-400 bg-primary-50 dark:bg-primary-900/20 border-b-2 border-primary-500'
+                        : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
                     }`}
                   >
                     {tab.label}
@@ -437,7 +533,7 @@ const CreateTemplate: React.FC = () => {
                   <div className="space-y-6">
                     {/* Template Name */}
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                         Template Name *
                       </label>
                       <input
@@ -446,23 +542,23 @@ const CreateTemplate: React.FC = () => {
                         onChange={(e) => updateFormData('name', e.target.value.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, ''))}
                         placeholder="e.g., order_confirmation"
                         maxLength={512}
-                        className={`w-full px-4 py-2.5 border rounded-xl focus:outline-none focus:ring-2 transition-all ${
+                        className={`w-full px-4 py-2.5 border rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 transition-all ${
                           errors.name
-                            ? 'border-red-300 focus:ring-red-500/20'
-                            : 'border-gray-200 focus:ring-primary-500/20 focus:border-primary-500'
+                            ? 'border-red-300 dark:border-red-600 focus:ring-red-500/20'
+                            : 'border-gray-200 dark:border-gray-600 focus:ring-primary-500/20 focus:border-primary-500'
                         }`}
                       />
                       {errors.name && (
-                        <p className="text-sm text-red-600 mt-1">{errors.name}</p>
+                        <p className="text-sm text-red-600 dark:text-red-400 mt-1">{errors.name}</p>
                       )}
-                      <p className="text-xs text-gray-500 mt-1">
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                         Use lowercase letters, numbers, and underscores only
                       </p>
                     </div>
 
                     {/* Header Type */}
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                         Header Type
                       </label>
                       <div className="grid grid-cols-5 gap-2">
@@ -473,8 +569,8 @@ const CreateTemplate: React.FC = () => {
                             onClick={() => updateFormData('header', { type: type.value })}
                             className={`flex flex-col items-center p-3 rounded-xl border-2 transition-all ${
                               formData.header.type === type.value
-                                ? 'border-primary-500 bg-primary-50 text-primary-600'
-                                : 'border-gray-200 hover:border-gray-300 text-gray-600'
+                                ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20 text-primary-600 dark:text-primary-400'
+                                : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500 text-gray-600 dark:text-gray-400'
                             }`}
                           >
                             <type.icon className="w-5 h-5 mb-1" />
@@ -487,7 +583,7 @@ const CreateTemplate: React.FC = () => {
                     {/* Header Content */}
                     {formData.header.type === 'text' && (
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                           Header Text *
                         </label>
                         <input
@@ -499,42 +595,35 @@ const CreateTemplate: React.FC = () => {
                           })}
                           placeholder="Enter header text"
                           maxLength={60}
-                          className={`w-full px-4 py-2.5 border rounded-xl focus:outline-none focus:ring-2 transition-all ${
+                          className={`w-full px-4 py-2.5 border rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 transition-all ${
                             errors.headerText
-                              ? 'border-red-300 focus:ring-red-500/20'
-                              : 'border-gray-200 focus:ring-primary-500/20 focus:border-primary-500'
+                              ? 'border-red-300 dark:border-red-600 focus:ring-red-500/20'
+                              : 'border-gray-200 dark:border-gray-600 focus:ring-primary-500/20 focus:border-primary-500'
                           }`}
                         />
                         {errors.headerText && (
-                          <p className="text-sm text-red-600 mt-1">{errors.headerText}</p>
+                          <p className="text-sm text-red-600 dark:text-red-400 mt-1">{errors.headerText}</p>
                         )}
-                        <p className="text-xs text-gray-500 mt-1">
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                           {(formData.header.text || '').length}/60 characters
                         </p>
                       </div>
                     )}
 
                     {['image', 'video', 'document'].includes(formData.header.type) && (
-                      <MediaUploader
-                        headerType={formData.header.type as 'image' | 'video' | 'document'}
-                        mediaUrl={formData.header.mediaUrl}
-                        fileName={formData.header.fileName}
-                        onMediaChange={(url, fileName) => updateFormData('header', {
-                          ...formData.header,
-                          mediaUrl: url,
-                          fileName
-                        })}
-                        onRemove={() => updateFormData('header', {
-                          ...formData.header,
-                          mediaUrl: undefined,
-                          fileName: undefined
-                        })}
-                      />
+                      <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4 text-center">
+                        <p className="text-gray-600 dark:text-gray-300 text-sm">
+                          Media will be uploaded when sending the message.
+                        </p>
+                        <p className="text-gray-500 dark:text-gray-400 text-xs mt-1">
+                          You can specify a URL or upload during campaign creation.
+                        </p>
+                      </div>
                     )}
 
                     {/* Body */}
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                         Message Body *
                       </label>
                       <textarea
@@ -543,20 +632,20 @@ const CreateTemplate: React.FC = () => {
                         placeholder="Enter your message here. Use {{1}}, {{2}}, etc. for variables."
                         rows={6}
                         maxLength={1024}
-                        className={`w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-2 transition-all resize-none ${
+                        className={`w-full px-4 py-3 border rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 transition-all resize-none ${
                           errors.body
-                            ? 'border-red-300 focus:ring-red-500/20'
-                            : 'border-gray-200 focus:ring-primary-500/20 focus:border-primary-500'
+                            ? 'border-red-300 dark:border-red-600 focus:ring-red-500/20'
+                            : 'border-gray-200 dark:border-gray-600 focus:ring-primary-500/20 focus:border-primary-500'
                         }`}
                       />
                       {errors.body && (
-                        <p className="text-sm text-red-600 mt-1">{errors.body}</p>
+                        <p className="text-sm text-red-600 dark:text-red-400 mt-1">{errors.body}</p>
                       )}
                       <div className="flex items-center justify-between mt-1">
-                        <p className="text-xs text-gray-500">
+                        <p className="text-xs text-gray-500 dark:text-gray-400">
                           {formData.body.length}/1024 characters
                         </p>
-                        <p className="text-xs text-gray-500">
+                        <p className="text-xs text-gray-500 dark:text-gray-400">
                           Use {'{{1}}'}, {'{{2}}'} for variables
                         </p>
                       </div>
@@ -564,7 +653,7 @@ const CreateTemplate: React.FC = () => {
 
                     {/* Footer */}
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                         Footer (Optional)
                       </label>
                       <input
@@ -573,16 +662,16 @@ const CreateTemplate: React.FC = () => {
                         onChange={(e) => updateFormData('footer', e.target.value)}
                         placeholder="e.g., Reply STOP to unsubscribe"
                         maxLength={60}
-                        className={`w-full px-4 py-2.5 border rounded-xl focus:outline-none focus:ring-2 transition-all ${
+                        className={`w-full px-4 py-2.5 border rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 transition-all ${
                           errors.footer
-                            ? 'border-red-300 focus:ring-red-500/20'
-                            : 'border-gray-200 focus:ring-primary-500/20 focus:border-primary-500'
+                            ? 'border-red-300 dark:border-red-600 focus:ring-red-500/20'
+                            : 'border-gray-200 dark:border-gray-600 focus:ring-primary-500/20 focus:border-primary-500'
                         }`}
                       />
                       {errors.footer && (
-                        <p className="text-sm text-red-600 mt-1">{errors.footer}</p>
+                        <p className="text-sm text-red-600 dark:text-red-400 mt-1">{errors.footer}</p>
                       )}
-                      <p className="text-xs text-gray-500 mt-1">
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                         {formData.footer.length}/60 characters
                       </p>
                     </div>
@@ -590,20 +679,31 @@ const CreateTemplate: React.FC = () => {
                     {/* Variables */}
                     {extractedVariables.length > 0 && (
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                           Sample Variable Values *
                         </label>
-                        <VariableManager
-                          variables={extractedVariables}
-                          sampleValues={sampleVariables}
-                          onSampleChange={(key, value) => 
-                            setSampleVariables(prev => ({ ...prev, [key]: value }))
-                          }
-                        />
+                        <div className="space-y-3">
+                          {extractedVariables.map((variable) => (
+                            <div key={variable} className="flex items-center gap-3">
+                              <span className="w-16 text-sm text-gray-600 dark:text-gray-400">{`{{${variable}}}`}</span>
+                              <input
+                                type="text"
+                                value={sampleVariables[variable] || ''}
+                                onChange={(e) => 
+                                  setSampleVariables(prev => ({ ...prev, [variable]: e.target.value }))
+                                }
+                                placeholder="Example value"
+                                className={`flex-1 px-3 py-1.5 border rounded-lg text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500/20 ${
+                                  errors.variables ? 'border-red-300 dark:border-red-600' : 'border-gray-200 dark:border-gray-600'
+                                }`}
+                              />
+                            </div>
+                          ))}
+                        </div>
                         {errors.variables && (
-                          <p className="text-sm text-red-600 mt-2">{errors.variables}</p>
+                          <p className="text-sm text-red-600 dark:text-red-400 mt-2">{errors.variables}</p>
                         )}
-                        <p className="text-xs text-gray-500 mt-2">
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
                           Sample values help Meta understand your template during review
                         </p>
                       </div>
@@ -616,22 +716,136 @@ const CreateTemplate: React.FC = () => {
                   <div className="space-y-4">
                     <div className="flex items-center justify-between">
                       <div>
-                        <h3 className="font-medium text-gray-900">Call-to-Action Buttons</h3>
-                        <p className="text-sm text-gray-500">Add up to 3 buttons to your template</p>
+                        <h3 className="font-medium text-gray-900 dark:text-white">Call-to-Action Buttons</h3>
+                        <p className="text-sm text-gray-500 dark:text-gray-400">Add up to 3 buttons to your template</p>
                       </div>
+                      {formData.buttons.length < 3 && (
+                        <button
+                          type="button"
+                          onClick={() => updateFormData('buttons', [...formData.buttons, {
+                            id: Date.now().toString(),
+                            type: 'quick_reply',
+                            text: ''
+                          }])}
+                          className="inline-flex items-center text-sm text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300"
+                        >
+                          <Plus className="w-4 h-4 mr-1" />
+                          Add Button
+                        </button>
+                      )}
                     </div>
-                    <ButtonBuilder
-                      buttons={formData.buttons}
-                      onChange={(buttons) => updateFormData('buttons', buttons)}
-                      maxButtons={3}
-                    />
+
+                    {formData.buttons.length === 0 && (
+                      <p className="text-gray-500 dark:text-gray-400 text-sm py-8 text-center">
+                        No buttons added. You can add up to 3 buttons.
+                      </p>
+                    )}
+
+                    {formData.buttons.map((button, index) => (
+                      <div key={button.id} className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <span className="font-medium text-gray-700 dark:text-gray-300">Button {index + 1}</span>
+                          <button
+                            type="button"
+                            onClick={() => updateFormData('buttons', formData.buttons.filter((_, i) => i !== index))}
+                            className="text-red-500 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                              Button Type
+                            </label>
+                            <select
+                              value={button.type}
+                              onChange={(e) => {
+                                const updated = [...formData.buttons];
+                                updated[index] = { ...updated[index], type: e.target.value as any };
+                                updateFormData('buttons', updated);
+                              }}
+                              className="w-full px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500/20"
+                            >
+                              <option value="quick_reply">Quick Reply</option>
+                              <option value="url">URL</option>
+                              <option value="phone">Phone Number</option>
+                            </select>
+                          </div>
+
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                              Button Text *
+                            </label>
+                            <input
+                              type="text"
+                              value={button.text}
+                              onChange={(e) => {
+                                const updated = [...formData.buttons];
+                                updated[index] = { ...updated[index], text: e.target.value };
+                                updateFormData('buttons', updated);
+                              }}
+                              placeholder="Button text"
+                              maxLength={25}
+                              className={`w-full px-3 py-2 border rounded-lg text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500/20 ${
+                                errors[`button_${index}_text`] ? 'border-red-300 dark:border-red-600' : 'border-gray-200 dark:border-gray-600'
+                              }`}
+                            />
+                          </div>
+                        </div>
+
+                        {button.type === 'url' && (
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                              URL *
+                            </label>
+                            <input
+                              type="url"
+                              value={button.url || ''}
+                              onChange={(e) => {
+                                const updated = [...formData.buttons];
+                                updated[index] = { ...updated[index], url: e.target.value };
+                                updateFormData('buttons', updated);
+                              }}
+                              placeholder="https://example.com"
+                              className={`w-full px-3 py-2 border rounded-lg text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500/20 ${
+                                errors[`button_${index}_url`] ? 'border-red-300 dark:border-red-600' : 'border-gray-200 dark:border-gray-600'
+                              }`}
+                            />
+                          </div>
+                        )}
+
+                        {button.type === 'phone' && (
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                              Phone Number *
+                            </label>
+                            <input
+                              type="tel"
+                              value={button.phoneNumber || ''}
+                              onChange={(e) => {
+                                const updated = [...formData.buttons];
+                                updated[index] = { ...updated[index], phoneNumber: e.target.value };
+                                updateFormData('buttons', updated);
+                              }}
+                              placeholder="+1234567890"
+                              className={`w-full px-3 py-2 border rounded-lg text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500/20 ${
+                                errors[`button_${index}_phone`] ? 'border-red-300 dark:border-red-600' : 'border-gray-200 dark:border-gray-600'
+                              }`}
+                            />
+                          </div>
+                        )}
+                      </div>
+                    ))}
+
                     {Object.keys(errors).filter(k => k.startsWith('button_')).length > 0 && (
-                      <div className="bg-red-50 border border-red-200 rounded-lg p-3">
-                        <p className="text-sm text-red-600 font-medium">Button Errors:</p>
+                      <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3">
+                        <p className="text-sm text-red-600 dark:text-red-400 font-medium">Button Errors:</p>
                         {Object.entries(errors)
                           .filter(([k]) => k.startsWith('button_'))
                           .map(([key, msg]) => (
-                            <p key={key} className="text-sm text-red-600">• {msg}</p>
+                            <p key={key} className="text-sm text-red-600 dark:text-red-400">• {msg}</p>
                           ))}
                       </div>
                     )}
@@ -643,7 +857,7 @@ const CreateTemplate: React.FC = () => {
                   <div className="space-y-6">
                     {/* Category */}
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                         Category *
                       </label>
                       <div className="space-y-2">
@@ -652,8 +866,8 @@ const CreateTemplate: React.FC = () => {
                             key={category.value}
                             className={`flex items-start space-x-3 p-4 rounded-xl border-2 cursor-pointer transition-all ${
                               formData.category === category.value
-                                ? 'border-primary-500 bg-primary-50'
-                                : 'border-gray-200 hover:border-gray-300'
+                                ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20'
+                                : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500'
                             }`}
                           >
                             <input
@@ -665,8 +879,8 @@ const CreateTemplate: React.FC = () => {
                               className="mt-1"
                             />
                             <div>
-                              <p className="font-medium text-gray-900">{category.label}</p>
-                              <p className="text-sm text-gray-500">{category.description}</p>
+                              <p className="font-medium text-gray-900 dark:text-white">{category.label}</p>
+                              <p className="text-sm text-gray-500 dark:text-gray-400">{category.description}</p>
                             </div>
                           </label>
                         ))}
@@ -675,13 +889,13 @@ const CreateTemplate: React.FC = () => {
 
                     {/* Language */}
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                         Language *
                       </label>
                       <select
                         value={formData.language}
                         onChange={(e) => updateFormData('language', e.target.value)}
-                        className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 bg-white"
+                        className="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                       >
                         {languages.map((lang) => (
                           <option key={lang.value} value={lang.value}>
@@ -692,16 +906,16 @@ const CreateTemplate: React.FC = () => {
                     </div>
 
                     {/* Info Box */}
-                    <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+                    <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl p-4">
                       <div className="flex items-start space-x-3">
-                        <Info className="w-5 h-5 text-blue-600 mt-0.5 shrink-0" />
-                        <div className="text-sm text-blue-800">
+                        <Info className="w-5 h-5 text-blue-600 dark:text-blue-400 mt-0.5 shrink-0" />
+                        <div className="text-sm text-blue-800 dark:text-blue-200">
                           <p className="font-medium mb-1">Review Process</p>
                           <p>
                             After submission, your template will be reviewed by Meta. 
                             This usually takes 24-48 hours. You'll be notified once approved.
                           </p>
-                          <ul className="mt-2 space-y-1 text-blue-700">
+                          <ul className="mt-2 space-y-1 text-blue-700 dark:text-blue-300">
                             <li>• Marketing templates need clear opt-out option</li>
                             <li>• Utility templates are for transactional messages</li>
                             <li>• Authentication templates are for OTPs only</li>
@@ -716,36 +930,34 @@ const CreateTemplate: React.FC = () => {
           </div>
 
           {/* Right: Live Preview */}
-          <div className="hidden lg:block">
-            <div className="sticky top-36">
-              <div className="bg-gray-900 rounded-2xl p-6">
-                <h3 className="text-white font-medium mb-4 text-center">📱 Live Preview</h3>
-                <TemplatePreview
-                  template={formData}
-                  sampleVariables={sampleVariables}
-                />
-              </div>
-              
-              {/* Quick Stats */}
-              <div className="mt-4 bg-white rounded-xl border border-gray-200 p-4">
-                <h4 className="font-medium text-gray-900 mb-3">Template Stats</h4>
-                <div className="grid grid-cols-2 gap-3 text-sm">
-                  <div className="bg-gray-50 rounded-lg p-2">
-                    <p className="text-gray-500">Body Length</p>
-                    <p className="font-semibold">{formData.body.length}/1024</p>
-                  </div>
-                  <div className="bg-gray-50 rounded-lg p-2">
-                    <p className="text-gray-500">Variables</p>
-                    <p className="font-semibold">{extractedVariables.length}</p>
-                  </div>
-                  <div className="bg-gray-50 rounded-lg p-2">
-                    <p className="text-gray-500">Buttons</p>
-                    <p className="font-semibold">{formData.buttons.length}/3</p>
-                  </div>
-                  <div className="bg-gray-50 rounded-lg p-2">
-                    <p className="text-gray-500">Category</p>
-                    <p className="font-semibold capitalize">{formData.category}</p>
-                  </div>
+          <div className="lg:sticky lg:top-36 h-fit">
+            <div className="bg-gray-900 dark:bg-gray-950 rounded-2xl p-6">
+              <h3 className="text-white font-medium mb-4 text-center">📱 Live Preview</h3>
+              <TemplatePreview
+                template={formData}
+                sampleVariables={sampleVariables}
+              />
+            </div>
+            
+            {/* Quick Stats */}
+            <div className="mt-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4">
+              <h4 className="font-medium text-gray-900 dark:text-white mb-3">Template Stats</h4>
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-2">
+                  <p className="text-gray-500 dark:text-gray-400">Body Length</p>
+                  <p className="font-semibold text-gray-900 dark:text-white">{formData.body.length}/1024</p>
+                </div>
+                <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-2">
+                  <p className="text-gray-500 dark:text-gray-400">Variables</p>
+                  <p className="font-semibold text-gray-900 dark:text-white">{extractedVariables.length}</p>
+                </div>
+                <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-2">
+                  <p className="text-gray-500 dark:text-gray-400">Buttons</p>
+                  <p className="font-semibold text-gray-900 dark:text-white">{formData.buttons.length}/3</p>
+                </div>
+                <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-2">
+                  <p className="text-gray-500 dark:text-gray-400">Category</p>
+                  <p className="font-semibold capitalize text-gray-900 dark:text-white">{formData.category}</p>
                 </div>
               </div>
             </div>

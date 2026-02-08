@@ -1,3 +1,5 @@
+// src/pages/CreateCampaign.tsx
+
 import React, { useState, useMemo, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
@@ -12,6 +14,7 @@ import {
   Loader2,
   Eye,
   AlertCircle,
+  Wifi,
 } from "lucide-react";
 
 import TemplateSelector from "../components/campaigns/TemplateSelector";
@@ -20,13 +23,14 @@ import VariableMapper from "../components/campaigns/VariableMapper";
 import SchedulePicker from "../components/campaigns/SchedulePicker";
 import TemplatePreview from "../components/templates/TemplatePreview";
 import CsvAudienceUploader from "../components/campaigns/CsvAudienceUploader";
+import NoWhatsAppConnected from "../components/common/NoWhatsAppConnected";
 
+import { useWhatsAppConnection } from "../hooks/useWhatsAppConnection";
 import type { CampaignFormData } from "../types/campaign";
 import {
   templates as templateApi,
   contacts as contactApi,
   campaigns as campaignApi,
-  whatsapp as whatsappApi,
 } from "../services/api";
 
 // ============================================
@@ -48,14 +52,6 @@ interface MappedContact {
   name: string;
   phone: string;
   tags: string[];
-}
-
-interface WhatsAppAccount {
-  id: string;
-  phoneNumber?: string;
-  displayName?: string;
-  status?: string;
-  isDefault?: boolean;
 }
 
 // ============================================
@@ -101,6 +97,10 @@ const mapHeaderForPreview = (headerType: string) => {
 // ============================================
 const CreateCampaign: React.FC = () => {
   const navigate = useNavigate();
+  
+  // ✅ WhatsApp Connection Hook
+  const { isConnected, isLoading: connectionLoading, defaultAccount } = useWhatsAppConnection();
+  
   const [currentStep, setCurrentStep] = useState(1);
   const [sending, setSending] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
@@ -111,10 +111,6 @@ const CreateCampaign: React.FC = () => {
   const [availableTags, setAvailableTags] = useState<string[]>([]);
   const [loadingData, setLoadingData] = useState(true);
   const [apiError, setApiError] = useState<string | null>(null);
-
-  // ✅ WhatsApp accounts
-  const [waAccounts, setWaAccounts] = useState<WhatsAppAccount[]>([]);
-  const [selectedWaAccountId, setSelectedWaAccountId] = useState<string>("");
 
   // Form State
   const [formData, setFormData] = useState<CampaignFormData>({
@@ -131,21 +127,22 @@ const CreateCampaign: React.FC = () => {
   });
 
   // ==========================================
-  // FETCH DATA ON MOUNT
+  // FETCH DATA ON MOUNT (only if connected)
   // ==========================================
   useEffect(() => {
     const fetchData = async () => {
+      if (!isConnected) return;
+      
       setLoadingData(true);
       setApiError(null);
 
       try {
-        const [templatesRes, contactsRes, waRes] = await Promise.all([
+        const [templatesRes, contactsRes] = await Promise.all([
           templateApi.getAll(),
           contactApi.getAll(),
-          whatsappApi.accounts(), // ✅ IMPORTANT
         ]);
 
-        // ✅ Templates
+        // Templates
         const templatesArray = parseApiResponse<any>(templatesRes.data, ["templates", "data", "items"]);
         const mappedTemplates: MappedTemplate[] = templatesArray.map((t: any) => ({
           id: t._id || t.id,
@@ -159,7 +156,7 @@ const CreateCampaign: React.FC = () => {
         }));
         setTemplates(mappedTemplates);
 
-        // ✅ Contacts
+        // Contacts
         const contactsArray = parseApiResponse<any>(contactsRes.data, ["contacts", "data", "items"]);
         const mappedContacts: MappedContact[] = contactsArray.map((c: any) => ({
           id: c._id || c.id,
@@ -169,37 +166,25 @@ const CreateCampaign: React.FC = () => {
         }));
         setContacts(mappedContacts);
 
-        // ✅ Tags
+        // Tags
         const tagsSet = new Set<string>();
         mappedContacts.forEach((c) => c.tags.forEach((tag: string) => tagsSet.add(tag)));
         setAvailableTags(Array.from(tagsSet));
 
-        // ✅ WhatsApp Accounts
-        const waArray = parseApiResponse<any>(waRes.data, ["accounts", "data", "items"]);
-        const mappedWa: WhatsAppAccount[] = (Array.isArray(waArray) ? waArray : []).map((a: any) => ({
-          id: a.id,
-          phoneNumber: a.phoneNumber,
-          displayName: a.displayName,
-          status: a.status,
-          isDefault: !!a.isDefault,
-        }));
-
-        setWaAccounts(mappedWa);
-
-        const def = mappedWa.find((a) => a.isDefault) || mappedWa[0];
-        if (def?.id) setSelectedWaAccountId(def.id);
       } catch (err: any) {
         console.error("❌ Failed to load data:", err);
         const errorMessage =
-          err.response?.data?.message || err.message || "Failed to load templates/contacts/accounts. Please refresh.";
+          err.response?.data?.message || err.message || "Failed to load templates/contacts. Please refresh.";
         setApiError(errorMessage);
       } finally {
         setLoadingData(false);
       }
     };
 
-    fetchData();
-  }, []);
+    if (isConnected) {
+      fetchData();
+    }
+  }, [isConnected]);
 
   // ==========================================
   // CSV IMPORT HANDLER
@@ -274,8 +259,7 @@ const CreateCampaign: React.FC = () => {
   const validateStep = (step: number): boolean => {
     switch (step) {
       case 1:
-        // ✅ require wa account
-        return !!formData.name.trim() && !!formData.templateId && !!selectedWaAccountId;
+        return !!formData.name.trim() && !!formData.templateId;
       case 2:
         return totalRecipients > 0;
       case 3:
@@ -303,15 +287,15 @@ const CreateCampaign: React.FC = () => {
   };
 
   // ==========================================
-  // SUBMIT CAMPAIGN (UPDATED)
+  // SUBMIT CAMPAIGN
   // ==========================================
   const handleSend = async () => {
     setSending(true);
     setApiError(null);
 
     try {
-      if (!selectedWaAccountId) {
-        throw new Error("Please connect/select a WhatsApp account first.");
+      if (!defaultAccount) {
+        throw new Error("No WhatsApp account available.");
       }
 
       let audienceContactIds: string[] = [];
@@ -331,38 +315,28 @@ const CreateCampaign: React.FC = () => {
         throw new Error("No recipients selected. Please check your audience filters.");
       }
 
-      // ✅ Prepare scheduledAt date in ISO format if applicable
+      // Prepare scheduledAt date
       const scheduledAt =
         formData.scheduleType === "later"
           ? new Date(`${formData.scheduledDate}T${formData.scheduledTime}:00`).toISOString()
           : undefined;
 
-      // ✅ Construct the payload matching the backend expectations
-      // Backend expects: contactIds at root level, simple structure
       const payload: any = {
-        whatsappAccountId: selectedWaAccountId,
+        whatsappAccountId: defaultAccount.id,
         name: formData.name.trim(),
         description: formData.description?.trim() || undefined,
         templateId: formData.templateId,
-
-        // ✅ IMPORTANT: contactIds at root
         contactIds: audienceContactIds,
-
-        // Optional: Send filter metadata for future reference
         audienceFilter:
           formData.audienceType === "tags"
             ? { tags: formData.selectedTags }
             : formData.audienceType === "all"
             ? { all: true }
             : undefined,
-
-        // ✅ variable mapping
         variableMapping:
           Object.keys(formData.variableMapping).length > 0
             ? formData.variableMapping
             : undefined,
-
-        // ✅ scheduledAt (ISO string)
         scheduledAt,
       };
 
@@ -386,44 +360,99 @@ const CreateCampaign: React.FC = () => {
   };
 
   // ==========================================
-  // LOADING STATE
+  // LOADING STATES
   // ==========================================
-  if (loadingData) {
+  
+  // Check WhatsApp connection loading
+  if (connectionLoading) {
     return (
-      <div className="flex items-center justify-center h-screen bg-gray-50">
+      <div className="min-h-[60vh] flex items-center justify-center">
         <div className="text-center">
-          <Loader2 className="w-10 h-10 text-primary-500 animate-spin mx-auto mb-4" />
-          <p className="text-gray-500">Loading templates and contacts...</p>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto mb-4"></div>
+          <p className="text-gray-600 dark:text-gray-400">Checking WhatsApp connection...</p>
         </div>
       </div>
     );
   }
 
-  const hasConnectedWa = waAccounts.length > 0;
+  // No WhatsApp connected
+  if (!isConnected) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center gap-4">
+          <Link 
+            to="/dashboard/campaigns" 
+            className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
+          >
+            <ArrowLeft className="w-5 h-5" />
+          </Link>
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Create Campaign</h1>
+            <p className="text-gray-500 dark:text-gray-400 mt-1">
+              Send bulk messages to your contacts
+            </p>
+          </div>
+        </div>
+
+        <NoWhatsAppConnected
+          title="WhatsApp Account Required"
+          description="You need to connect a WhatsApp Business account before creating campaigns. Campaigns use approved message templates to send bulk messages to your contacts."
+          variant="full-page"
+          actionLabel="Connect WhatsApp Account"
+        />
+      </div>
+    );
+  }
+
+  // Loading templates/contacts
+  if (loadingData) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-gray-50 dark:bg-gray-900">
+        <div className="text-center">
+          <Loader2 className="w-10 h-10 text-primary-500 animate-spin mx-auto mb-4" />
+          <p className="text-gray-500 dark:text-gray-400">Loading templates and contacts...</p>
+        </div>
+      </div>
+    );
+  }
 
   // ==========================================
-  // RENDER
+  // MAIN RENDER
   // ==========================================
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       {/* Header */}
-      <div className="bg-white border-b border-gray-200 sticky top-16 z-20">
+      <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 sticky top-16 z-20">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center space-x-4">
-              <Link to="/dashboard/campaigns" className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
-                <ArrowLeft className="w-5 h-5 text-gray-600" />
+              <Link 
+                to="/dashboard/campaigns" 
+                className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+              >
+                <ArrowLeft className="w-5 h-5 text-gray-600 dark:text-gray-400" />
               </Link>
               <div>
-                <h1 className="text-xl font-bold text-gray-900">Create Campaign</h1>
-                <p className="text-sm text-gray-500">Step {currentStep} of 4</p>
+                <h1 className="text-xl font-bold text-gray-900 dark:text-white">Create Campaign</h1>
+                <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
+                  <span>Step {currentStep} of 4</span>
+                  {defaultAccount && (
+                    <>
+                      <span>•</span>
+                      <span className="flex items-center text-green-600 dark:text-green-400">
+                        <Wifi className="w-3 h-3 mr-1" />
+                        {defaultAccount.displayName || defaultAccount.phoneNumber}
+                      </span>
+                    </>
+                  )}
+                </div>
               </div>
             </div>
 
             {selectedTemplate && (
               <button
                 onClick={() => setShowPreview(true)}
-                className="flex items-center space-x-2 px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-xl transition-colors"
+                className="flex items-center space-x-2 px-4 py-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-xl transition-colors"
               >
                 <Eye className="w-5 h-5" />
                 <span>Preview</span>
@@ -436,13 +465,16 @@ const CreateCampaign: React.FC = () => {
       <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         {/* Error Banner */}
         {apiError && (
-          <div className="mb-6 bg-red-50 border border-red-200 rounded-xl p-4 flex items-start space-x-3">
-            <AlertCircle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
-            <div>
-              <p className="text-red-700 font-medium">Error</p>
-              <p className="text-red-600 text-sm">{apiError}</p>
+          <div className="mb-6 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-4 flex items-start space-x-3">
+            <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="text-red-700 dark:text-red-300 font-medium">Error</p>
+              <p className="text-red-600 dark:text-red-400 text-sm">{apiError}</p>
             </div>
-            <button onClick={() => setApiError(null)} className="ml-auto text-red-400 hover:text-red-600">
+            <button 
+              onClick={() => setApiError(null)} 
+              className="text-red-400 hover:text-red-600 dark:hover:text-red-300 text-xl"
+            >
               ×
             </button>
           </div>
@@ -459,22 +491,24 @@ const CreateCampaign: React.FC = () => {
                       step.number < currentStep
                         ? "bg-primary-500 text-white"
                         : step.number === currentStep
-                        ? "bg-primary-500 text-white ring-4 ring-primary-100"
-                        : "bg-gray-200 text-gray-500"
+                        ? "bg-primary-500 text-white ring-4 ring-primary-100 dark:ring-primary-900"
+                        : "bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400"
                     }`}
                   >
                     {step.number < currentStep ? <Check className="w-5 h-5" /> : <step.icon className="w-5 h-5" />}
                   </div>
                   <span
                     className={`ml-3 font-medium hidden sm:inline ${
-                      step.number <= currentStep ? "text-gray-900" : "text-gray-500"
+                      step.number <= currentStep ? "text-gray-900 dark:text-white" : "text-gray-500 dark:text-gray-400"
                     }`}
                   >
                     {step.title}
                   </span>
                 </div>
                 {index < steps.length - 1 && (
-                  <div className={`flex-1 h-1 mx-4 rounded ${step.number < currentStep ? "bg-primary-500" : "bg-gray-200"}`} />
+                  <div className={`flex-1 h-1 mx-4 rounded ${
+                    step.number < currentStep ? "bg-primary-500" : "bg-gray-200 dark:bg-gray-700"
+                  }`} />
                 )}
               </React.Fragment>
             ))}
@@ -482,74 +516,71 @@ const CreateCampaign: React.FC = () => {
         </div>
 
         {/* Step Content */}
-        <div className="bg-white rounded-2xl border border-gray-200 p-6">
-          {/* Step 1 */}
+        <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-6">
+          {/* Step 1: Template Selection */}
           {currentStep === 1 && (
             <div className="space-y-6 animate-fade-in">
               <div>
-                <h2 className="text-lg font-semibold text-gray-900 mb-1">Campaign Details</h2>
-                <p className="text-gray-500">Name your campaign, select WhatsApp account & template</p>
+                <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">
+                  Campaign Details
+                </h2>
+                <p className="text-gray-500 dark:text-gray-400">
+                  Name your campaign and select a template
+                </p>
               </div>
 
-              {/* ✅ WhatsApp Account Selector */}
-              <div className="p-4 rounded-xl border border-gray-200 bg-gray-50">
-                <label className="block text-sm font-medium text-gray-700 mb-2">WhatsApp Account *</label>
-
-                {hasConnectedWa ? (
-                  <select
-                    value={selectedWaAccountId}
-                    onChange={(e) => setSelectedWaAccountId(e.target.value)}
-                    className="w-full px-4 py-2.5 border border-gray-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500"
-                  >
-                    {waAccounts.map((a) => (
-                      <option key={a.id} value={a.id}>
-                        {(a.displayName || "WhatsApp")} {a.phoneNumber ? `(${a.phoneNumber})` : ""}{" "}
-                        {a.isDefault ? "• Default" : ""}
-                      </option>
-                    ))}
-                  </select>
-                ) : (
-                  <div className="bg-white rounded-xl border border-dashed border-gray-300 p-4">
-                    <p className="text-sm text-gray-700 font-medium">No WhatsApp account connected</p>
-                    <p className="text-sm text-gray-500 mt-1">
-                      Please connect WhatsApp (Embedded Signup) before creating a campaign.
-                    </p>
-                    <Link
-                      to="/dashboard"
-                      className="inline-block mt-3 text-primary-600 hover:underline font-medium text-sm"
-                    >
-                      Go to Dashboard → Connect WhatsApp
-                    </Link>
+              {/* WhatsApp Account Info */}
+              <div className="p-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  WhatsApp Account
+                </label>
+                <div className="flex items-center space-x-3">
+                  <div className="w-10 h-10 bg-green-100 dark:bg-green-900 rounded-full flex items-center justify-center">
+                    <Wifi className="w-5 h-5 text-green-600 dark:text-green-400" />
                   </div>
-                )}
+                  <div>
+                    <p className="font-medium text-gray-900 dark:text-white">
+                      {defaultAccount?.displayName || "WhatsApp Business"}
+                    </p>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                      {defaultAccount?.phoneNumber || "Connected"}
+                    </p>
+                  </div>
+                </div>
               </div>
 
               <div className="grid gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Campaign Name *</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Campaign Name *
+                  </label>
                   <input
                     type="text"
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                     placeholder="e.g., Diwali Sale 2024"
-                    className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500"
+                    className="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Description (Optional)</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Description (Optional)
+                  </label>
                   <textarea
                     value={formData.description}
                     onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                     placeholder="Brief description of this campaign..."
                     rows={2}
-                    className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 resize-none"
+                    className="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 resize-none"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Select Template *</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Select Template *
+                </label>
                 {templates.length > 0 ? (
                   <TemplateSelector
                     templates={templates}
@@ -558,10 +589,13 @@ const CreateCampaign: React.FC = () => {
                     onPreview={(template) => console.log("Preview:", template)}
                   />
                 ) : (
-                  <div className="text-center py-8 bg-gray-50 rounded-xl border border-dashed border-gray-300">
+                  <div className="text-center py-8 bg-gray-50 dark:bg-gray-900 rounded-xl border border-dashed border-gray-300 dark:border-gray-600">
                     <FileText className="w-10 h-10 text-gray-400 mx-auto mb-2" />
-                    <p className="text-gray-500">No templates found.</p>
-                    <Link to="/dashboard/templates/new" className="text-primary-600 hover:underline mt-2 inline-block font-medium">
+                    <p className="text-gray-500 dark:text-gray-400">No templates found.</p>
+                    <Link 
+                      to="/dashboard/templates/new" 
+                      className="text-primary-600 hover:underline mt-2 inline-block font-medium"
+                    >
                       Create Template →
                     </Link>
                   </div>
@@ -570,12 +604,16 @@ const CreateCampaign: React.FC = () => {
             </div>
           )}
 
-          {/* Step 2 */}
+          {/* Step 2: Audience Selection */}
           {currentStep === 2 && (
             <div className="space-y-6 animate-fade-in">
               <div>
-                <h2 className="text-lg font-semibold text-gray-900 mb-1">Select Audience</h2>
-                <p className="text-gray-500">Choose who should receive this campaign</p>
+                <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">
+                  Select Audience
+                </h2>
+                <p className="text-gray-500 dark:text-gray-400">
+                  Choose who should receive this campaign
+                </p>
               </div>
 
               {contacts.length > 0 ? (
@@ -591,9 +629,11 @@ const CreateCampaign: React.FC = () => {
                   totalSelected={totalRecipients}
                 />
               ) : (
-                <div className="text-center py-6 bg-gray-50 rounded-xl border border-dashed border-gray-300">
+                <div className="text-center py-6 bg-gray-50 dark:bg-gray-900 rounded-xl border border-dashed border-gray-300 dark:border-gray-600">
                   <Users className="w-10 h-10 text-gray-400 mx-auto mb-2" />
-                  <p className="text-gray-500">No contacts found yet. Upload CSV to import.</p>
+                  <p className="text-gray-500 dark:text-gray-400">
+                    No contacts found yet. Upload CSV to import.
+                  </p>
                 </div>
               )}
 
@@ -601,12 +641,16 @@ const CreateCampaign: React.FC = () => {
             </div>
           )}
 
-          {/* Step 3 */}
+          {/* Step 3: Variable Mapping */}
           {currentStep === 3 && (
             <div className="space-y-6 animate-fade-in">
               <div>
-                <h2 className="text-lg font-semibold text-gray-900 mb-1">Map Variables</h2>
-                <p className="text-gray-500">Connect template variables to contact fields</p>
+                <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">
+                  Map Variables
+                </h2>
+                <p className="text-gray-500 dark:text-gray-400">
+                  Connect template variables to contact fields
+                </p>
               </div>
 
               {selectedTemplate?.variables && selectedTemplate.variables.length > 0 ? (
@@ -616,21 +660,29 @@ const CreateCampaign: React.FC = () => {
                   onMappingChange={(mapping) => setFormData({ ...formData, variableMapping: mapping })}
                 />
               ) : (
-                <div className="text-center py-8 bg-green-50 rounded-xl border border-green-200">
-                  <Check className="w-10 h-10 text-green-500 mx-auto mb-2" />
-                  <p className="text-green-700 font-medium">No Variables Required</p>
-                  <p className="text-green-600 text-sm">This template has no variables to map.</p>
+                <div className="text-center py-8 bg-green-50 dark:bg-green-900/20 rounded-xl border border-green-200 dark:border-green-800">
+                  <Check className="w-10 h-10 text-green-500 dark:text-green-400 mx-auto mb-2" />
+                  <p className="text-green-700 dark:text-green-300 font-medium">
+                    No Variables Required
+                  </p>
+                  <p className="text-green-600 dark:text-green-400 text-sm">
+                    This template has no variables to map.
+                  </p>
                 </div>
               )}
             </div>
           )}
 
-          {/* Step 4 */}
+          {/* Step 4: Schedule */}
           {currentStep === 4 && (
             <div className="space-y-6 animate-fade-in">
               <div>
-                <h2 className="text-lg font-semibold text-gray-900 mb-1">Schedule Campaign</h2>
-                <p className="text-gray-500">Choose when to send your campaign</p>
+                <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">
+                  Schedule Campaign
+                </h2>
+                <p className="text-gray-500 dark:text-gray-400">
+                  Choose when to send your campaign
+                </p>
               </div>
 
               <SchedulePicker
@@ -650,7 +702,7 @@ const CreateCampaign: React.FC = () => {
           <button
             onClick={handleBack}
             disabled={currentStep === 1}
-            className="flex items-center space-x-2 px-5 py-2.5 text-gray-700 font-medium rounded-xl hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="flex items-center space-x-2 px-5 py-2.5 text-gray-700 dark:text-gray-300 font-medium rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             <ArrowLeft className="w-5 h-5" />
             <span>Back</span>
@@ -674,7 +726,7 @@ const CreateCampaign: React.FC = () => {
               {sending ? (
                 <>
                   <Loader2 className="w-5 h-5 animate-spin" />
-                  <span>Sending...</span>
+                  <span>Creating Campaign...</span>
                 </>
               ) : (
                 <>

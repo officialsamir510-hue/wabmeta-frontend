@@ -1,3 +1,5 @@
+// src/App.tsx
+
 import React, { Suspense, type JSX } from "react";
 import {
   BrowserRouter as Router,
@@ -12,10 +14,10 @@ import LoadingScreen from "./components/common/LoadingScreen";
 import { usePlanAccess } from "./hooks/usePlanAccess";
 import MetaCallback from "./pages/MetaCallback";
 import { ThemeProvider } from "./context/ThemeContext";
+import { SocketProvider } from "./context/SocketContext";
 import Privacy from './pages/Privacy';
 import Terms from './pages/Terms';
 import DataDeletion from './pages/DataDeletion';
-
 
 // Lazy Load Pages
 const Landing = React.lazy(() => import("./pages/Landing"));
@@ -117,149 +119,152 @@ function App() {
     <ThemeProvider>
       <ErrorBoundary>
         <Router>
-          <Routes>
-            {/* ===== Public Routes ===== */}
-            <Route path="/" element={<RouteSuspense><Landing /></RouteSuspense>} />
+          {/* Socket Provider wraps authenticated routes */}
+          <SocketProvider>
+            <Routes>
+              {/* ===== Public Routes ===== */}
+              <Route path="/" element={<RouteSuspense><Landing /></RouteSuspense>} />
 
-            {/* Meta Callback (not lazy) */}
-            <Route path="/meta/callback" element={<MetaCallback />} />
+              {/* Meta Callback (not lazy) */}
+              <Route path="/meta/callback" element={<MetaCallback />} />
 
-            {/* ✅ Legal Pages - TOP LEVEL (Not nested inside dashboard) */}
-            <Route path="/privacy" element={<Privacy />} />
-            <Route path="/terms" element={<Terms />} />
-            <Route path="/data-deletion" element={<DataDeletion />} />
+              {/* ✅ Legal Pages - TOP LEVEL (Not nested inside dashboard) */}
+              <Route path="/privacy" element={<Privacy />} />
+              <Route path="/terms" element={<Terms />} />
+              <Route path="/data-deletion" element={<DataDeletion />} />
 
-            {/* ===== Auth Routes ===== */}
-            <Route path="/login" element={<RouteSuspense><Login /></RouteSuspense>} />
-            <Route path="/signup" element={<RouteSuspense><Signup /></RouteSuspense>} />
-            <Route
-              path="/forgot-password"
-              element={<RouteSuspense><ForgotPassword /></RouteSuspense>}
-            />
-            <Route
-              path="/reset-password"
-              element={<RouteSuspense><ResetPassword /></RouteSuspense>}
-            />
-            <Route path="/verify-otp" element={<RouteSuspense><VerifyOTP /></RouteSuspense>} />
-            <Route
-              path="/verify-email"
-              element={<RouteSuspense><VerifyEmail /></RouteSuspense>}
-            />
-
-            {/* ===== Dashboard Routes ===== */}
-            <Route
-              path="/dashboard"
-              element={
-                <RouteSuspense>
-                  <DashboardLayout />
-                </RouteSuspense>
-              }
-            >
-              <Route index element={<Dashboard />} />
-
-              {/* Notifications */}
-              <Route path="notifications" element={<Notifications />} />
-
-              {/* Inbox */}
-              <Route path="inbox" element={<Inbox />} />
-
-              {/* Contacts */}
-              <Route path="contacts" element={<Contacts />} />
-              <Route path="contacts/:id" element={<ContactDetails />} />
-              <Route path="contacts/import" element={<ImportContacts />} />
-
-              {/* Templates */}
-              <Route path="templates" element={<Templates />} />
-              <Route path="templates/new" element={<CreateTemplate />} />
-              <Route path="templates/edit/:id" element={<CreateTemplate />} />
-
-              {/* Campaigns */}
-              <Route path="campaigns" element={<Campaigns />} />
-              <Route path="campaigns/new" element={<CreateCampaign />} />
-              <Route path="campaigns/:id" element={<CampaignDetails />} />
-
-              {/* Protected Features */}
+              {/* ===== Auth Routes ===== */}
+              <Route path="/login" element={<RouteSuspense><Login /></RouteSuspense>} />
+              <Route path="/signup" element={<RouteSuspense><Signup /></RouteSuspense>} />
               <Route
-                path="chatbot"
-                element={
-                  <PlanRoute feature="chatbot">
-                    <ChatbotList />
-                  </PlanRoute>
-                }
+                path="/forgot-password"
+                element={<RouteSuspense><ForgotPassword /></RouteSuspense>}
               />
               <Route
-                path="chatbot/new"
-                element={
-                  <PlanRoute feature="chatbot">
-                    <ChatbotBuilder />
-                  </PlanRoute>
-                }
+                path="/reset-password"
+                element={<RouteSuspense><ResetPassword /></RouteSuspense>}
               />
+              <Route path="/verify-otp" element={<RouteSuspense><VerifyOTP /></RouteSuspense>} />
               <Route
-                path="chatbot/edit/:id"
-                element={
-                  <PlanRoute feature="chatbot">
-                    <ChatbotBuilder />
-                  </PlanRoute>
-                }
+                path="/verify-email"
+                element={<RouteSuspense><VerifyEmail /></RouteSuspense>}
               />
 
+              {/* ===== Dashboard Routes ===== */}
               <Route
-                path="automation"
-                element={
-                  <PlanRoute feature="automation">
-                    <Automation />
-                  </PlanRoute>
-                }
-              />
-
-              <Route
-                path="reports"
-                element={
-                  <PlanRoute feature="analytics">
-                    <Reports />
-                  </PlanRoute>
-                }
-              />
-
-              {/* Management */}
-              <Route path="settings" element={<Settings />} />
-              <Route path="billing" element={<Billing />} />
-              <Route path="profile" element={<Profile />} />
-              <Route path="help" element={<Help />} />
-
-              {/* Placeholder */}
-              <Route path="activity" element={<NotFound />} />
-            </Route>
-
-            {/* ===== Admin Routes ===== */}
-            <Route path="/admin/login" element={<RouteSuspense><AdminLogin /></RouteSuspense>} />
-
-            <Route
-              path="/admin"
-              element={
-                <RouteSuspense>
-                  <AdminProtectedRoute />
-                </RouteSuspense>
-              }
-            >
-              <Route
+                path="/dashboard"
                 element={
                   <RouteSuspense>
-                    <AdminLayout />
+                    <DashboardLayout />
                   </RouteSuspense>
                 }
               >
-                <Route index element={<Navigate to="/admin/dashboard" replace />} />
-                <Route path="dashboard" element={<AdminDashboard />} />
-                <Route path="users" element={<UserManagement />} />
-                <Route path="settings" element={<SystemSettings />} />
-              </Route>
-            </Route>
+                <Route index element={<Dashboard />} />
 
-            {/* ===== 404 Route ===== */}
-            <Route path="*" element={<RouteSuspense><NotFound /></RouteSuspense>} />
-          </Routes>
+                {/* Notifications */}
+                <Route path="notifications" element={<Notifications />} />
+
+                {/* Inbox */}
+                <Route path="inbox" element={<Inbox />} />
+
+                {/* Contacts */}
+                <Route path="contacts" element={<Contacts />} />
+                <Route path="contacts/:id" element={<ContactDetails />} />
+                <Route path="contacts/import" element={<ImportContacts />} />
+
+                {/* Templates */}
+                <Route path="templates" element={<Templates />} />
+                <Route path="templates/new" element={<CreateTemplate />} />
+                <Route path="templates/edit/:id" element={<CreateTemplate />} />
+
+                {/* Campaigns */}
+                <Route path="campaigns" element={<Campaigns />} />
+                <Route path="campaigns/new" element={<CreateCampaign />} />
+                <Route path="campaigns/:id" element={<CampaignDetails />} />
+
+                {/* Protected Features */}
+                <Route
+                  path="chatbot"
+                  element={
+                    <PlanRoute feature="chatbot">
+                      <ChatbotList />
+                    </PlanRoute>
+                  }
+                />
+                <Route
+                  path="chatbot/new"
+                  element={
+                    <PlanRoute feature="chatbot">
+                      <ChatbotBuilder />
+                    </PlanRoute>
+                  }
+                />
+                <Route
+                  path="chatbot/edit/:id"
+                  element={
+                    <PlanRoute feature="chatbot">
+                      <ChatbotBuilder />
+                    </PlanRoute>
+                  }
+                />
+
+                <Route
+                  path="automation"
+                  element={
+                    <PlanRoute feature="automation">
+                      <Automation />
+                    </PlanRoute>
+                  }
+                />
+
+                <Route
+                  path="reports"
+                  element={
+                    <PlanRoute feature="analytics">
+                      <Reports />
+                    </PlanRoute>
+                  }
+                />
+
+                {/* Management */}
+                <Route path="settings" element={<Settings />} />
+                <Route path="billing" element={<Billing />} />
+                <Route path="profile" element={<Profile />} />
+                <Route path="help" element={<Help />} />
+
+                {/* Placeholder */}
+                <Route path="activity" element={<NotFound />} />
+              </Route>
+
+              {/* ===== Admin Routes ===== */}
+              <Route path="/admin/login" element={<RouteSuspense><AdminLogin /></RouteSuspense>} />
+
+              <Route
+                path="/admin"
+                element={
+                  <RouteSuspense>
+                    <AdminProtectedRoute />
+                  </RouteSuspense>
+                }
+              >
+                <Route
+                  element={
+                    <RouteSuspense>
+                      <AdminLayout />
+                    </RouteSuspense>
+                  }
+                >
+                  <Route index element={<Navigate to="/admin/dashboard" replace />} />
+                  <Route path="dashboard" element={<AdminDashboard />} />
+                  <Route path="users" element={<UserManagement />} />
+                  <Route path="settings" element={<SystemSettings />} />
+                </Route>
+              </Route>
+
+              {/* ===== 404 Route ===== */}
+              <Route path="*" element={<RouteSuspense><NotFound /></RouteSuspense>} />
+            </Routes>
+          </SocketProvider>
         </Router>
       </ErrorBoundary>
     </ThemeProvider>

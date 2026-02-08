@@ -1,41 +1,22 @@
-import React from 'react';
-import { Handle, Position, type NodeProps } from 'reactflow';
-import { MousePointer2 } from 'lucide-react';
-import type { ChatbotNodeData } from '../../../types/chatbot';
+import { Handle, Position } from 'reactflow';
+import { Plus } from 'lucide-react';
 
-const ButtonNode: React.FC<NodeProps<ChatbotNodeData>> = ({ data, selected }) => {
+const ButtonNode = ({ data }: any) => {
   return (
-    <div className={`bg-white border-2 rounded-xl shadow-md min-w-62.5 transition-all ${
-      selected ? 'border-blue-500 ring-2 ring-blue-200' : 'border-gray-200'
-    }`}>
-      <Handle type="target" position={Position.Top} className="w-3 h-3 bg-gray-400" />
-      
-      <div className="bg-blue-50 px-4 py-2 border-b border-blue-100 rounded-t-lg flex items-center">
-        <MousePointer2 className="w-4 h-4 text-blue-600 mr-2" />
-        <span className="font-semibold text-blue-900 text-sm">Buttons / Options</span>
+    <div className="px-4 py-3 bg-white border-2 border-purple-500 rounded-lg shadow-lg min-w-50">
+      <Handle type="target" position={Position.Top} className="w-3 h-3 bg-purple-500" />
+      <div className="flex items-center gap-2 mb-2">
+        <Plus className="w-4 h-4 text-purple-500" />
+        <span className="font-medium text-gray-900">Buttons</span>
       </div>
-      
-      <div className="p-4">
-        <p className="text-sm text-gray-600 mb-3">{data.content || 'Select an option:'}</p>
-        <div className="space-y-2">
-          {data.options?.map((option, index) => (
-            <div key={index} className="relative">
-              <div className="bg-gray-100 px-3 py-2 rounded text-sm text-center text-gray-700 border border-gray-200">
-                {option}
-              </div>
-              <Handle
-                type="source"
-                position={Position.Right}
-                id={`option-${index}`}
-                className="w-3 h-3 bg-blue-500 -right-1.5 top-1/2 -translate-y-1/2"
-              />
-            </div>
-          ))}
-          {(!data.options || data.options.length === 0) && (
-            <p className="text-xs text-gray-400 italic">No buttons added</p>
-          )}
-        </div>
+      <div className="space-y-1">
+        {data.buttons?.map((btn: any, idx: number) => (
+          <div key={idx} className="text-sm bg-purple-50 px-2 py-1 rounded">
+            {btn.text}
+          </div>
+        ))}
       </div>
+      <Handle type="source" position={Position.Bottom} className="w-3 h-3 bg-purple-500" />
     </div>
   );
 };
