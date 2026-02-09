@@ -354,6 +354,62 @@ export const whatsapp = {
 };
 
 // ------------------------------
+// META API ✅ UPDATED & EXPANDED
+// ------------------------------
+export const meta = {
+  /**
+   * Get Meta OAuth URL for Embedded Signup
+   */
+  getAuthUrl: () => api.get("/meta/auth/url"),
+
+  /**
+   * Connect Meta account with authorization code
+   */
+  connect: (data: { code: string; state?: string }) => 
+    api.post("/meta/connect", data),
+
+  /**
+   * Get connection status
+   */
+  getStatus: () => api.get("/meta/status"),
+
+  /**
+   * Refresh connection data (sync phone numbers, etc.)
+   */
+  refresh: () => api.post("/meta/refresh"),
+
+  /**
+   * Disconnect Meta account
+   */
+  disconnect: () => api.post("/meta/disconnect"),
+
+  /**
+   * Get connected phone numbers
+   */
+  getPhoneNumbers: () => api.get("/meta/phone-numbers"),
+
+  /**
+   * Register a phone number for messaging
+   */
+  registerPhoneNumber: (phoneNumberId: string, pin?: string) =>
+    api.post(`/meta/phone-numbers/${phoneNumberId}/register`, { pin }),
+
+  /**
+   * Send test message
+   */
+  sendTestMessage: (data: {
+    phoneNumberId: string;
+    to: string;
+    message: string;
+  }) => api.post("/meta/test-message", data),
+
+  /**
+   * @deprecated Use whatsapp.sendText instead
+   */
+  sendTest: (data: any) => api.post("/whatsapp/send/text", data),
+};
+
+// ------------------------------
 // INBOX API
 // ------------------------------
 export const inbox = {
@@ -711,7 +767,7 @@ export const analytics = {
 };
 
 // ------------------------------
-// DASHBOARD API ✅ UPDATED
+// DASHBOARD API
 // ------------------------------
 export const dashboard = {
   // Get basic stats (backward compatibility)
@@ -744,7 +800,7 @@ export const dashboard = {
     }
   },
 
-  // ✅ NEW: Get dashboard widgets data with time range
+  // Get dashboard widgets data with time range
   getWidgets: (days: number = 7) => 
     api.get("/dashboard/widgets", { params: { days } }),
 
@@ -757,23 +813,6 @@ export const dashboard = {
 
   getChartData: (type: string, range: string = "week") =>
     api.get(`/dashboard/charts/${type}`, { params: { range } }),
-};
-
-// ------------------------------
-// COMPATIBILITY EXPORTS
-// ------------------------------
-export const meta = {
-  connect: (data: { code?: string; redirectUri?: string }) => {
-    if (data?.code) {
-      const redirectUri =
-        data.redirectUri || `${window.location.origin}/meta-callback`;
-      return api.post("/whatsapp/connect", { code: data.code, redirectUri });
-    }
-    return Promise.reject({
-      response: { data: { message: "Manual setup not supported." } },
-    });
-  },
-  sendTest: (data: any) => api.post("/whatsapp/send/text", data),
 };
 
 // ------------------------------
