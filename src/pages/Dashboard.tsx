@@ -1,4 +1,3 @@
-// src/pages/Dashboard.tsx
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import {
@@ -7,7 +6,6 @@ import {
   Users,
   CheckCircle2,
   AlertTriangle,
-  ArrowRight,
   Zap,
   Loader2,
   RefreshCw,
@@ -20,7 +18,7 @@ import ChartCard from "../components/dashboard/ChartCard";
 import ConnectionStatus from "../components/dashboard/ConnectionStatus";
 import { MetaConnectModal } from "../components/dashboard/MetaConnectModal";
 import useMetaConnection from "../hooks/useMetaConnection";
-import { campaigns, contacts, inbox, billing } from "../services/api";
+import { campaigns, contacts, inbox, billing, dashboard } from "../services/api";
 
 type StatsData = {
   contacts: number;
@@ -29,7 +27,14 @@ type StatsData = {
   responseRate: number;
 };
 
-const CACHE_KEY = "wabmeta_dashboard_cache_v2";
+type WidgetsResponse = {
+  days: number;
+  messagesOverview: Array<{ date: string; label: string; sent: number; received: number; total: number }>;
+  deliveryByDay: Array<{ label: string; deliveryRate: number }>;
+  recentActivity: any[];
+};
+
+const CACHE_KEY = "wabmeta_dashboard_cache_v3";
 
 const Dashboard: React.FC = () => {
   const { connection, refreshConnection, disconnect } = useMetaConnection();
@@ -41,30 +46,27 @@ const Dashboard: React.FC = () => {
     responseRate: 0,
   });
 
-  const [activeCampaigns, setActiveCampaigns] = useState<any[]>([]);
   const [billingUsage, setBillingUsage] = useState<any>(null);
+  const [widgets, setWidgets] = useState<WidgetsResponse | null>(null);
+  const [chartPeriod, setChartPeriod] = useState<'7' | '30' | '90'>('7');
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
-
   const [showConnectModal, setShowConnectModal] = useState(false);
+  
   const hasCacheRef = useRef(false);
 
-  const calculateProgress = (total: number = 0, sent: number = 0) => {
-    if (!total) return 0;
-    return Math.round((sent / total) * 100);
-  };
-
+  // Initial load from cache
   useEffect(() => {
     try {
       const cachedRaw = localStorage.getItem(CACHE_KEY);
       if (cachedRaw) {
         const cached = JSON.parse(cachedRaw);
         if (cached?.statsData) setStatsData(cached.statsData);
-        if (Array.isArray(cached?.activeCampaigns)) setActiveCampaigns(cached.activeCampaigns);
         if (cached?.billingUsage !== undefined) setBillingUsage(cached.billingUsage);
-
+        if (cached?.widgets) setWidgets(cached.widgets);
+        if (cached?.chartPeriod) setChartPeriod(cached.chartPeriod);
         hasCacheRef.current = true;
         setLoading(false);
       }
@@ -77,69 +79,53 @@ const Dashboard: React.FC = () => {
     else setRefreshing(true);
 
     try {
+      const widgetsPromise =
+        "getWidgets" in dashboard
+          ? (dashboard as { getWidgets: (days: number) => Promise<{ data: { data: WidgetsResponse | null } }> }).getWidgets(Number(chartPeriod))
+          : Promise.resolve({ data: { data: null } });
+
+      // 1. Fetch main stats
       const results = await Promise.allSettled([
         contacts.stats(),
         campaigns.stats(),
         inbox.stats(),
-        campaigns.getAll({ page: 1, limit: 5 }),
         billing.getUsage(),
+        // Fetch widgets based on selected period
+        widgetsPromise,
       ]);
 
-      const [contactsStatsRes, campaignsStatsRes, inboxStatsRes, campaignsListRes, billingUsageRes] =
-        results;
+      const [contactsRes, campaignsRes, inboxRes, billingRes, widgetsRes] = results;
 
-      const contactsStats =
-        contactsStatsRes.status === "fulfilled" ? contactsStatsRes.value.data?.data : null;
+      // Process stats
+      const cData = contactsRes.status === "fulfilled" ? contactsRes.value.data?.data : null;
+      const campData = campaignsRes.status === "fulfilled" ? campaignsRes.value.data?.data : null;
+      const inData = inboxRes.status === "fulfilled" ? inboxRes.value.data?.data : null;
+      const billData = billingRes.status === "fulfilled" ? billingRes.value.data?.data : null;
+      const wData = widgetsRes.status === "fulfilled" ? widgetsRes.value.data?.data : null;
 
-      const campStats =
-        campaignsStatsRes.status === "fulfilled" ? campaignsStatsRes.value.data?.data : null;
-
-      const inStats = inboxStatsRes.status === "fulfilled" ? inboxStatsRes.value.data?.data : null;
-
-      const list =
-        campaignsListRes.status === "fulfilled" ? campaignsListRes.value.data?.data : [];
-
-      const usage =
-        billingUsageRes.status === "fulfilled" ? billingUsageRes.value.data?.data : null;
-
-      const totalSent = campStats?.totalMessagesSent || 0;
-      const totalDelivered = campStats?.totalMessagesDelivered || 0;
+      const totalSent = campData?.totalMessagesSent || 0;
+      const totalDelivered = campData?.totalMessagesDelivered || 0;
       const deliveryRate = totalSent > 0 ? Math.round((totalDelivered / totalSent) * 100) : 0;
 
-      const nextStatsData: StatsData = {
-        contacts: contactsStats?.total || 0,
+      const nextStats = {
+        contacts: cData?.total || 0,
         messagesSent: totalSent,
         deliveryRate,
-        responseRate: inStats?.responseRate || 0,
+        responseRate: inData?.responseRate || 0,
       };
 
-      const active = (Array.isArray(list) ? list : [])
-        .filter((c: any) =>
-          c?.status
-            ? ["RUNNING", "SCHEDULED", "COMPLETED"].includes(String(c.status).toUpperCase())
-            : false
-        )
-        .slice(0, 5)
-        .map((c: any) => ({
-          id: c.id,
-          name: c.name || "Untitled Campaign",
-          status: String(c.status || "unknown").toLowerCase(),
-          sent: c.sentCount || 0,
-          delivered: c.deliveredCount || 0,
-          opened: c.readCount || 0,
-          progress: calculateProgress(c.totalContacts || 0, c.sentCount || 0),
-        }));
+      setStatsData(nextStats);
+      setBillingUsage(billData);
+      setWidgets(wData);
 
-      setStatsData(nextStatsData);
-      setActiveCampaigns(active);
-      setBillingUsage(usage);
-
+      // Save to cache
       localStorage.setItem(
         CACHE_KEY,
         JSON.stringify({
-          statsData: nextStatsData,
-          activeCampaigns: active,
-          billingUsage: usage,
+          statsData: nextStats,
+          billingUsage: billData,
+          widgets: wData,
+          chartPeriod,
           ts: Date.now(),
         })
       );
@@ -151,12 +137,18 @@ const Dashboard: React.FC = () => {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [chartPeriod]);
 
+  // Refetch when period changes
   useEffect(() => {
-    fetchDashboardData({ showFullLoader: !hasCacheRef.current });
+    if (hasCacheRef.current) {
+      fetchDashboardData({ showFullLoader: false });
+    } else {
+      fetchDashboardData();
+    }
   }, [fetchDashboardData]);
 
+  // Actions
   const handleSync = async () => {
     try {
       setRefreshing(true);
@@ -170,7 +162,7 @@ const Dashboard: React.FC = () => {
   const handleDisconnect = async () => {
     try {
       setDisconnecting(true);
-      await disconnect(); // calls backend + clears local state
+      await disconnect();
       await refreshConnection();
       await fetchDashboardData({ showFullLoader: false });
     } finally {
@@ -178,74 +170,36 @@ const Dashboard: React.FC = () => {
     }
   };
 
+  // Mapped Data for Charts
+  const messageChartData = useMemo(() => {
+    const rows = widgets?.messagesOverview || [];
+    return rows.map((r) => ({
+      name: r.label,
+      messages: r.sent,
+    }));
+  }, [widgets]);
+
+  const deliveryChartData = useMemo(() => {
+    const rows = widgets?.deliveryByDay || [];
+    return rows.map((r) => ({
+      name: r.label,
+      delivered: r.deliveryRate || 0,
+    }));
+  }, [widgets]);
+
   const lowCredits = useMemo(() => {
     const msg = billingUsage?.messages;
     if (!msg || !msg.limit || msg.limit <= 0) return { show: false, remaining: 0 };
     if (msg.unlimited) return { show: false, remaining: 0 };
-
-    const used = Number(msg.used || 0);
-    const limit = Number(msg.limit || 0);
-    const remaining = Math.max(limit - used, 0);
-    const show = remaining <= 20 || (used / limit) * 100 >= 80;
-    return { show, remaining };
+    const remaining = Math.max(Number(msg.limit) - Number(msg.used || 0), 0);
+    return { show: remaining <= 20, remaining };
   }, [billingUsage]);
 
-  const stats = useMemo(
-    () => [
-      {
-        title: "Messages Sent",
-        value: (statsData.messagesSent || 0).toLocaleString(),
-        change: 0,
-        icon: Send,
-        iconColor: "text-blue-600",
-        iconBg: "bg-blue-100",
-      },
-      {
-        title: "Delivery Rate",
-        value: `${statsData.deliveryRate || 0}%`,
-        change: 0,
-        icon: CheckCircle2,
-        iconColor: "text-green-600",
-        iconBg: "bg-green-100",
-      },
-      {
-        title: "Active Contacts",
-        value: (statsData.contacts || 0).toLocaleString(),
-        change: 0,
-        icon: Users,
-        iconColor: "text-purple-600",
-        iconBg: "bg-purple-100",
-      },
-      {
-        title: "Response Rate",
-        value: `${statsData.responseRate || 0}%`,
-        change: 0,
-        icon: MessageSquare,
-        iconColor: "text-orange-600",
-        iconBg: "bg-orange-100",
-      },
-    ],
-    [statsData]
-  );
-
-  const messageData = [
-    { name: "Mon", messages: 2400 },
-    { name: "Tue", messages: 1398 },
-    { name: "Wed", messages: 9800 },
-    { name: "Thu", messages: 3908 },
-    { name: "Fri", messages: 4800 },
-    { name: "Sat", messages: 3800 },
-    { name: "Sun", messages: 4300 },
-  ];
-
-  const deliveryData = [
-    { name: "Mon", delivered: 95, failed: 5 },
-    { name: "Tue", delivered: 98, failed: 2 },
-    { name: "Wed", delivered: 97, failed: 3 },
-    { name: "Thu", delivered: 99, failed: 1 },
-    { name: "Fri", delivered: 96, failed: 4 },
-    { name: "Sat", delivered: 98, failed: 2 },
-    { name: "Sun", delivered: 97, failed: 3 },
+  const statsCards = [
+    { title: "Messages Sent", value: (statsData.messagesSent || 0).toLocaleString(), icon: Send, iconColor: "text-blue-600", iconBg: "bg-blue-100", change: 0 },
+    { title: "Delivery Rate", value: `${statsData.deliveryRate || 0}%`, icon: CheckCircle2, iconColor: "text-green-600", iconBg: "bg-green-100", change: 0 },
+    { title: "Active Contacts", value: (statsData.contacts || 0).toLocaleString(), icon: Users, iconColor: "text-purple-600", iconBg: "bg-purple-100", change: 0 },
+    { title: "Response Rate", value: `${statsData.responseRate || 0}%`, icon: MessageSquare, iconColor: "text-orange-600", iconBg: "bg-orange-100", change: 0 },
   ];
 
   if (loading && !hasCacheRef.current) {
@@ -261,122 +215,87 @@ const Dashboard: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Good morning!</h1>
           <p className="text-gray-500 mt-1">Here's what's happening with your business today.</p>
         </div>
-
         <div className="flex items-center space-x-3">
-          <button
-            onClick={handleSync}
-            className="p-2 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors"
-            title="Refresh"
-            disabled={refreshing}
-          >
+          <button onClick={handleSync} className="p-2 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors" disabled={refreshing}>
             <RefreshCw className={`w-5 h-5 text-gray-600 ${refreshing ? "animate-spin" : ""}`} />
           </button>
-
-          <Link
-            to="/dashboard/campaigns/new"
-            className="inline-flex items-center space-x-2 px-4 py-2.5 bg-primary-500 hover:bg-primary-600 text-white font-medium rounded-xl transition-colors"
-          >
+          <Link to="/dashboard/campaigns/new" className="inline-flex items-center space-x-2 px-4 py-2.5 bg-primary-500 hover:bg-primary-600 text-white font-medium rounded-xl transition-colors">
             <Send className="w-4 h-4" />
             <span>New Campaign</span>
           </Link>
         </div>
-      </div>
+      </div>bg-linear-to-r
 
-      {/* Connection Status */}
       {connection.isConnected ? (
         <ConnectionStatus connection={connection} onDisconnect={handleDisconnect} disconnectLoading={disconnecting} />
       ) : (
         <div className="bg-linear-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-2xl p-6 shadow-sm">
           <div className="flex flex-col md:flex-row items-center justify-between gap-6">
-            <div className="flex items-center space-x-4 w-full md:w-auto">
+            <div className="flex items-center space-x-4">
               <div className="w-16 h-16 bg-blue-100 rounded-2xl flex items-center justify-center shrink-0 shadow-sm">
                 <Zap className="w-8 h-8 text-blue-600" />
               </div>
               <div>
                 <h3 className="text-xl font-bold text-gray-900">Connect WhatsApp Business</h3>
-                <p className="text-gray-600 max-w-lg mt-1 text-sm md:text-base">
-                  Link your account to start sending automated campaigns and manage customer chats directly from WabMeta.
-                </p>
+                <p className="text-gray-600 max-w-lg mt-1 text-sm md:text-base">Link your account to start sending campaigns.</p>
               </div>
             </div>
-
-            <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
-              <button
-                onClick={() => setShowConnectModal(true)}
-                className="flex items-center justify-center gap-2 px-6 py-3 bg-[#1877F2] hover:bg-[#166FE5] text-white font-semibold rounded-xl shadow-lg shadow-blue-500/30 transition-all transform hover:scale-105 active:scale-95 whitespace-nowrap"
-              >
+            <div className="flex gap-3">
+              <button onClick={() => setShowConnectModal(true)} className="px-6 py-3 bg-[#1877F2] text-white font-semibold rounded-xl shadow-lg transition-all hover:scale-105">
                 Connect with Meta
               </button>
-
-              <button
-                onClick={() => setShowConnectModal(true)}
-                className="px-6 py-3 bg-white border-2 border-gray-200 text-gray-700 font-semibold rounded-xl hover:bg-gray-50 transition-all active:scale-95"
-              >
-                Manual Setup
-              </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Low credits banner */}
       {lowCredits.show && (
-        <div className="bg-linear-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex justify-between items-center">
           <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 bg-amber-100 rounded-full flex items-center justify-center shrink-0">
-              <AlertTriangle className="w-5 h-5 text-amber-600" />
-            </div>
-            <div>
-              <p className="font-medium text-amber-800">Low message credits</p>
-              <p className="text-sm text-amber-600">
-                You have {lowCredits.remaining} credits remaining. Recharge to continue sending messages.
-              </p>
-            </div>
+            <AlertTriangle className="w-5 h-5 text-amber-600" />
+            <p className="text-amber-800 font-medium">Low message credits: {lowCredits.remaining} remaining</p>
           </div>
-          <Link
-            to="/dashboard/billing"
-            className="flex items-center space-x-1 px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white font-medium rounded-lg transition-colors whitespace-nowrap shadow-sm"
-          >
-            <Zap className="w-4 h-4" />
-            <span>Recharge</span>
-          </Link>
+          <Link to="/dashboard/billing" className="text-amber-700 underline text-sm">Recharge</Link>
         </div>
       )}
 
-      {/* Stats Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6">
-        {stats.map((stat) => (
-          <StatsCard key={stat.title} {...stat} />
-        ))}
+        {statsCards.map((stat) => <StatsCard key={stat.title} {...stat} />)}
       </div>
 
-      {/* Charts Row */}
       <div className="grid lg:grid-cols-2 gap-6">
-        <ChartCard title="Messages Overview" subtitle="Total messages sent this week" type="area" data={messageData} dataKey="messages" />
-        <ChartCard title="Delivery Performance" subtitle="Message delivery rate" type="bar" data={deliveryData} dataKey="delivered" color="#10B981" />
+        <ChartCard
+          title="Messages Overview"
+          subtitle="Total messages sent"
+          type="area"
+          data={messageChartData}
+          dataKey="messages"
+          period={chartPeriod}
+          onPeriodChange={setChartPeriod}
+        />
+        <ChartCard
+          title="Delivery Performance"
+          subtitle="Message delivery rate (%)"
+          type="bar"
+          data={deliveryChartData}
+          dataKey="delivered"
+          color="#10B981"
+          period={chartPeriod}
+          onPeriodChange={setChartPeriod}
+        />
       </div>
 
-      {/* Bottom Grid */}
       <div className="grid lg:grid-cols-2 gap-6">
         <QuickActions />
-        <RecentActivity />
+        <RecentActivity activities={widgets?.recentActivity || []} />
       </div>
 
-      {/* Connect Modal */}
-      <MetaConnectModal
-        isOpen={showConnectModal}
-        onClose={() => setShowConnectModal(false)}
-        onConnect={async () => {
-          await refreshConnection();
-          await fetchDashboardData({ showFullLoader: false });
-        }}
-      />
+      <MetaConnectModal isOpen={showConnectModal} onClose={() => setShowConnectModal(false)} onConnect={handleSync} />
     </div>
   );
 };

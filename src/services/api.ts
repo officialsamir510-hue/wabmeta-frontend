@@ -238,7 +238,7 @@ export const auth = {
 };
 
 // ------------------------------
-// CONTACTS API (keep as-is)
+// CONTACTS API
 // ------------------------------
 export const contacts = {
   getAll: (params?: any) => api.get("/contacts", { params }),
@@ -254,7 +254,6 @@ export const contacts = {
 // ------------------------------
 // CAMPAIGNS API
 // ------------------------------
-
 export const campaigns = {
   getAll: (params?: {
     page?: number;
@@ -288,7 +287,6 @@ export const campaigns = {
 // ------------------------------
 // TEMPLATES API
 // ------------------------------
-
 export const templates = {
   getAll: (params?: {
     page?: number;
@@ -322,7 +320,6 @@ export const templates = {
 // ------------------------------
 // WHATSAPP API
 // ------------------------------
-
 export const whatsapp = {
   connect: (data: { code: string; redirectUri: string }) =>
     api.post("/whatsapp/connect", data),
@@ -359,7 +356,6 @@ export const whatsapp = {
 // ------------------------------
 // INBOX API
 // ------------------------------
-
 export const inbox = {
   conversations: (params?: {
     page?: number;
@@ -407,7 +403,6 @@ export const inbox = {
 // ------------------------------
 // CHATBOT API
 // ------------------------------
-
 export const chatbot = {
   getAll: (params?: { page?: number; limit?: number; status?: string }) =>
     api.get("/chatbot", { params }),
@@ -432,7 +427,6 @@ export const chatbot = {
 // ------------------------------
 // ADMIN API
 // ------------------------------
-
 export const admin = {
   // Auth
   login: (data: { email: string; password: string }) =>
@@ -517,7 +511,6 @@ export const admin = {
 // ------------------------------
 // TEAM / ORGANIZATIONS API
 // ------------------------------
-
 export const team = {
   // Get current organization with members
   getCurrent: () => api.get("/organizations/current"),
@@ -570,7 +563,6 @@ export const team = {
 // ------------------------------
 // BILLING API
 // ------------------------------
-
 export const billing = {
   // Current plan & usage
   getCurrentPlan: () => api.get("/billing/plan"),
@@ -618,7 +610,6 @@ export const billing = {
 // ------------------------------
 // SETTINGS API
 // ------------------------------
-
 export const settings = {
   // Profile
   getProfile: () => api.get("/users/profile"),
@@ -686,7 +677,6 @@ export const settings = {
 // ------------------------------
 // NOTIFICATIONS API
 // ------------------------------
-
 export const notifications = {
   getAll: (params?: { page?: number; limit?: number; read?: boolean }) =>
     api.get("/notifications", { params }),
@@ -703,7 +693,6 @@ export const notifications = {
 // ------------------------------
 // ANALYTICS / REPORTS API
 // ------------------------------
-
 export const analytics = {
   getOverview: (params?: { startDate?: string; endDate?: string }) =>
     api.get("/analytics/overview", { params }),
@@ -722,24 +711,10 @@ export const analytics = {
 };
 
 // ------------------------------
-// COMPATIBILITY EXPORTS
+// DASHBOARD API ✅ UPDATED
 // ------------------------------
-
-export const meta = {
-  connect: (data: { code?: string; redirectUri?: string }) => {
-    if (data?.code) {
-      const redirectUri =
-        data.redirectUri || `${window.location.origin}/meta-callback`;
-      return api.post("/whatsapp/connect", { code: data.code, redirectUri });
-    }
-    return Promise.reject({
-      response: { data: { message: "Manual setup not supported." } },
-    });
-  },
-  sendTest: (data: any) => api.post("/whatsapp/send/text", data),
-};
-
 export const dashboard = {
+  // Get basic stats (backward compatibility)
   getStats: async () => {
     try {
       const [contactsRes, campaignsRes, inboxRes] = await Promise.all([
@@ -768,12 +743,42 @@ export const dashboard = {
       };
     }
   },
+
+  // ✅ NEW: Get dashboard widgets data with time range
+  getWidgets: (days: number = 7) => 
+    api.get("/dashboard/widgets", { params: { days } }),
+
+  // Additional dashboard methods
+  getRecentActivity: (limit: number = 10) =>
+    api.get("/dashboard/activity", { params: { limit } }),
+
+  getQuickStats: () =>
+    api.get("/dashboard/quick-stats"),
+
+  getChartData: (type: string, range: string = "week") =>
+    api.get(`/dashboard/charts/${type}`, { params: { range } }),
+};
+
+// ------------------------------
+// COMPATIBILITY EXPORTS
+// ------------------------------
+export const meta = {
+  connect: (data: { code?: string; redirectUri?: string }) => {
+    if (data?.code) {
+      const redirectUri =
+        data.redirectUri || `${window.location.origin}/meta-callback`;
+      return api.post("/whatsapp/connect", { code: data.code, redirectUri });
+    }
+    return Promise.reject({
+      response: { data: { message: "Manual setup not supported." } },
+    });
+  },
+  sendTest: (data: any) => api.post("/whatsapp/send/text", data),
 };
 
 // ------------------------------
 // HEALTH CHECK
 // ------------------------------
-
 export const health = {
   check: () => api.get("/health").catch(() => axios.get(`${API_URL.replace('/api/v1', '')}/health`)),
   
@@ -790,5 +795,4 @@ export const health = {
 // ------------------------------
 // DEFAULT EXPORT
 // ------------------------------
-
 export default api;
