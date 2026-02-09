@@ -91,48 +91,52 @@ const mapHeaderForPreview = (headerType: string) => {
   return { type: "none" as const };
 };
 
-// ✅ FIXED: Robust WhatsApp account fetcher (With Fallback)
+// ✅ FIXED: Only use real API response, no mock IDs
 const getConnectedWhatsAppAccountId = async (): Promise<string> => {
   try {
     const res = await whatsappApi.accounts();
-    console.log("🔍 WhatsApp API Response:", res); 
+    console.log("🔍 WhatsApp API Response:", res);
 
     // Handle all possible response structures
-    const accounts = Array.isArray(res) ? res 
-      : Array.isArray(res.data) ? res.data 
-      : Array.isArray(res.data?.data) ? res.data.data 
-      : [];
+    const accounts = Array.isArray(res.data) 
+      ? res.data 
+      : Array.isArray(res.data?.data) 
+        ? res.data.data 
+        : [];
 
     console.log("🔍 Parsed Accounts:", accounts);
 
     if (!accounts || accounts.length === 0) {
-      console.warn("⚠️ No accounts found. Using fallback mock ID.");
-      // ⚠️ FALLBACK: Agar real account nahi mila to bhi aage badho (Testing ke liye)
-      return "mock-wa-account-id"; 
+      throw new Error("No WhatsApp accounts found. Please connect one in Settings → WhatsApp.");
     }
 
-    // Try to find connected/default account
+    // Try to find connected/default account first
     const connected = accounts.find((a: any) => 
-      String(a.status).toUpperCase() === 'CONNECTED' || a.isDefault
+      String(a.status || '').toUpperCase() === 'CONNECTED' || 
+      a.isDefault === true
     );
 
     if (connected?.id) {
       console.log("✅ Found connected account:", connected.id);
       return connected.id;
     }
-    
-    // If no connected status found, just return the first account ID
-    if (accounts.length > 0) {
+
+    // Fallback to first available account
+    if (accounts[0]?.id) {
       console.log("⚠️ Using first available account:", accounts[0].id);
       return accounts[0].id;
     }
 
-    return "mock-wa-account-id";
+    throw new Error("No valid WhatsApp account ID found.");
 
-  } catch (e) {
-    console.error("❌ Failed to check WhatsApp connection:", e);
-    // ⚠️ FALLBACK: Error aaye tab bhi mat roko
-    return "mock-wa-account-id-fallback";
+  } catch (error: any) {
+    console.error("❌ Failed to get WhatsApp account:", error);
+    
+    // Re-throw with user-friendly message
+    const message = error.response?.data?.message || 
+                    error.message || 
+                    "Failed to verify WhatsApp connection. Please try again.";
+    throw new Error(message);
   }
 };
 
