@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>WabMeta - WhatsApp Business Platform</title>
+  </head>
+  <body>
+    <div id="root"></div>
+
+    <!-- ✅ ADD THIS BEFORE </body> -->
+    <script>
+      window.fbAsyncInit = function() {
+        FB.init({
+          appId      : '1434968781548162',
+          cookie     : true,
+          xfbml      : true,
+          version    : 'v22.0'
+        });
+        console.log('✅ Facebook SDK initialized');
+      };
+
+      (function(d, s, id){
+        var js, fjs = d.getElementsByTagName(s)[0];
+        if (d.getElementById(id)) {return;}
+        js = d.createElement(s); js.id = id;
+        js.src = "https://connect.facebook.net/en_US/sdk.js";
+        fjs.parentNode.insertBefore(js, fjs);
+      }(document, 'script', 'facebook-jssdk'));
+    </script>
+
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
