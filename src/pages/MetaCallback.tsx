@@ -13,7 +13,11 @@ const MetaCallback: React.FC = () => {
   const navigate = useNavigate();
   const [status, setStatus] = useState<CallbackStatus>('processing');
   const [message, setMessage] = useState('Processing your connection...');
+  
+  // ✅ Prevent double execution
   const hasProcessed = useRef(false);
+  const isProcessing = useRef(false);
+  const processedCode = useRef<string | null>(null);
 
   useEffect(() => {
     // Prevent double execution in React Strict Mode
@@ -107,6 +111,15 @@ const MetaCallback: React.FC = () => {
       if (!state) {
         throw new Error('Missing state parameter');
       }
+
+      // ✅ PREVENT DOUBLE SUBMISSION
+      if (isProcessing.current || processedCode.current === code) {
+        console.log('⚠️ Already processing this code, skipping...');
+        return;
+      }
+
+      isProcessing.current = true;
+      processedCode.current = code;
 
       setMessage('Exchanging authorization code...');
 
@@ -203,7 +216,26 @@ const MetaCallback: React.FC = () => {
     } catch (error: any) {
       console.error('❌ Callback error:', error);
 
-      const errorMessage = extractErrorMessage(error);
+      let errorMessage = extractErrorMessage(error);
+
+      // ✅ Special handling for "code already used"
+      if (errorMessage.includes('authorization code has been used') || 
+          errorMessage.includes('Code has expired') ||
+          errorMessage.includes('invalid_grant')) {
+        errorMessage = 'Connection already processed. Please check your dashboard.';
+        
+        // Might have succeeded earlier, redirect to dashboard
+        setTimeout(() => {
+          if (window.opener && !window.opener.closed) {
+            notifyOpener('META_CONNECTED', { 
+              message: 'Connection may have succeeded. Please refresh dashboard.' 
+            });
+            window.close();
+          } else {
+            navigate('/dashboard/settings?tab=whatsapp', { replace: true });
+          }
+        }, 3000);
+      }
 
       setStatus('error');
       setMessage(errorMessage);
@@ -215,6 +247,8 @@ const MetaCallback: React.FC = () => {
       if (window.opener && !window.opener.closed) {
         setTimeout(() => window.close(), 3000);
       }
+    } finally {
+      isProcessing.current = false;
     }
   };
 
