@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useRef } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { Loader2, CheckCircle, XCircle } from 'lucide-react';
+import { Loader2, CheckCircle, XCircle, RefreshCw } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { meta } from '../services/api';
 
@@ -41,6 +41,42 @@ const MetaCallback: React.FC = () => {
   };
 
   /**
+   * Extract error message from various error formats
+   */
+  const extractErrorMessage = (err: any): string => {
+    // Check for axios/fetch response error
+    if (err.response) {
+      console.error('HTTP Error:', err.response.status, err.response.data);
+
+      // Extract from response data
+      if (err.response.data?.error) {
+        return err.response.data.error;
+      }
+      if (err.response.data?.message) {
+        return err.response.data.message;
+      }
+
+      // Handle HTML response (server error page)
+      if (typeof err.response.data === 'string') {
+        if (err.response.data.includes('<!doctype') || err.response.data.includes('<html')) {
+          return `Server error (${err.response.status}). Please try again.`;
+        }
+        return err.response.data;
+      }
+
+      return `Server error: ${err.response.status}`;
+    }
+
+    // Direct error message
+    if (err.message) {
+      return err.message;
+    }
+
+    // Unknown error
+    return 'An unexpected error occurred';
+  };
+
+  /**
    * Handle the OAuth callback
    */
   const handleCallback = async () => {
@@ -65,7 +101,7 @@ const MetaCallback: React.FC = () => {
 
       // Validate required parameters
       if (!code) {
-        throw new Error('No authorization code received');
+        throw new Error('No authorization code received from Meta');
       }
 
       if (!state) {
@@ -75,22 +111,26 @@ const MetaCallback: React.FC = () => {
       setMessage('Exchanging authorization code...');
 
       // Check for auth token
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('token') || localStorage.getItem('accessToken');
       if (!token) {
         throw new Error('Authentication required. Please login again.');
       }
 
+      console.log('📤 Sending code to backend...');
+
       // Connect via API service
       let response;
       try {
-        // Try using the API service first
         response = await meta.connect({ code, state });
       } catch (apiError: any) {
+        console.warn('API service failed:', apiError);
+
         // Fallback to direct fetch if API service fails
-        console.warn('API service failed, trying direct fetch...');
-        
         const apiUrl = import.meta.env.VITE_API_URL || 'https://wabmeta-api.onrender.com/api/v1';
-        const fetchResponse = await fetch(`${apiUrl}/meta/auth/callback`, {
+        
+        console.log('🔄 Trying direct fetch to:', `${apiUrl}/meta/connect`);
+        
+        const fetchResponse = await fetch(`${apiUrl}/meta/connect`, {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -101,25 +141,40 @@ const MetaCallback: React.FC = () => {
 
         if (!fetchResponse.ok) {
           let errorMessage = `Server error: ${fetchResponse.status}`;
+          
           try {
             const errorData = await fetchResponse.json();
             errorMessage = errorData.error || errorData.message || errorMessage;
           } catch {
-            const errorText = await fetchResponse.text();
-            if (errorText) errorMessage = errorText;
+            try {
+              const errorText = await fetchResponse.text();
+              if (errorText && !errorText.includes('<!doctype')) {
+                errorMessage = errorText;
+              }
+            } catch {
+              // Ignore
+            }
           }
+          
           throw new Error(errorMessage);
         }
 
         response = { data: await fetchResponse.json() };
       }
 
-      console.log('✅ Backend response:', response.data);
+      console.log('📥 Backend response:', response.data);
+
+      // Validate response
+      if (!response || !response.data) {
+        throw new Error('Invalid response from server');
+      }
 
       // Check for success
-      if (response.data?.success) {
+      if (response.data.success) {
         setStatus('success');
         setMessage('WhatsApp Business Account connected successfully!');
+
+        console.log('✅ Connection successful');
 
         // Notify opener window
         notifyOpener('META_OAUTH_SUCCESS', { data: response.data.data });
@@ -140,19 +195,15 @@ const MetaCallback: React.FC = () => {
         }
       } else {
         throw new Error(
-          response.data?.error ||
-            response.data?.message ||
-            'Failed to connect WhatsApp'
+          response.data.error ||
+          response.data.message ||
+          'Failed to connect WhatsApp'
         );
       }
     } catch (error: any) {
       console.error('❌ Callback error:', error);
 
-      const errorMessage =
-        error.response?.data?.error ||
-        error.response?.data?.message ||
-        error.message ||
-        'An unexpected error occurred';
+      const errorMessage = extractErrorMessage(error);
 
       setStatus('error');
       setMessage(errorMessage);
@@ -216,7 +267,7 @@ const MetaCallback: React.FC = () => {
           </h2>
 
           {/* Message */}
-          <p className="text-gray-600 dark:text-gray-400 mb-6">{message}</p>
+          <p className="text-gray-600 dark:text-gray-400 mb-6 text-sm">{message}</p>
 
           {/* Success info */}
           {status === 'success' && (
@@ -228,9 +279,18 @@ const MetaCallback: React.FC = () => {
               </p>
               {/* Success animation */}
               <div className="flex justify-center">
-                <div className="w-2 h-2 bg-green-500 rounded-full animate-bounce mx-1" style={{ animationDelay: '0ms' }} />
-                <div className="w-2 h-2 bg-green-500 rounded-full animate-bounce mx-1" style={{ animationDelay: '150ms' }} />
-                <div className="w-2 h-2 bg-green-500 rounded-full animate-bounce mx-1" style={{ animationDelay: '300ms' }} />
+                <div 
+                  className="w-2 h-2 bg-green-500 rounded-full animate-bounce mx-1" 
+                  style={{ animationDelay: '0ms' }} 
+                />
+                <div 
+                  className="w-2 h-2 bg-green-500 rounded-full animate-bounce mx-1" 
+                  style={{ animationDelay: '150ms' }} 
+                />
+                <div 
+                  className="w-2 h-2 bg-green-500 rounded-full animate-bounce mx-1" 
+                  style={{ animationDelay: '300ms' }} 
+                />
               </div>
             </div>
           )}
@@ -242,19 +302,7 @@ const MetaCallback: React.FC = () => {
                 onClick={handleRetry}
                 className="w-full bg-green-600 hover:bg-green-700 text-white font-medium py-2.5 px-4 rounded-lg transition flex items-center justify-center gap-2"
               >
-                <svg
-                  className="w-4 h-4"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                  />
-                </svg>
+                <RefreshCw className="w-4 h-4" />
                 Try Again
               </button>
               <button
@@ -263,6 +311,15 @@ const MetaCallback: React.FC = () => {
               >
                 Back to Dashboard
               </button>
+            </div>
+          )}
+
+          {/* Debug info in development */}
+          {status === 'error' && import.meta.env.DEV && (
+            <div className="mt-6 p-3 bg-gray-100 dark:bg-gray-900 rounded-lg text-left">
+              <p className="text-xs text-gray-500 dark:text-gray-400 font-mono break-all">
+                Debug: {message}
+              </p>
             </div>
           )}
         </div>
