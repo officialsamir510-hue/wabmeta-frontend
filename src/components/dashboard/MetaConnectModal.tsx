@@ -1,10 +1,9 @@
 // src/components/dashboard/MetaConnectModal.tsx
 
 import React, { useState, useEffect, useRef } from 'react';
-import { X, AlertCircle, Loader2, MessageCircle, CheckCircle } from 'lucide-react';
+import { X, AlertCircle, Loader2, CheckCircle } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { meta } from '../../services/api';
-import { useFacebookSDK } from '../../hooks/useFacebookSDK';
 
 interface MetaConnectModalProps {
   isOpen: boolean;
@@ -17,83 +16,53 @@ const MetaConnectModal: React.FC<MetaConnectModalProps> = ({
   onClose,
   onSuccess
 }) => {
-  const { isReady: isFBReady, isLoading: isFBLoading, FB } = useFacebookSDK();
   const [isConnecting, setIsConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const popupRef = useRef<Window | null>(null);
   const checkIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
+  // Cleanup on close/unmount
   useEffect(() => {
-    if (!isOpen) cleanup();
+    if (!isOpen) {
+      cleanup();
+    }
     return () => cleanup();
   }, [isOpen]);
 
   const cleanup = () => {
-    if (popupRef.current && !popupRef.current.closed) popupRef.current.close();
+    if (popupRef.current && !popupRef.current.closed) {
+      popupRef.current.close();
+    }
     popupRef.current = null;
+    
     if (checkIntervalRef.current) {
       clearInterval(checkIntervalRef.current);
       checkIntervalRef.current = null;
     }
+    
     setIsConnecting(false);
     setError(null);
   };
 
-  const handleConnect = () => {
-    // ✅ Method 1: Try FB SDK First (Best UX)
-    if (isFBReady && FB) {
-      connectViaSDK();
-    } else {
-      // ✅ Method 2: Fallback to Popup (If SDK fails)
-      connectViaPopup();
-    }
-  };
-
-  const connectViaSDK = () => {
-    setIsConnecting(true);
-    setError(null);
-    console.log('🔗 Starting connection via Facebook SDK (v22.0)');
-
-    FB.login(
-      (response: any) => {
-        if (response.authResponse) {
-          const { code } = response.authResponse;
-          if (code) {
-            console.log('✅ Got authorization code');
-            handleBackendConnection(code);
-          } else {
-            setIsConnecting(false);
-            setError('No authorization code received');
-          }
-        } else {
-          console.log('❌ User cancelled');
-          setIsConnecting(false);
-        }
-      },
-      {
-        config_id: '736708392598776', // Configuration ID
-        response_type: 'code',
-        override_default_response_type: true,
-        extras: {
-          setup: {},
-          featureType: '',
-          sessionInfoVersion: '3',
-        }
-      }
-    );
-  };
-
-  const connectViaPopup = async () => {
+  const handleConnect = async () => {
     try {
       setIsConnecting(true);
       setError(null);
-      console.log('🔗 Starting connection via Popup fallback');
 
-      const response = await meta.getAuthUrl('new'); // Force 'new' mode
-      const authUrl = response.data?.data?.url;
+      console.log('🔗 Requesting Standard OAuth URL...');
+
+      // Get OAuth URL from backend
+      const response = await meta.getAuthUrl();
       
-      if (!authUrl) throw new Error('Failed to get OAuth URL');
+      const authUrl = response.data?.data?.url || response.data?.data?.authUrl;
+      
+      if (!authUrl) {
+        throw new Error('Failed to get OAuth URL');
+      }
 
+      console.log('✅ Got OAuth URL');
+
+      // Open in popup
       const width = 650;
       const height = 750;
       const left = window.screen.width / 2 - width / 2;
@@ -102,63 +71,78 @@ const MetaConnectModal: React.FC<MetaConnectModalProps> = ({
       const popup = window.open(
         authUrl,
         'MetaOAuth',
-        `width=${width},height=${height},left=${left},top=${top},scrollbars=yes`
+        `width=${width},height=${height},left=${left},top=${top},scrollbars=yes,resizable=yes`
       );
 
-      if (!popup) throw new Error('Popup blocked. Please allow popups.');
+      if (!popup) {
+        throw new Error('Popup blocked. Please allow popups for this site.');
+      }
 
       popupRef.current = popup;
 
+      // Listen for messages from popup
       const handleMessage = (event: MessageEvent) => {
         if (event.origin !== window.location.origin) return;
-        if (event.data?.type === 'META_CONNECTED') {
+
+        const { type } = event.data || {};
+
+        if (type === 'META_OAUTH_SUCCESS' || type === 'META_CONNECTED') {
+          console.log('✅ Connection successful');
           window.removeEventListener('message', handleMessage);
           cleanup();
           toast.success('WhatsApp connected successfully!');
           onSuccess?.();
           onClose();
         }
+
+        if (type === 'META_OAUTH_ERROR') {
+          console.error('❌ Connection failed:', event.data.error);
+          window.removeEventListener('message', handleMessage);
+          setError(event.data.error || 'Connection failed');
+          setIsConnecting(false);
+        }
       };
 
       window.addEventListener('message', handleMessage);
 
-      // Check for closure
+      // Monitor popup closure
       checkIntervalRef.current = setInterval(async () => {
-        if (!popup || popup.closed) {
+        if (!popupRef.current || popupRef.current.closed) {
           clearInterval(checkIntervalRef.current!);
+          checkIntervalRef.current = null;
           window.removeEventListener('message', handleMessage);
-          setIsConnecting(false);
-          
-          // Check status just in case
-          const status = await meta.getStatus();
-          if (status.data?.data?.isConnected) {
-            onSuccess?.();
-            onClose();
+
+          // Check if connection succeeded
+          try {
+            const statusRes = await meta.getStatus();
+            if (statusRes.data?.data?.isConnected) {
+              toast.success('WhatsApp connected successfully!');
+              onSuccess?.();
+              onClose();
+              return;
+            }
+          } catch (err) {
+            console.error('Status check error:', err);
           }
+
+          setIsConnecting(false);
         }
       }, 1000);
 
-    } catch (err: any) {
-      console.error('Popup error:', err);
-      setError(err.message);
-      setIsConnecting(false);
-    }
-  };
+      // Timeout after 5 minutes
+      setTimeout(() => {
+        if (checkIntervalRef.current) {
+          clearInterval(checkIntervalRef.current);
+          checkIntervalRef.current = null;
+          setIsConnecting(false);
+        }
+      }, 5 * 60 * 1000);
 
-  const handleBackendConnection = async (code: string) => {
-    try {
-      const response = await meta.connect({ code });
-      if (response.data?.success) {
-        toast.success('WhatsApp connected successfully!');
-        onSuccess?.();
-        onClose();
-      } else {
-        throw new Error(response.data?.error || 'Connection failed');
-      }
     } catch (err: any) {
-      console.error('Backend error:', err);
+      console.error('❌ Connect error:', err);
       setError(err.message || 'Failed to connect');
       setIsConnecting(false);
+      toast.error(err.message || 'Failed to connect');
     }
   };
 
@@ -170,50 +154,97 @@ const MetaConnectModal: React.FC<MetaConnectModalProps> = ({
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b dark:border-gray-700">
           <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
-            Connect WhatsApp
+            Connect WhatsApp Business
           </h2>
-          <button onClick={onClose} disabled={isConnecting} className="text-gray-400 hover:text-gray-600">
+          <button
+            onClick={onClose}
+            disabled={isConnecting}
+            className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition disabled:opacity-50"
+          >
             <X size={24} />
           </button>
         </div>
 
         {/* Content */}
         <div className="p-6 space-y-6">
+          {/* Icon */}
           <div className="text-center">
-            <div className="w-16 h-16 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
-              <MessageCircle className="w-8 h-8 text-green-600" />
+            <div className="w-20 h-20 bg-linear-to-br from-green-400 to-green-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg">
+              <svg viewBox="0 0 24 24" className="w-10 h-10 fill-white">
+                <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+              </svg>
             </div>
             <p className="text-gray-600 dark:text-gray-400">
-              Connect your WhatsApp Business account to start messaging.
+              Connect your WhatsApp Business account to start messaging customers.
             </p>
           </div>
 
+          {/* Error */}
           {error && (
-            <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm flex items-center gap-2">
-              <AlertCircle size={16} />
-              {error}
+            <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="text-red-500 shrink-0 mt-0.5" size={20} />
+                <div>
+                  <p className="text-sm font-medium text-red-800 dark:text-red-200">
+                    Connection Failed
+                  </p>
+                  <p className="text-sm text-red-700 dark:text-red-300 mt-1">{error}</p>
+                </div>
+              </div>
             </div>
           )}
 
-          <div className="space-y-3">
-            <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
-              <CheckCircle className="w-4 h-4 text-green-500" />
-              <span>Facebook account required</span>
-            </div>
-            <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
-              <CheckCircle className="w-4 h-4 text-green-500" />
-              <span>Business verification may be needed</span>
-            </div>
-            <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
-              <CheckCircle className="w-4 h-4 text-green-500" />
-              <span>Valid phone number needed</span>
-            </div>
+          {/* Features */}
+          <div className="bg-green-50 dark:bg-green-900/10 rounded-lg p-4 space-y-3">
+            <h4 className="text-sm font-semibold text-green-900 dark:text-green-100">
+              What you'll get:
+            </h4>
+            <ul className="text-sm text-green-800 dark:text-green-200 space-y-2">
+              <li className="flex items-center gap-2">
+                <CheckCircle className="w-4 h-4 text-green-600 dark:text-green-400" />
+                Send & receive WhatsApp messages
+              </li>
+              <li className="flex items-center gap-2">
+                <CheckCircle className="w-4 h-4 text-green-600 dark:text-green-400" />
+                Create marketing campaigns
+              </li>
+              <li className="flex items-center gap-2">
+                <CheckCircle className="w-4 h-4 text-green-600 dark:text-green-400" />
+                Automated chatbot responses
+              </li>
+              <li className="flex items-center gap-2">
+                <CheckCircle className="w-4 h-4 text-green-600 dark:text-green-400" />
+                Real-time analytics
+              </li>
+            </ul>
           </div>
 
+          {/* Requirements */}
+          <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+            <h4 className="text-sm font-semibold text-blue-900 dark:text-blue-100 mb-2">
+              Requirements:
+            </h4>
+            <ul className="text-sm text-blue-700 dark:text-blue-300 space-y-1">
+              <li>• Facebook account with admin access</li>
+              <li>• Meta Business Manager account</li>
+              <li>• Valid phone number for WhatsApp</li>
+            </ul>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="p-6 border-t dark:border-gray-700 flex gap-3">
+          <button
+            onClick={onClose}
+            disabled={isConnecting}
+            className="flex-1 px-4 py-2.5 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg font-medium transition disabled:opacity-50"
+          >
+            Cancel
+          </button>
           <button
             onClick={handleConnect}
-            disabled={isConnecting || isFBLoading}
-            className="w-full py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium flex items-center justify-center gap-2 transition disabled:opacity-50"
+            disabled={isConnecting}
+            className="flex-1 px-4 py-3 bg-green-600 hover:bg-green-700 disabled:bg-green-400 text-white rounded-lg font-medium transition flex items-center justify-center gap-2"
           >
             {isConnecting ? (
               <>
@@ -222,17 +253,13 @@ const MetaConnectModal: React.FC<MetaConnectModalProps> = ({
               </>
             ) : (
               <>
-                <MessageCircle className="w-5 h-5" />
-                Connect WhatsApp Business
+                <svg viewBox="0 0 24 24" className="w-5 h-5 fill-current">
+                  <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+                </svg>
+                Connect WhatsApp
               </>
             )}
           </button>
-
-          {!isFBLoading && (
-            <p className="text-xs text-center text-gray-400">
-              {isFBReady ? '✅ Secure connection via Meta' : '⚠️ Using standard connection'}
-            </p>
-          )}
         </div>
       </div>
     </div>
