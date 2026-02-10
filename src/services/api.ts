@@ -354,13 +354,15 @@ export const whatsapp = {
 };
 
 // ------------------------------
-// META API ✅ UPDATED & EXPANDED
+// META API ✅ COMPLETE WITH MODE SUPPORT
 // ------------------------------
 export const meta = {
   /**
-   * Get Meta OAuth URL for Embedded Signup
+   * Get Meta OAuth URL with mode selection
+   * @param mode - 'new' (Embedded Signup), 'existing' (Standard OAuth), or 'both' (default)
    */
-  getAuthUrl: () => api.get("/meta/auth/url"),
+  getAuthUrl: (mode: 'new' | 'existing' | 'both' = 'both') => 
+    api.get("/meta/auth/url", { params: { mode } }),
 
   /**
    * Connect Meta account with authorization code
@@ -369,9 +371,43 @@ export const meta = {
     api.post("/meta/connect", data),
 
   /**
+   * Alternative callback endpoint
+   */
+  callback: (data: { code: string; state?: string }) =>
+    api.post("/meta/auth/callback", data),
+
+  /**
    * Get connection status
    */
   getStatus: () => api.get("/meta/status"),
+
+  /**
+   * Get WhatsApp Business connection status (with fallback)
+   */
+  getConnectionStatus: async () => {
+    try {
+      return await api.get("/meta/status");
+    } catch (error) {
+      // Fallback for direct fetch
+      const token = localStorage.getItem('token') || localStorage.getItem('accessToken');
+      const apiUrl = API_URL;
+      
+      const response = await fetch(`${apiUrl}/meta/status`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      
+      const data = await response.json();
+      return { data };
+    }
+  },
 
   /**
    * Refresh connection data (sync phone numbers, etc.)
@@ -395,6 +431,11 @@ export const meta = {
     api.post(`/meta/phone-numbers/${phoneNumberId}/register`, { pin }),
 
   /**
+   * Get linked business accounts
+   */
+  getBusinessAccounts: () => api.get("/meta/business-accounts"),
+
+  /**
    * Send test message
    */
   sendTestMessage: (data: {
@@ -406,7 +447,7 @@ export const meta = {
   /**
    * @deprecated Use whatsapp.sendText instead
    */
-  sendTest: (data: any) => api.post("/whatsapp/send/text", data),
+  sendTest: (data: any) => meta.sendTestMessage(data),
 };
 
 // ------------------------------
