@@ -1,197 +1,426 @@
 // src/services/api.ts
 
-import axios, { AxiosError, type InternalAxiosRequestConfig } from "axios";
+import axios, { 
+  AxiosError, 
+  AxiosInstance, 
+  AxiosRequestConfig,
+  InternalAxiosRequestConfig 
+} from 'axios';
 
-// ------------------------------
-// BASE URL CONFIGURATION
-// ------------------------------
+// ============================================
+// TYPE DEFINITIONS
+// ============================================
+
+interface ApiResponse<T = any> {
+  success: boolean;
+  data: T;
+  message?: string;
+  meta?: {
+    page?: number;
+    limit?: number;
+    total?: number;
+    totalPages?: number;
+  };
+}
+
+interface ApiError {
+  success: false;
+  message: string;
+  code?: string;
+  details?: any;
+  stack?: string;
+}
+
+interface RefreshTokenResponse {
+  accessToken: string;
+  refreshToken: string;
+}
+
+// ============================================
+// CONFIGURATION
+// ============================================
+
 const getApiBaseUrl = (): string => {
   const envUrl = import.meta.env.VITE_API_URL;
 
   if (envUrl) {
-    const cleanUrl = envUrl.replace(/\/+$/, "");
-    if (cleanUrl.endsWith("/api/v1")) return cleanUrl;
-    if (cleanUrl.endsWith("/api")) return `${cleanUrl}/v1`;
+    const cleanUrl = envUrl.replace(/\/+$/, '');
+    
+    // If already has /api/v1, use as-is
+    if (cleanUrl.endsWith('/api/v1')) {
+      return cleanUrl;
+    }
+    
+    // If has /api but not version, add version
+    if (cleanUrl.endsWith('/api')) {
+      return `${cleanUrl}/v1`;
+    }
+    
+    // Otherwise add full path
     return `${cleanUrl}/api/v1`;
   }
 
+  // Default to production in production build
   if (import.meta.env.PROD) {
-    // ✅ Correct production API
-    return "https://wabmeta-api.onrender.com/api/v1";
+    return 'https://wabmeta-api.onrender.com/api/v1';
   }
 
-  return "http://localhost:5001/api/v1";
+  // Development default
+  return 'http://localhost:10000/api/v1';
 };
 
-const API_URL = getApiBaseUrl();
+const API_BASE_URL = getApiBaseUrl();
 
-console.log("🔗 API Base URL:", API_URL);
-console.log("🌐 Environment:", import.meta.env.MODE);
-
-// ------------------------------
-// HELPERS
-// ------------------------------
-const isJwtLike = (t: string) => typeof t === "string" && t.split(".").length === 3;
-
-const cleanupInvalidTokens = () => {
-  const maybeBad =
-    localStorage.getItem("token") ||
-    localStorage.getItem("wabmeta_token");
-
-  // remove legacy keys if they are not JWT
-  if (maybeBad && !isJwtLike(maybeBad)) {
-    localStorage.removeItem("token");
-    localStorage.removeItem("wabmeta_token");
-  }
-};
-
-// ------------------------------
-// AXIOS INSTANCE
-// ------------------------------
-const api = axios.create({
-  baseURL: API_URL,
-  timeout: 30000,
-  headers: {
-    "Content-Type": "application/json",
-    Accept: "application/json",
-  },
-  withCredentials: true,
+// Log configuration
+console.log('🔗 API Configuration:', {
+  baseUrl: API_BASE_URL,
+  environment: import.meta.env.MODE,
+  isDevelopment: import.meta.env.DEV,
+  isProduction: import.meta.env.PROD,
 });
 
-// ------------------------------
+// ============================================
+// TOKEN MANAGEMENT
+// ============================================
+
+const TOKEN_KEYS = {
+  ACCESS: 'accessToken',
+  REFRESH: 'refreshToken',
+  USER: 'user',
+  ADMIN: 'wabmeta_admin_token',
+  LEGACY_TOKEN: 'token',
+  LEGACY_WABMETA: 'wabmeta_token',
+} as const;
+
+/**
+ * Check if a string is a valid JWT token
+ */
+const isValidJWT = (token: string): boolean => {
+  if (!token || typeof token !== 'string') return false;
+  const parts = token.split('.');
+  return parts.length === 3;
+};
+
+/**
+ * Get access token from storage
+ */
+const getAccessToken = (): string | null => {
+  // Try modern token first
+  let token = localStorage.getItem(TOKEN_KEYS.ACCESS);
+  
+  // Fallback to legacy tokens
+  if (!token || !isValidJWT(token)) {
+    token = localStorage.getItem(TOKEN_KEYS.LEGACY_TOKEN) || 
+            localStorage.getItem(TOKEN_KEYS.LEGACY_WABMETA);
+  }
+  
+  return token && isValidJWT(token) ? token : null;
+};
+
+/**
+ * Get refresh token from storage
+ */
+const getRefreshToken = (): string | null => {
+  const token = localStorage.getItem(TOKEN_KEYS.REFRESH);
+  return token && isValidJWT(token) ? token : null;
+};
+
+/**
+ * Get admin token from storage
+ */
+const getAdminToken = (): string | null => {
+  const token = localStorage.getItem(TOKEN_KEYS.ADMIN);
+  return token && isValidJWT(token) ? token : null;
+};
+
+/**
+ * Set authentication tokens
+ */
+const setAuthTokens = (accessToken: string, refreshToken?: string) => {
+  if (accessToken && isValidJWT(accessToken)) {
+    localStorage.setItem(TOKEN_KEYS.ACCESS, accessToken);
+    // Keep legacy tokens in sync
+    localStorage.setItem(TOKEN_KEYS.LEGACY_TOKEN, accessToken);
+    localStorage.setItem(TOKEN_KEYS.LEGACY_WABMETA, accessToken);
+  }
+  
+  if (refreshToken && isValidJWT(refreshToken)) {
+    localStorage.setItem(TOKEN_KEYS.REFRESH, refreshToken);
+  }
+};
+
+/**
+ * Clear all authentication data
+ */
+const clearAuthData = () => {
+  Object.values(TOKEN_KEYS).forEach(key => {
+    localStorage.removeItem(key);
+  });
+};
+
+/**
+ * Clean up invalid tokens
+ */
+const cleanupInvalidTokens = () => {
+  Object.values(TOKEN_KEYS).forEach(key => {
+    const value = localStorage.getItem(key);
+    if (value && !isValidJWT(value)) {
+      localStorage.removeItem(key);
+      console.warn(`⚠️ Removed invalid token: ${key}`);
+    }
+  });
+};
+
+// ============================================
+// AXIOS INSTANCE
+// ============================================
+
+const api: AxiosInstance = axios.create({
+  baseURL: API_BASE_URL,
+  timeout: 30000,
+  headers: {
+    'Content-Type': 'application/json',
+    'Accept': 'application/json',
+  },
+  withCredentials: true, // Important for cookies
+});
+
+// ============================================
 // REQUEST INTERCEPTOR
-// ------------------------------
+// ============================================
+
 api.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
-    const method = config.method?.toUpperCase() || "GET";
-    const url = config.url || "";
-    console.log(`📤 ${method} ${url}`);
+    const method = config.method?.toUpperCase() || 'GET';
+    const url = config.url || '';
+    
+    if (import.meta.env.DEV) {
+      console.log(`📤 ${method} ${url}`);
+    }
 
+    // Clean up invalid tokens before each request
     cleanupInvalidTokens();
 
-    const isAdminRoute = url.includes("/admin");
+    // Determine if this is an admin route
+    const isAdminRoute = url.includes('/admin');
 
-    // Admin token
-    const adminToken = localStorage.getItem("wabmeta_admin_token");
+    // Get appropriate token
+    const token = isAdminRoute 
+      ? getAdminToken() 
+      : getAccessToken();
 
-    // User token
-    const userToken =
-      localStorage.getItem("accessToken") ||
-      localStorage.getItem("token") ||
-      localStorage.getItem("wabmeta_token");
-
-    const tokenToUse = isAdminRoute ? adminToken : userToken;
-
-    if (tokenToUse && isJwtLike(tokenToUse)) {
-      config.headers.Authorization = `Bearer ${tokenToUse}`;
-    } else {
-      // prevent "invalid signature" spam
-      if (!isAdminRoute) {
-        if (tokenToUse && !isJwtLike(tokenToUse)) {
-          localStorage.removeItem("accessToken");
-          localStorage.removeItem("token");
-          localStorage.removeItem("wabmeta_token");
-        }
-      }
+    // Add authorization header if token exists
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
     }
 
     return config;
   },
   (error: AxiosError) => {
-    console.error("❌ Request Error:", error.message);
+    console.error('❌ Request Error:', error.message);
     return Promise.reject(error);
   }
 );
 
-// ------------------------------
+// ============================================
 // RESPONSE INTERCEPTOR
-// ------------------------------
+// ============================================
+
+let isRefreshing = false;
+let failedQueue: Array<{
+  resolve: (value?: any) => void;
+  reject: (reason?: any) => void;
+}> = [];
+
+const processQueue = (error: AxiosError | null, token: string | null = null) => {
+  failedQueue.forEach(prom => {
+    if (error) {
+      prom.reject(error);
+    } else {
+      prom.resolve(token);
+    }
+  });
+  
+  failedQueue = [];
+};
+
 api.interceptors.response.use(
   (response) => {
-    console.log(`📥 ${response.status} ${response.config.url}`);
+    const status = response.status;
+    const url = response.config.url || '';
+    
+    if (import.meta.env.DEV) {
+      console.log(`📥 ${status} ${url}`);
+    }
+    
     return response;
   },
-  async (error: AxiosError) => {
-    const status = error.response?.status || "ERR";
-    const url = error.config?.url || "";
-    const data = error.response?.data as any;
+  async (error: AxiosError<ApiError>) => {
+    const originalRequest = error.config as InternalAxiosRequestConfig & { 
+      _retry?: boolean 
+    };
+    
+    const status = error.response?.status;
+    const url = originalRequest?.url || '';
+    const errorData = error.response?.data;
 
-    console.error(`❌ ${status} ${url}`, data);
+    console.error(`❌ ${status} ${url}`, errorData?.message || error.message);
 
     // Network error
-    if (error.code === "ERR_NETWORK") {
-      console.error("🔴 Network Error - Backend down or CORS misconfigured");
+    if (error.code === 'ERR_NETWORK') {
+      console.error('🔴 Network Error - Backend may be down or CORS misconfigured');
+      return Promise.reject({
+        message: 'Cannot connect to server. Please check your internet connection.',
+        code: 'NETWORK_ERROR',
+      });
     }
 
-    // 401 handling (refresh)
-    if (status === 401 && !url.includes("/auth/refresh")) {
-      const isAdminRoute = url.includes("/admin");
+    // Timeout error
+    if (error.code === 'ECONNABORTED') {
+      console.error('⏱️ Request Timeout');
+      return Promise.reject({
+        message: 'Request timed out. Please try again.',
+        code: 'TIMEOUT',
+      });
+    }
 
+    // Handle 401 Unauthorized
+    if (status === 401 && originalRequest && !originalRequest._retry) {
+      // Determine if admin or user route
+      const isAdminRoute = url.includes('/admin');
+
+      // For admin routes, just redirect to admin login
       if (isAdminRoute) {
-        localStorage.removeItem("wabmeta_admin_token");
-        if (window.location.pathname.startsWith("/admin")) {
-          window.location.href = "/admin/login";
+        localStorage.removeItem(TOKEN_KEYS.ADMIN);
+        
+        // Only redirect if we're on an admin page
+        if (window.location.pathname.startsWith('/admin')) {
+          window.location.href = '/admin/login';
         }
+        
         return Promise.reject(error);
       }
 
-      const refreshToken = localStorage.getItem("refreshToken");
+      // For user routes, try to refresh token
+      // But skip refresh for login, register, and refresh endpoints
+      const skipRefresh = 
+        url.includes('/auth/login') || 
+        url.includes('/auth/register') ||
+        url.includes('/auth/refresh') ||
+        url.includes('/auth/google');
 
-      // If no refresh token => logout
+      if (skipRefresh) {
+        clearAuthData();
+        return Promise.reject(error);
+      }
+
+      // Check if we have a refresh token
+      const refreshToken = getRefreshToken();
+      
       if (!refreshToken) {
-        localStorage.removeItem("accessToken");
-        localStorage.removeItem("token");
-        localStorage.removeItem("wabmeta_token");
-        window.location.href = "/login";
+        console.warn('⚠️ No refresh token available');
+        clearAuthData();
+        window.location.href = '/login';
         return Promise.reject(error);
       }
+
+      // If already refreshing, queue this request
+      if (isRefreshing) {
+        return new Promise((resolve, reject) => {
+          failedQueue.push({ resolve, reject });
+        })
+          .then(token => {
+            if (originalRequest.headers) {
+              originalRequest.headers.Authorization = `Bearer ${token}`;
+            }
+            return api(originalRequest);
+          })
+          .catch(err => Promise.reject(err));
+      }
+
+      // Mark as retrying
+      originalRequest._retry = true;
+      isRefreshing = true;
 
       try {
-        // ✅ IMPORTANT: backend expects refreshToken in body OR cookie (not Authorization header)
-        const refreshResponse = await axios.post(
-          `${API_URL}/auth/refresh`,
+        console.log('🔄 Attempting token refresh...');
+        
+        // Call refresh endpoint
+        const response = await axios.post<ApiResponse<RefreshTokenResponse>>(
+          `${API_BASE_URL}/auth/refresh`,
           { refreshToken },
-          { withCredentials: true }
+          { 
+            withCredentials: true,
+            headers: {
+              'Content-Type': 'application/json',
+            }
+          }
         );
 
-        const newAccessToken = refreshResponse.data?.data?.accessToken;
-        const newRefreshToken = refreshResponse.data?.data?.refreshToken;
+        const newAccessToken = response.data?.data?.accessToken;
+        const newRefreshToken = response.data?.data?.refreshToken;
 
-        if (!newAccessToken || !isJwtLike(newAccessToken)) {
-          throw new Error("Refresh did not return valid access token");
+        if (!newAccessToken || !isValidJWT(newAccessToken)) {
+          throw new Error('Invalid access token received from refresh');
         }
 
-        localStorage.setItem("accessToken", newAccessToken);
-        localStorage.setItem("token", newAccessToken);
-        localStorage.setItem("wabmeta_token", newAccessToken);
+        console.log('✅ Token refreshed successfully');
 
-        if (newRefreshToken) {
-          localStorage.setItem("refreshToken", newRefreshToken);
+        // Store new tokens
+        setAuthTokens(newAccessToken, newRefreshToken);
+
+        // Process queued requests
+        processQueue(null, newAccessToken);
+
+        // Retry original request with new token
+        if (originalRequest.headers) {
+          originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
         }
 
-        // retry original request
-        if (error.config) {
-          error.config.headers = error.config.headers || {};
-          (error.config.headers as any).Authorization = `Bearer ${newAccessToken}`;
-          return api.request(error.config);
-        }
+        return api(originalRequest);
+
       } catch (refreshError) {
-        console.error("🔴 Token refresh failed:", refreshError);
-        localStorage.removeItem("accessToken");
-        localStorage.removeItem("refreshToken");
-        localStorage.removeItem("token");
-        localStorage.removeItem("wabmeta_token");
-        window.location.href = "/login";
+        console.error('❌ Token refresh failed:', refreshError);
+        
+        // Clear auth data
+        clearAuthData();
+        
+        // Process queued requests with error
+        processQueue(refreshError as AxiosError, null);
+        
+        // Redirect to login
+        window.location.href = '/login';
+        
+        return Promise.reject(refreshError);
+      } finally {
+        isRefreshing = false;
       }
+    }
+
+    // Handle 403 Forbidden
+    if (status === 403) {
+      console.error('🚫 Access Forbidden');
+    }
+
+    // Handle 429 Too Many Requests
+    if (status === 429) {
+      console.error('⏸️ Rate Limited');
+    }
+
+    // Handle 500+ Server Errors
+    if (status && status >= 500) {
+      console.error('💥 Server Error');
     }
 
     return Promise.reject(error);
   }
 );
 
-// ------------------------------
-// AUTH API
-// ------------------------------
+// ============================================
+// API MODULES
+// ============================================
+
+// ---------- AUTH ----------
 export const auth = {
   register: (data: {
     email: string;
@@ -200,679 +429,334 @@ export const auth = {
     lastName?: string;
     phone?: string;
     organizationName?: string;
-  }) => api.post("/auth/register", data),
+  }) => api.post<ApiResponse>('/auth/register', data),
 
-  login: (data: { email: string; password: string }, config?: any) =>
-    api.post("/auth/login", data, config),
+  login: (data: { email: string; password: string }) => 
+    api.post<ApiResponse<{ accessToken: string; refreshToken: string; user: any }>>('/auth/login', data),
 
-  // ✅ Must send { credential } (ID token JWT)
-  googleLogin: (data: { credential: string }) =>
-    api.post("/auth/google", data),
+  googleLogin: (data: { credential: string }) => 
+    api.post<ApiResponse<{ accessToken: string; refreshToken: string; user: any }>>('/auth/google', data),
 
-  me: () => api.get("/auth/me"),
+  me: () => api.get<ApiResponse>('/auth/me'),
 
-  verifyEmail: (data: { token: string }) => api.post("/auth/verify-email", data),
+  verifyEmail: (data: { token: string }) => api.post<ApiResponse>('/auth/verify-email', data),
 
-  resendVerification: (data: { email: string }) =>
-    api.post("/auth/resend-verification", data),
+  resendVerification: (data: { email: string }) => api.post<ApiResponse>('/auth/resend-verification', data),
 
-  forgotPassword: (data: { email: string }) => api.post("/auth/forgot-password", data),
+  forgotPassword: (data: { email: string }) => api.post<ApiResponse>('/auth/forgot-password', data),
 
-  resetPassword: (data: { token: string; password: string }) =>
-    api.post("/auth/reset-password", data),
+  resetPassword: (data: { token: string; password: string }) => api.post<ApiResponse>('/auth/reset-password', data),
 
-  sendOTP: (data: { email: string }) => api.post("/auth/send-otp", data),
+  refresh: (refreshToken?: string) => 
+    api.post<ApiResponse<RefreshTokenResponse>>('/auth/refresh', { refreshToken }),
 
-  verifyOTP: (data: { email: string; otp: string }) =>
-    api.post("/auth/verify-otp", data),
+  logout: () => api.post<ApiResponse>('/auth/logout'),
 
-  refresh: (refreshToken?: string) =>
-    api.post("/auth/refresh", refreshToken ? { refreshToken } : {}),
-
-  logout: () => api.post("/auth/logout"),
-
-  logoutAll: () => api.post("/auth/logout-all"),
+  logoutAll: () => api.post<ApiResponse>('/auth/logout-all'),
 
   changePassword: (data: { currentPassword: string; newPassword: string }) =>
-    api.post("/auth/change-password", data),
+    api.post<ApiResponse>('/auth/change-password', data),
 };
 
-// ------------------------------
-// CONTACTS API
-// ------------------------------
+// ---------- USERS ----------
+export const users = {
+  getProfile: () => api.get<ApiResponse>('/users/profile'),
+
+  updateProfile: (data: {
+    firstName?: string;
+    lastName?: string;
+    phone?: string;
+    avatar?: string;
+  }) => api.put<ApiResponse>('/users/profile', data),
+
+  updateAvatar: (avatar: string) => api.put<ApiResponse>('/users/avatar', { avatar }),
+
+  getStats: () => api.get<ApiResponse>('/users/stats'),
+
+  getSessions: () => api.get<ApiResponse>('/users/sessions'),
+
+  revokeSession: (sessionId: string) => api.delete<ApiResponse>(`/users/sessions/${sessionId}`),
+
+  revokeAllSessions: () => api.delete<ApiResponse>('/users/sessions'),
+
+  deleteAccount: (data: { password: string; reason?: string }) =>
+    api.delete<ApiResponse>('/users/account', { data }),
+};
+
+// ---------- ORGANIZATIONS ----------
+export const organizations = {
+  getAll: () => api.get<ApiResponse>('/organizations'),
+
+  getCurrent: () => api.get<ApiResponse>('/organizations/current'),
+
+  getById: (id: string) => api.get<ApiResponse>(`/organizations/${id}`),
+
+  create: (data: { name: string; slug?: string }) => api.post<ApiResponse>('/organizations', data),
+
+  update: (id: string, data: any) => api.put<ApiResponse>(`/organizations/${id}`, data),
+
+  delete: (id: string, password: string) => 
+    api.delete<ApiResponse>(`/organizations/${id}`, { data: { password } }),
+
+  inviteMember: (orgId: string, data: { email: string; role: string }) =>
+    api.post<ApiResponse>(`/organizations/${orgId}/members`, data),
+
+  updateMemberRole: (orgId: string, memberId: string, role: string) =>
+    api.put<ApiResponse>(`/organizations/${orgId}/members/${memberId}`, { role }),
+
+  removeMember: (orgId: string, memberId: string) =>
+    api.delete<ApiResponse>(`/organizations/${orgId}/members/${memberId}`),
+
+  switch: (orgId: string) => api.post<ApiResponse>(`/organizations/${orgId}/switch`),
+};
+
+// ---------- CONTACTS ----------
 export const contacts = {
-  getAll: (params?: any) => api.get("/contacts", { params }),
-  create: (data: any) => api.post("/contacts", data),
-  getById: (id: string) => api.get(`/contacts/${id}`),
-  update: (id: string, data: any) => api.put(`/contacts/${id}`, data),
-  delete: (id: string) => api.delete(`/contacts/${id}`),
-  stats: () => api.get("/contacts/stats"),
-  tags: () => api.get("/contacts/tags"),
-  import: (data: any) => api.post("/contacts/import", data),
+  getAll: (params?: any) => api.get<ApiResponse>('/contacts', { params }),
+
+  create: (data: any) => api.post<ApiResponse>('/contacts', data),
+
+  getById: (id: string) => api.get<ApiResponse>(`/contacts/${id}`),
+
+  update: (id: string, data: any) => api.put<ApiResponse>(`/contacts/${id}`, data),
+
+  delete: (id: string) => api.delete<ApiResponse>(`/contacts/${id}`),
+
+  import: (data: any) => api.post<ApiResponse>('/contacts/import', data),
+
+  export: (format: string = 'csv') => 
+    api.get(`/contacts/export?format=${format}`, { responseType: 'blob' }),
+
+  stats: () => api.get<ApiResponse>('/contacts/stats'),
+
+  getTags: () => api.get<ApiResponse>('/contacts/tags'),
 };
 
-// ------------------------------
-// CAMPAIGNS API
-// ------------------------------
-export const campaigns = {
-  getAll: (params?: {
-    page?: number;
-    limit?: number;
-    status?: string;
-    search?: string;
-  }) => api.get("/campaigns", { params }),
-
-  create: (data: any) => api.post("/campaigns", data),
-
-  getById: (id: string) => api.get(`/campaigns/${id}`),
-
-  update: (id: string, data: any) => api.put(`/campaigns/${id}`, data),
-
-  delete: (id: string) => api.delete(`/campaigns/${id}`),
-
-  stats: () => api.get("/campaigns/stats"),
-
-  start: (id: string) => api.post(`/campaigns/${id}/start`),
-
-  pause: (id: string) => api.post(`/campaigns/${id}/pause`),
-
-  resume: (id: string) => api.post(`/campaigns/${id}/resume`),
-
-  cancel: (id: string) => api.post(`/campaigns/${id}/cancel`),
-
-  getContacts: (id: string, params?: any) =>
-    api.get(`/campaigns/${id}/contacts`, { params }),
-};
-
-// ------------------------------
-// TEMPLATES API
-// ------------------------------
+// ---------- TEMPLATES ----------
 export const templates = {
-  getAll: (params?: {
-    page?: number;
-    limit?: number;
-    status?: string;
-    category?: string;
-    search?: string;
-  }) => api.get("/templates", { params }),
+  getAll: (params?: any) => api.get<ApiResponse>('/templates', { params }),
 
-  create: (data: any) => api.post("/templates", data),
+  create: (data: any) => api.post<ApiResponse>('/templates', data),
 
-  getById: (id: string) => api.get(`/templates/${id}`),
+  getById: (id: string) => api.get<ApiResponse>(`/templates/${id}`),
 
-  update: (id: string, data: any) => api.put(`/templates/${id}`, data),
+  update: (id: string, data: any) => api.put<ApiResponse>(`/templates/${id}`, data),
 
-  delete: (id: string) => api.delete(`/templates/${id}`),
+  delete: (id: string) => api.delete<ApiResponse>(`/templates/${id}`),
 
-  stats: () => api.get("/templates/stats"),
+  sync: (whatsappAccountId: string) => 
+    api.post<ApiResponse>('/templates/sync', { whatsappAccountId }),
 
-  approved: () => api.get("/templates", { params: { status: "APPROVED" } }),
+  submitForApproval: (id: string) => api.post<ApiResponse>(`/templates/${id}/submit`),
 
-  preview: (data: any) => api.post("/templates/preview", data),
-
-  sync: (whatsappAccountId: string) =>
-    api.post("/templates/sync", { whatsappAccountId }),
-
-  submitForApproval: (id: string) =>
-    api.post(`/templates/${id}/submit`),
+  stats: () => api.get<ApiResponse>('/templates/stats'),
 };
 
-// ------------------------------
-// WHATSAPP API
-// ------------------------------
+// ---------- CAMPAIGNS ----------
+export const campaigns = {
+  getAll: (params?: any) => api.get<ApiResponse>('/campaigns', { params }),
+
+  create: (data: any) => api.post<ApiResponse>('/campaigns', data),
+
+  getById: (id: string) => api.get<ApiResponse>(`/campaigns/${id}`),
+
+  update: (id: string, data: any) => api.put<ApiResponse>(`/campaigns/${id}`, data),
+
+  delete: (id: string) => api.delete<ApiResponse>(`/campaigns/${id}`),
+
+  start: (id: string) => api.post<ApiResponse>(`/campaigns/${id}/start`),
+
+  pause: (id: string) => api.post<ApiResponse>(`/campaigns/${id}/pause`),
+
+  resume: (id: string) => api.post<ApiResponse>(`/campaigns/${id}/resume`),
+
+  cancel: (id: string) => api.post<ApiResponse>(`/campaigns/${id}/cancel`),
+
+  stats: () => api.get<ApiResponse>('/campaigns/stats'),
+};
+
+// ---------- WHATSAPP ----------
 export const whatsapp = {
-  connect: (data: { code: string; redirectUri: string }) =>
-    api.post("/whatsapp/connect", data),
+  getAccounts: () => api.get<ApiResponse>('/whatsapp/accounts'),
 
-  accounts: () => api.get("/whatsapp/accounts"),
+  getAccount: (id: string) => api.get<ApiResponse>(`/whatsapp/accounts/${id}`),
 
-  getAccount: (id: string) => api.get(`/whatsapp/accounts/${id}`),
-
-  disconnect: (id: string) => api.delete(`/whatsapp/accounts/${id}`),
-
-  setDefault: (id: string) => api.post(`/whatsapp/accounts/${id}/default`),
-
-  sendText: (data: {
-    whatsappAccountId: string;
-    to: string;
-    message: string;
-  }) => api.post("/whatsapp/send/text", data),
-
-  sendTemplate: (data: {
-    whatsappAccountId: string;
-    to: string;
-    templateName: string;
-    templateLanguage: string;
-    components?: any[];
-  }) => api.post("/whatsapp/send/template", data),
-
-  templatesSync: (data: { whatsappAccountId: string }) =>
-    api.post("/whatsapp/templates/sync", data),
-
-  getTemplates: (whatsappAccountId: string) =>
-    api.get(`/whatsapp/accounts/${whatsappAccountId}/templates`),
-};
-
-// ------------------------------
-// META API ✅ COMPLETE WITH MODE SUPPORT
-// ------------------------------
-export const meta = {
-  /**
-   * Get Meta OAuth URL with mode selection
-   * @param mode - 'new' (Embedded Signup), 'existing' (Standard OAuth), or 'both' (default)
-   */
-  getAuthUrl: (mode: 'new' | 'existing' | 'both' = 'both') => 
-    api.get("/meta/auth/url", { params: { mode } }),
-
-  /**
-   * Connect Meta account with authorization code
-   */
   connect: (data: { code: string; state?: string }) => 
-    api.post("/meta/connect", data),
+    api.post<ApiResponse>('/whatsapp/connect', data),
 
-  /**
-   * Alternative callback endpoint
-   */
-  callback: (data: { code: string; state?: string }) =>
-    api.post("/meta/auth/callback", data),
+  disconnect: (id: string) => api.delete<ApiResponse>(`/whatsapp/accounts/${id}`),
 
-  /**
-   * Get connection status
-   */
-  getStatus: () => api.get("/meta/status"),
+  setDefault: (id: string) => api.post<ApiResponse>(`/whatsapp/accounts/${id}/default`),
 
-  /**
-   * Get WhatsApp Business connection status (with fallback)
-   */
-  getConnectionStatus: async () => {
-    try {
-      return await api.get("/meta/status");
-    } catch (error) {
-      // Fallback for direct fetch
-      const token = localStorage.getItem('token') || localStorage.getItem('accessToken');
-      const apiUrl = API_URL;
-      
-      const response = await fetch(`${apiUrl}/meta/status`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
-      
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
-      
-      const data = await response.json();
-      return { data };
-    }
-  },
+  sendText: (data: { whatsappAccountId: string; to: string; message: string }) =>
+    api.post<ApiResponse>('/whatsapp/send/text', data),
 
-  /**
-   * Refresh connection data (sync phone numbers, etc.)
-   */
-  refresh: () => api.post("/meta/refresh"),
-
-  /**
-   * Disconnect Meta account
-   */
-  disconnect: () => api.post("/meta/disconnect"),
-
-  /**
-   * Get connected phone numbers
-   */
-  getPhoneNumbers: () => api.get("/meta/phone-numbers"),
-
-  /**
-   * Register a phone number for messaging
-   */
-  registerPhoneNumber: (phoneNumberId: string, pin?: string) =>
-    api.post(`/meta/phone-numbers/${phoneNumberId}/register`, { pin }),
-
-  /**
-   * Get linked business accounts
-   */
-  getBusinessAccounts: () => api.get("/meta/business-accounts"),
-
-  /**
-   * Send test message
-   */
-  sendTestMessage: (data: {
-    phoneNumberId: string;
-    to: string;
-    message: string;
-  }) => api.post("/meta/test-message", data),
-
-  /**
-   * @deprecated Use whatsapp.sendText instead
-   */
-  sendTest: (data: any) => meta.sendTestMessage(data),
+  sendTemplate: (data: any) => api.post<ApiResponse>('/whatsapp/send/template', data),
 };
 
-// ------------------------------
-// INBOX API
-// ------------------------------
+// ---------- META ----------
+export const meta = {
+  getAuthUrl: (mode: 'new' | 'existing' | 'both' = 'both') => 
+    api.get<ApiResponse<{ url: string }>>('/meta/auth/url', { params: { mode } }),
+
+  connect: (data: { code: string; state?: string }) => 
+    api.post<ApiResponse>('/meta/connect', data),
+
+  getStatus: () => api.get<ApiResponse>('/meta/status'),
+
+  refresh: () => api.post<ApiResponse>('/meta/refresh'),
+
+  disconnect: () => api.post<ApiResponse>('/meta/disconnect'),
+
+  getPhoneNumbers: () => api.get<ApiResponse>('/meta/phone-numbers'),
+
+  sendTestMessage: (data: { phoneNumberId: string; to: string; message: string }) =>
+    api.post<ApiResponse>('/meta/test-message', data),
+};
+
+// ---------- INBOX ----------
 export const inbox = {
-  conversations: (params?: {
-    page?: number;
-    limit?: number;
-    status?: string;
-    search?: string;
-    assignedTo?: string;
-    isArchived?: boolean;
-  }) => api.get("/inbox/conversations", { params }),
+  getConversations: (params?: any) => api.get<ApiResponse>('/inbox/conversations', { params }),
 
-  getConversation: (id: string) => api.get(`/inbox/conversations/${id}`),
+  getConversation: (id: string) => api.get<ApiResponse>(`/inbox/conversations/${id}`),
 
-  getMessages: (conversationId: string, params?: { page?: number; limit?: number }) =>
-    api.get(`/inbox/conversations/${conversationId}/messages`, { params }),
+  getMessages: (conversationId: string, params?: any) =>
+    api.get<ApiResponse>(`/inbox/conversations/${conversationId}/messages`, { params }),
 
   sendMessage: (conversationId: string, data: { content: string; type?: string }) =>
-    api.post(`/inbox/conversations/${conversationId}/messages`, data),
+    api.post<ApiResponse>(`/inbox/conversations/${conversationId}/messages`, data),
 
   markAsRead: (conversationId: string) =>
-    api.post(`/inbox/conversations/${conversationId}/read`),
+    api.post<ApiResponse>(`/inbox/conversations/${conversationId}/read`),
 
-  archive: (conversationId: string) =>
-    api.post(`/inbox/conversations/${conversationId}/archive`),
-
-  unarchive: (conversationId: string) =>
-    api.post(`/inbox/conversations/${conversationId}/unarchive`),
-
-  assign: (conversationId: string, userId: string) =>
-    api.post(`/inbox/conversations/${conversationId}/assign`, { userId }),
-
-  addLabel: (conversationId: string, label: string) =>
-    api.post(`/inbox/conversations/${conversationId}/labels`, { label }),
-
-  removeLabel: (conversationId: string, label: string) =>
-    api.delete(`/inbox/conversations/${conversationId}/labels/${label}`),
-
-  stats: () => api.get("/inbox/stats"),
-
-  quickReplies: () => api.get("/inbox/quick-replies"),
-
-  createQuickReply: (data: { title: string; content: string }) =>
-    api.post("/inbox/quick-replies", data),
+  stats: () => api.get<ApiResponse>('/inbox/stats'),
 };
 
-// ------------------------------
-// CHATBOT API
-// ------------------------------
+// ---------- CHATBOT ----------
 export const chatbot = {
-  getAll: (params?: { page?: number; limit?: number; status?: string }) =>
-    api.get("/chatbot", { params }),
+  getAll: (params?: any) => api.get<ApiResponse>('/chatbot', { params }),
 
-  create: (data: any) => api.post("/chatbot", data),
+  create: (data: any) => api.post<ApiResponse>('/chatbot', data),
 
-  getById: (id: string) => api.get(`/chatbot/${id}`),
+  getById: (id: string) => api.get<ApiResponse>(`/chatbot/${id}`),
 
-  update: (id: string, data: any) => api.put(`/chatbot/${id}`, data),
+  update: (id: string, data: any) => api.put<ApiResponse>(`/chatbot/${id}`, data),
 
-  delete: (id: string) => api.delete(`/chatbot/${id}`),
+  delete: (id: string) => api.delete<ApiResponse>(`/chatbot/${id}`),
 
-  activate: (id: string) => api.post(`/chatbot/${id}/activate`),
+  activate: (id: string) => api.post<ApiResponse>(`/chatbot/${id}/activate`),
 
-  deactivate: (id: string) => api.post(`/chatbot/${id}/deactivate`),
-
-  duplicate: (id: string) => api.post(`/chatbot/${id}/duplicate`),
-
-  stats: (id: string) => api.get(`/chatbot/${id}/stats`),
+  deactivate: (id: string) => api.post<ApiResponse>(`/chatbot/${id}/deactivate`),
 };
 
-// ------------------------------
-// ADMIN API
-// ------------------------------
-export const admin = {
-  // Auth
-  login: (data: { email: string; password: string }) =>
-    api.post("/admin/login", data),
-
-  getProfile: () => api.get("/admin/profile"),
-
-  // Dashboard
-  getDashboard: () => api.get("/admin/dashboard"),
-
-  // Users Management
-  getUsers: (params?: {
-    page?: number;
-    limit?: number;
-    search?: string;
-    status?: string;
-  }) => api.get("/admin/users", { params }),
-
-  getUserById: (id: string) => api.get(`/admin/users/${id}`),
-
-  updateUser: (id: string, data: any) => api.put(`/admin/users/${id}`, data),
-
-  deleteUser: (id: string) => api.delete(`/admin/users/${id}`),
-
-  suspendUser: (id: string) => api.post(`/admin/users/${id}/suspend`),
-
-  activateUser: (id: string) => api.post(`/admin/users/${id}/activate`),
-
-  // Organizations Management
-  getOrganizations: (params?: {
-    page?: number;
-    limit?: number;
-    search?: string;
-    planType?: string;
-  }) => api.get("/admin/organizations", { params }),
-
-  getOrganizationById: (id: string) => api.get(`/admin/organizations/${id}`),
-
-  updateOrganization: (id: string, data: any) =>
-    api.put(`/admin/organizations/${id}`, data),
-
-  deleteOrganization: (id: string) => api.delete(`/admin/organizations/${id}`),
-
-  updateSubscription: (orgId: string, data: any) =>
-    api.put(`/admin/organizations/${orgId}/subscription`, data),
-
-  // Plans Management
-  getPlans: () => api.get("/admin/plans"),
-
-  createPlan: (data: any) => api.post("/admin/plans", data),
-
-  updatePlan: (id: string, data: any) => api.put(`/admin/plans/${id}`, data),
-
-  // Admin Users Management (Super Admin only)
-  getAdmins: () => api.get("/admin/admins"),
-
-  createAdmin: (data: {
-    email: string;
-    password: string;
-    name: string;
-    role?: string;
-  }) => api.post("/admin/admins", data),
-
-  updateAdmin: (id: string, data: any) => api.put(`/admin/admins/${id}`, data),
-
-  deleteAdmin: (id: string) => api.delete(`/admin/admins/${id}`),
-
-  // Activity Logs
-  getActivityLogs: (params?: {
-    page?: number;
-    limit?: number;
-    action?: string;
-    userId?: string;
-  }) => api.get("/admin/activity-logs", { params }),
-
-  // System Settings
-  getSettings: () => api.get("/admin/settings"),
-
-  updateSettings: (data: any) => api.put("/admin/settings", data),
-};
-
-// ------------------------------
-// TEAM / ORGANIZATIONS API
-// ------------------------------
-export const team = {
-  // Get current organization with members
-  getCurrent: () => api.get("/organizations/current"),
-
-  // Get organization by ID
-  getById: (id: string) => api.get(`/organizations/${id}`),
-
-  // Get organization stats
-  getStats: (id: string) => api.get(`/organizations/${id}/stats`),
-
-  // Create organization
-  create: (data: { name: string; slug?: string }) =>
-    api.post("/organizations", data),
-
-  // Update organization
-  update: (orgId: string, data: any) => api.put(`/organizations/${orgId}`, data),
-
-  // Delete organization
-  delete: (orgId: string, password: string) =>
-    api.delete(`/organizations/${orgId}`, { data: { password } }),
-
-  // Invite member
-  inviteMember: (orgId: string, data: { email: string; role: string }) =>
-    api.post(`/organizations/${orgId}/members`, data),
-
-  // Update member role
-  updateMemberRole: (orgId: string, memberId: string, role: string) =>
-    api.put(`/organizations/${orgId}/members/${memberId}`, { role }),
-
-  // Remove member
-  removeMember: (orgId: string, memberId: string) =>
-    api.delete(`/organizations/${orgId}/members/${memberId}`),
-
-  // Leave organization
-  leave: (orgId: string) => api.post(`/organizations/${orgId}/leave`),
-
-  // Transfer ownership
-  transferOwnership: (
-    orgId: string,
-    data: { newOwnerId: string; password: string }
-  ) => api.post(`/organizations/${orgId}/transfer`, data),
-
-  // Switch organization
-  switch: (orgId: string) => api.post(`/organizations/${orgId}/switch`),
-
-  // Get all user's organizations
-  getAll: () => api.get("/organizations"),
-};
-
-// ------------------------------
-// BILLING API
-// ------------------------------
+// ---------- BILLING ----------
 export const billing = {
-  // Current plan & usage
-  getCurrentPlan: () => api.get("/billing/plan"),
+  getCurrentPlan: () => api.get<ApiResponse>('/billing/plan'),
 
-  getUsage: () => api.get("/billing/usage"),
+  getPlans: () => api.get<ApiResponse>('/billing/plans'),
 
-  // Plans
-  getPlans: () => api.get("/billing/plans"),
+  getUsage: () => api.get<ApiResponse>('/billing/usage'),
 
-  // Subscription
-  upgrade: (data: { planType: string; billingCycle: "monthly" | "yearly" }) =>
-    api.post("/billing/upgrade", data),
+  upgrade: (data: { planType: string; billingCycle: string }) =>
+    api.post<ApiResponse>('/billing/upgrade', data),
 
-  cancel: () => api.post("/billing/cancel"),
+  cancel: () => api.post<ApiResponse>('/billing/cancel'),
 
-  // Invoices
-  getInvoices: (params?: { page?: number; limit?: number }) =>
-    api.get("/billing/invoices", { params }),
+  getInvoices: (params?: any) => api.get<ApiResponse>('/billing/invoices', { params }),
 
-  downloadInvoice: (invoiceId: string) =>
-    api.get(`/billing/invoices/${invoiceId}/download`, { responseType: "blob" }),
-
-  // Payment Methods
-  getPaymentMethods: () => api.get("/billing/payment-methods"),
-
-  addPaymentMethod: (data: any) => api.post("/billing/payment-methods", data),
-
-  deletePaymentMethod: (id: string) =>
-    api.delete(`/billing/payment-methods/${id}`),
-
-  setDefaultPaymentMethod: (id: string) =>
-    api.post(`/billing/payment-methods/${id}/default`),
-
-  // Razorpay
   createRazorpayOrder: (data: { planKey: string; billingCycle?: string }) =>
-    api.post("/billing/razorpay/create-order", data),
+    api.post<ApiResponse>('/billing/razorpay/create-order', data),
 
   verifyRazorpayPayment: (data: {
     razorpay_order_id: string;
     razorpay_payment_id: string;
     razorpay_signature: string;
-  }) => api.post("/billing/razorpay/verify", data),
+  }) => api.post<ApiResponse>('/billing/razorpay/verify', data),
 };
 
-// ------------------------------
-// SETTINGS API
-// ------------------------------
-export const settings = {
-  // Profile
-  getProfile: () => api.get("/users/profile"),
-
-  getProfileFull: () => api.get("/users/profile/full"),
-
-  updateProfile: (data: {
-    firstName?: string;
-    lastName?: string | null;
-    phone?: string | null;
-    avatar?: string | null;
-  }) => api.put("/users/profile", data),
-
-  updateAvatar: (avatar: string) => api.put("/users/avatar", { avatar }),
-
-  // User Stats
-  getStats: () => api.get("/users/stats"),
-
-  // Sessions
-  getSessions: () => api.get("/users/sessions"),
-
-  revokeSession: (sessionId: string) =>
-    api.delete(`/users/sessions/${sessionId}`),
-
-  revokeAllSessions: () => api.delete("/users/sessions"),
-
-  // Password
-  changePassword: (data: { currentPassword: string; newPassword: string }) =>
-    api.post("/auth/change-password", data),
-
-  // Delete Account
-  deleteAccount: (data: { password: string; reason?: string }) =>
-    api.delete("/users/account", { data }),
-
-  // Notifications
-  getNotifications: () =>
-    api.get("/settings/notifications").catch(() => ({ data: { data: {} } })),
-
-  updateNotifications: (data: any) => api.put("/settings/notifications", data),
-
-  // API Keys
-  getApiKeys: () =>
-    api.get("/settings/api-keys").catch(() => ({ data: { data: [] } })),
-
-  createApiKey: (data: { name: string; permissions?: string[] }) =>
-    api.post("/settings/api-keys", data),
-
-  deleteApiKey: (id: string) => api.delete(`/settings/api-keys/${id}`),
-
-  // Webhooks
-  getWebhooks: () =>
-    api.get("/settings/webhooks").catch(() => ({ data: { data: [] } })),
-
-  createWebhook: (data: { url: string; events: string[]; secret?: string }) =>
-    api.post("/settings/webhooks", data),
-
-  updateWebhook: (id: string, data: any) =>
-    api.put(`/settings/webhooks/${id}`, data),
-
-  deleteWebhook: (id: string) => api.delete(`/settings/webhooks/${id}`),
-
-  testWebhook: (id: string) => api.post(`/settings/webhooks/${id}/test`),
-};
-
-// ------------------------------
-// NOTIFICATIONS API
-// ------------------------------
-export const notifications = {
-  getAll: (params?: { page?: number; limit?: number; read?: boolean }) =>
-    api.get("/notifications", { params }),
-
-  markAsRead: (id: string) => api.post(`/notifications/${id}/read`),
-
-  markAllAsRead: () => api.post("/notifications/read-all"),
-
-  delete: (id: string) => api.delete(`/notifications/${id}`),
-
-  getUnreadCount: () => api.get("/notifications/unread-count"),
-};
-
-// ------------------------------
-// ANALYTICS / REPORTS API
-// ------------------------------
-export const analytics = {
-  getOverview: (params?: { startDate?: string; endDate?: string }) =>
-    api.get("/analytics/overview", { params }),
-
-  getMessageStats: (params?: { startDate?: string; endDate?: string }) =>
-    api.get("/analytics/messages", { params }),
-
-  getCampaignStats: (params?: { startDate?: string; endDate?: string }) =>
-    api.get("/analytics/campaigns", { params }),
-
-  getContactGrowth: (params?: { startDate?: string; endDate?: string }) =>
-    api.get("/analytics/contacts", { params }),
-
-  export: (params: { type: string; startDate?: string; endDate?: string }) =>
-    api.get("/analytics/export", { params, responseType: "blob" }),
-};
-
-// ------------------------------
-// DASHBOARD API
-// ------------------------------
+// ---------- DASHBOARD ----------
 export const dashboard = {
-  // Get basic stats (backward compatibility)
-  getStats: async () => {
-    try {
-      const [contactsRes, campaignsRes, inboxRes] = await Promise.all([
-        api.get("/contacts/stats").catch(() => ({ data: { data: {} } })),
-        api.get("/campaigns/stats").catch(() => ({ data: { data: {} } })),
-        api.get("/inbox/stats").catch(() => ({ data: { data: {} } })),
-      ]);
+  getStats: () => api.get<ApiResponse>('/dashboard/stats'),
 
-      return {
-        data: {
-          contacts: contactsRes.data?.data?.total ?? 0,
-          messagesSent: campaignsRes.data?.data?.totalMessagesSent ?? 0,
-          deliveryRate: campaignsRes.data?.data?.averageDeliveryRate ?? 0,
-          responseRate: inboxRes.data?.data?.responseRate ?? 0,
-        },
-      };
-    } catch (error) {
-      console.error("Dashboard stats error:", error);
-      return {
-        data: {
-          contacts: 0,
-          messagesSent: 0,
-          deliveryRate: 0,
-          responseRate: 0,
-        },
-      };
-    }
-  },
+  getWidgets: (days: number = 7) => api.get<ApiResponse>('/dashboard/widgets', { params: { days } }),
 
-  // Get dashboard widgets data with time range
-  getWidgets: (days: number = 7) => 
-    api.get("/dashboard/widgets", { params: { days } }),
-
-  // Additional dashboard methods
-  getRecentActivity: (limit: number = 10) =>
-    api.get("/dashboard/activity", { params: { limit } }),
-
-  getQuickStats: () =>
-    api.get("/dashboard/quick-stats"),
-
-  getChartData: (type: string, range: string = "week") =>
-    api.get(`/dashboard/charts/${type}`, { params: { range } }),
+  getActivity: (limit: number = 10) => 
+    api.get<ApiResponse>('/dashboard/activity', { params: { limit } }),
 };
 
-// ------------------------------
-// HEALTH CHECK
-// ------------------------------
+// ---------- ADMIN ----------
+export const admin = {
+  login: (data: { email: string; password: string }) => 
+    api.post<ApiResponse<{ token: string }>>('/admin/login', data),
+
+  getDashboard: () => api.get<ApiResponse>('/admin/dashboard'),
+
+  getUsers: (params?: any) => api.get<ApiResponse>('/admin/users', { params }),
+
+  getOrganizations: (params?: any) => api.get<ApiResponse>('/admin/organizations', { params }),
+
+  getPlans: () => api.get<ApiResponse>('/admin/plans'),
+
+  createPlan: (data: any) => api.post<ApiResponse>('/admin/plans', data),
+
+  updatePlan: (id: string, data: any) => api.put<ApiResponse>(`/admin/plans/${id}`, data),
+};
+
+// ---------- HEALTH ----------
 export const health = {
-  check: () => api.get("/health").catch(() => axios.get(`${API_URL.replace('/api/v1', '')}/health`)),
-  
-  ping: async (): Promise<boolean> => {
+  check: async (): Promise<boolean> => {
     try {
-      await api.get("/health");
+      await api.get('/health');
       return true;
     } catch {
       return false;
     }
   },
+
+  ping: () => api.get('/health'),
 };
 
-// ------------------------------
-// DEFAULT EXPORT
-// ------------------------------
+// ============================================
+// HELPER FUNCTIONS
+// ============================================
+
+export const setAuthToken = (accessToken: string, refreshToken?: string) => {
+  setAuthTokens(accessToken, refreshToken);
+};
+
+export const removeAuthToken = () => {
+  clearAuthData();
+};
+
+export const getAuthToken = () => {
+  return getAccessToken();
+};
+
+export const isAuthenticated = (): boolean => {
+  return !!getAccessToken();
+};
+
+// ============================================
+// ERROR HANDLER
+// ============================================
+
+export const handleApiError = (error: any): string => {
+  if (axios.isAxiosError(error)) {
+    const apiError = error.response?.data as ApiError;
+    return apiError?.message || error.message || 'An error occurred';
+  }
+  
+  if (error instanceof Error) {
+    return error.message;
+  }
+  
+  return 'An unknown error occurred';
+};
+
+// ============================================
+// EXPORTS
+// ============================================
+
 export default api;
+
+export type { ApiResponse, ApiError, RefreshTokenResponse };

@@ -1,367 +1,305 @@
 // src/hooks/useMetaConnection.ts
 
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { meta, whatsapp } from '../services/api';
+import { useState, useCallback, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
+import api from '../services/api';
+import {
+  WhatsAppAccount,
+  EmbeddedSignupConfig,
+  ConnectionProgress,
+  FBLoginResponse,
+} from '../types/meta';
 
-// ============================================
-// TYPES
-// ============================================
-
-interface WhatsAppAccount {
-  id: string;
-  phoneNumber: string;
-  displayName: string;
-  status: string;
-  isDefault: boolean;
-  phoneNumberId?: string;
-  wabaId?: string;
-  qualityRating?: string;
-}
-
-interface PhoneNumber {
-  id: string;
-  phoneNumberId: string;
-  phoneNumber: string;
-  displayName?: string;
-  isPrimary: boolean;
-  isActive: boolean;
-  qualityRating?: string;
-}
-
-interface MetaConnectionState {
-  isConnected: boolean;
-  isConnecting: boolean;
-  status: 'LOADING' | 'CONNECTED' | 'DISCONNECTED' | 'ERROR' | 'TOKEN_EXPIRED';
+interface UseMetaConnectionReturn {
+  // State
   accounts: WhatsAppAccount[];
-  phoneNumbers: PhoneNumber[];
-  wabaId?: string;
-  wabaName?: string;
-  connectedAt?: string;
-  lastSync?: string;
+  isLoading: boolean;
+  isConnecting: boolean;
   error: string | null;
-  primaryAccount?: WhatsAppAccount;
+  progress: ConnectionProgress | null;
+  config: EmbeddedSignupConfig | null;
+  sdkLoaded: boolean;
+
+  // Actions
+  loadAccounts: () => Promise<void>;
+  startConnection: (organizationId: string) => void;
+  disconnectAccount: (accountId: string) => Promise<void>;
+  setDefaultAccount: (accountId: string) => Promise<void>;
+  refreshHealth: (accountId: string) => Promise<void>;
+  syncTemplates: (accountId: string) => Promise<void>;
+  completeConnection: (code: string, organizationId: string) => Promise<void>;
+  clearError: () => void;
 }
 
-const STORAGE_KEY = 'wabmeta_connection';
+export function useMetaConnection(organizationId: string): UseMetaConnectionReturn {
+  const navigate = useNavigate();
+  const [accounts, setAccounts] = useState<WhatsAppAccount[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isConnecting, setIsConnecting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [progress, setProgress] = useState<ConnectionProgress | null>(null);
+  const [config, setConfig] = useState<EmbeddedSignupConfig | null>(null);
+  const [sdkLoaded, setSdkLoaded] = useState(false);
+  
+  const sdkInitialized = useRef(false);
 
-const initialState: MetaConnectionState = {
-  isConnected: false,
-  isConnecting: false,
-  status: 'LOADING',
-  accounts: [],
-  phoneNumbers: [],
-  error: null,
-};
+  // Load Facebook SDK
+  useEffect(() => {
+    loadFacebookSDK();
+    loadConfig();
+  }, []);
 
-// ============================================
-// HELPER: Clear all stored data
-// ============================================
+  const loadFacebookSDK = useCallback(() => {
+    if (sdkInitialized.current) return;
 
-const clearStoredData = () => {
-  localStorage.removeItem(STORAGE_KEY);
-  localStorage.removeItem('meta_connection');
-  localStorage.removeItem('meta_status');
-  localStorage.removeItem('whatsapp_accounts');
-  sessionStorage.removeItem(STORAGE_KEY);
-  console.log('🧹 Cleared all Meta connection cache');
-};
-
-// ============================================
-// HOOK
-// ============================================
-
-const useMetaConnection = () => {
-  const [connection, setConnection] = useState<MetaConnectionState>(initialState);
-  const [loading, setLoading] = useState(true);
-  const isMounted = useRef(true);
-  const fetchInProgress = useRef(false);
-
-  // ==========================================
-  // FETCH STATUS FROM BACKEND
-  // ==========================================
-  const fetchStatus = useCallback(async (showLoading = true) => {
-    // Prevent duplicate fetches
-    if (fetchInProgress.current) {
-      console.log('⏳ Fetch already in progress, skipping...');
+    // Check if already loaded
+    if (window.FB) {
+      setSdkLoaded(true);
       return;
     }
 
-    fetchInProgress.current = true;
+    // Load SDK script
+    const script = document.createElement('script');
+    script.src = 'https://connect.facebook.net/en_US/sdk.js';
+    script.async = true;
+    script.defer = true;
+    script.crossOrigin = 'anonymous';
 
-    try {
-      if (showLoading) {
-        setLoading(true);
-      }
-
-      console.log('🔍 Fetching Meta connection status...');
-
-      // 1. Get Meta connection status from backend
-      const statusRes = await meta.getStatus();
-      const statusData = statusRes.data?.data;
-
-      console.log('📥 Status response:', {
-        isConnected: statusData?.isConnected,
-        status: statusData?.status,
-        accountsCount: statusData?.whatsappAccounts?.length || 0,
-      });
-
-      // 2. Get WhatsApp accounts
-      let accountsData: any[] = [];
-      try {
-        const accountsRes = await whatsapp.accounts();
-        accountsData = accountsRes.data?.data || [];
-        console.log('📱 WhatsApp accounts:', accountsData.length);
-      } catch (e) {
-        console.warn('⚠️ Could not fetch WhatsApp accounts:', e);
-      }
-
-      // 3. Determine connection status
-      // ✅ CRITICAL: Only use backend status, don't use cached data
-      const isConnected = statusData?.isConnected === true;
-      const connectedAccounts = accountsData.filter(
-        (a: any) => a.status === 'CONNECTED'
-      );
-
-      if (!isMounted.current) return;
-
-      if (isConnected || connectedAccounts.length > 0) {
-        // ✅ CONNECTED
-        const accounts = accountsData.map((a: any) => ({
-          id: a.id,
-          phoneNumber: a.phoneNumber,
-          displayName: a.displayName || 'WhatsApp Business',
-          status: a.status,
-          isDefault: a.isDefault || false,
-          phoneNumberId: a.phoneNumberId,
-          wabaId: a.wabaId,
-          qualityRating: a.qualityRating,
-        }));
-
-        const phoneNumbers = (statusData?.phoneNumbers || []).map((p: any) => ({
-          id: p.id,
-          phoneNumberId: p.phoneNumberId,
-          phoneNumber: p.phoneNumber,
-          displayName: p.displayName,
-          isPrimary: p.isPrimary || false,
-          isActive: p.isActive !== false,
-          qualityRating: p.qualityRating,
-        }));
-
-        const primaryAccount = accounts.find((a: WhatsAppAccount) => a.isDefault) || accounts[0];
-
-        setConnection({
-          isConnected: true,
-          isConnecting: false,
-          status: 'CONNECTED',
-          accounts,
-          phoneNumbers,
-          wabaId: statusData?.wabaId || statusData?.connection?.wabaId,
-          wabaName: statusData?.wabaName || statusData?.connection?.wabaName,
-          connectedAt: statusData?.connectedAt || statusData?.connection?.createdAt,
-          lastSync: new Date().toISOString(),
-          error: null,
-          primaryAccount,
+    window.fbAsyncInit = () => {
+      if (config) {
+        window.FB.init({
+          appId: config.appId,
+          autoLogAppEvents: true,
+          xfbml: true,
+          version: config.version,
         });
-
-        // Save to localStorage for quick initial load
-        localStorage.setItem(STORAGE_KEY, JSON.stringify({
-          isConnected: true,
-          status: 'CONNECTED',
-          lastSync: new Date().toISOString(),
-        }));
-
-      } else {
-        // ❌ NOT CONNECTED
-        console.log('⚠️ Not connected, clearing state');
-        
-        // Clear any cached data
-        clearStoredData();
-
-        setConnection({
-          isConnected: false,
-          isConnecting: false,
-          status: statusData?.status === 'TOKEN_EXPIRED' ? 'TOKEN_EXPIRED' : 'DISCONNECTED',
-          accounts: [],
-          phoneNumbers: [],
-          error: statusData?.message || null,
-        });
+        setSdkLoaded(true);
+        sdkInitialized.current = true;
       }
+    };
 
-    } catch (err: any) {
-      console.error('❌ Failed to fetch connection status:', err);
-      
-      if (!isMounted.current) return;
-
-      // On error, assume disconnected (don't use cached data)
-      clearStoredData();
-      
-      setConnection({
-        isConnected: false,
-        isConnecting: false,
-        status: 'ERROR',
-        accounts: [],
-        phoneNumbers: [],
-        error: err.message || 'Failed to check connection status',
-      });
-    } finally {
-      fetchInProgress.current = false;
-      if (isMounted.current) {
-        setLoading(false);
-      }
-    }
-  }, []);
-
-  // ==========================================
-  // DISCONNECT
-  // ==========================================
-  const disconnect = useCallback(async () => {
-    try {
-      console.log('🔌 Disconnecting Meta...');
-      
-      setConnection(prev => ({ ...prev, isConnecting: true }));
-
-      // Call backend disconnect
-      await meta.disconnect();
-
-      // Clear all stored data
-      clearStoredData();
-
-      // Reset state
-      setConnection({
-        isConnected: false,
-        isConnecting: false,
-        status: 'DISCONNECTED',
-        accounts: [],
-        phoneNumbers: [],
-        error: null,
-      });
-
-      console.log('✅ Disconnected successfully');
-      
-      return { success: true };
-
-    } catch (err: any) {
-      console.error('❌ Disconnect failed:', err);
-      
-      // Even if API fails, clear local state
-      clearStoredData();
-      
-      setConnection({
-        isConnected: false,
-        isConnecting: false,
-        status: 'DISCONNECTED',
-        accounts: [],
-        phoneNumbers: [],
-        error: null,
-      });
-
-      throw err;
-    }
-  }, []);
-
-  // ==========================================
-  // START CONNECTION (UI state)
-  // ==========================================
-  const startConnection = useCallback(() => {
-    setConnection(prev => ({
-      ...prev,
-      isConnecting: true,
-      error: null,
-    }));
-  }, []);
-
-  // ==========================================
-  // CANCEL CONNECTION
-  // ==========================================
-  const cancelConnection = useCallback(() => {
-    setConnection(prev => ({
-      ...prev,
-      isConnecting: false,
-      error: null,
-    }));
-  }, []);
-
-  // ==========================================
-  // SET ERROR
-  // ==========================================
-  const setError = useCallback((error: string) => {
-    setConnection(prev => ({
-      ...prev,
-      isConnecting: false,
-      error,
-    }));
-  }, []);
-
-  // ==========================================
-  // REFRESH CONNECTION
-  // ==========================================
-  const refreshConnection = useCallback(async () => {
-    console.log('🔄 Refreshing connection...');
-    await fetchStatus(true);
-  }, [fetchStatus]);
-
-  // ==========================================
-  // COMPLETE CONNECTION (after OAuth success)
-  // ==========================================
-  const completeConnection = useCallback(async () => {
-    console.log('✅ Connection complete, fetching status...');
-    await fetchStatus(true);
-  }, [fetchStatus]);
-
-  // ==========================================
-  // INITIAL FETCH ON MOUNT
-  // ==========================================
-  useEffect(() => {
-    isMounted.current = true;
-    
-    // ✅ Always fetch fresh status from backend on mount
-    // Don't rely on cached localStorage data for isConnected status
-    fetchStatus();
+    document.body.appendChild(script);
 
     return () => {
-      isMounted.current = false;
+      document.body.removeChild(script);
     };
-  }, [fetchStatus]);
+  }, [config]);
 
-  // ==========================================
-  // PERIODIC REFRESH (Optional - every 5 minutes)
-  // ==========================================
+  // Initialize SDK when config is loaded
   useEffect(() => {
-    if (!connection.isConnected) return;
+    if (config && window.FB && !sdkInitialized.current) {
+      window.FB.init({
+        appId: config.appId,
+        autoLogAppEvents: true,
+        xfbml: true,
+        version: config.version,
+      });
+      setSdkLoaded(true);
+      sdkInitialized.current = true;
+    }
+  }, [config]);
 
-    const interval = setInterval(() => {
-      console.log('⏰ Periodic connection refresh...');
-      fetchStatus(false); // Don't show loading for background refresh
-    }, 5 * 60 * 1000); // 5 minutes
-
-    return () => clearInterval(interval);
-  }, [connection.isConnected, fetchStatus]);
-
-  // ==========================================
-  // RETURN
-  // ==========================================
-  return {
-    // State
-    connection,
-    loading,
-    isConnected: connection.isConnected,
-    isConnecting: connection.isConnecting,
-    status: connection.status,
-    accounts: connection.accounts,
-    phoneNumbers: connection.phoneNumbers,
-    primaryAccount: connection.primaryAccount,
-    error: connection.error,
-
-    // Actions
-    startConnection,
-    cancelConnection,
-    completeConnection,
-    disconnect,
-    refreshConnection,
-    setError,
-    fetchStatus,
+  const loadConfig = async () => {
+    try {
+      const response = await api.get('/meta/config');
+      setConfig(response.data.data);
+    } catch (err: any) {
+      console.error('Failed to load Meta config:', err);
+    }
   };
-};
+
+  const loadAccounts = useCallback(async () => {
+    if (!organizationId) return;
+
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const response = await api.get(`/meta/organizations/${organizationId}/accounts`);
+      setAccounts(response.data.data.accounts);
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Failed to load WhatsApp accounts');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [organizationId]);
+
+  // Load accounts on mount
+  useEffect(() => {
+    if (organizationId) {
+      loadAccounts();
+    }
+  }, [organizationId, loadAccounts]);
+
+  const startConnection = useCallback(
+    (orgId: string) => {
+      if (!config || !sdkLoaded || !window.FB) {
+        setError('Facebook SDK not loaded. Please refresh the page.');
+        return;
+      }
+
+      setIsConnecting(true);
+      setError(null);
+      setProgress({
+        step: 'INIT',
+        status: 'in_progress',
+        message: 'Opening WhatsApp Business signup...',
+      });
+
+      // Facebook Login with WhatsApp Business scopes
+      window.FB.login(
+        (response: FBLoginResponse) => {
+          if (response.status === 'connected' && response.authResponse) {
+            // Get the code from authResponse
+            const code = response.authResponse.code || response.authResponse.accessToken;
+            
+            if (code) {
+              completeConnection(code, orgId);
+            } else {
+              setError('Failed to get authorization code');
+              setIsConnecting(false);
+              setProgress(null);
+            }
+          } else {
+            setError('Connection cancelled or failed');
+            setIsConnecting(false);
+            setProgress(null);
+          }
+        },
+        {
+          scope: 'whatsapp_business_management,whatsapp_business_messaging,business_management',
+          response_type: 'code',
+          extras: {
+            setup: {
+              // Embedded Signup specific
+            },
+            featureType: 'whatsapp_embedded_signup',
+            sessionInfoVersion: 2,
+          },
+        }
+      );
+    },
+    [config, sdkLoaded]
+  );
+
+  const completeConnection = async (code: string, orgId: string) => {
+    setIsConnecting(true);
+    setProgress({
+      step: 'TOKEN_EXCHANGE',
+      status: 'in_progress',
+      message: 'Connecting your WhatsApp Business account...',
+    });
+
+    try {
+      const response = await api.post('/meta/callback', {
+        code,
+        organizationId: orgId,
+      });
+
+      if (response.data.success) {
+        setProgress({
+          step: 'COMPLETED',
+          status: 'completed',
+          message: 'WhatsApp account connected successfully!',
+        });
+
+        // Add new account to list
+        if (response.data.data.account) {
+          setAccounts((prev) => [response.data.data.account, ...prev]);
+        }
+
+        // Refresh accounts
+        await loadAccounts();
+      } else {
+        throw new Error(response.data.message || 'Connection failed');
+      }
+    } catch (err: any) {
+      const errorMessage =
+        err.response?.data?.message || err.message || 'Failed to complete connection';
+      setError(errorMessage);
+      setProgress({
+        step: 'COMPLETED',
+        status: 'error',
+        message: errorMessage,
+      });
+    } finally {
+      setIsConnecting(false);
+    }
+  };
+
+  const disconnectAccount = async (accountId: string) => {
+    try {
+      await api.delete(`/meta/organizations/${organizationId}/accounts/${accountId}`);
+      setAccounts((prev) => prev.filter((a) => a.id !== accountId));
+    } catch (err: any) {
+      throw new Error(err.response?.data?.message || 'Failed to disconnect account');
+    }
+  };
+
+  const setDefaultAccount = async (accountId: string) => {
+    try {
+      await api.post(`/meta/organizations/${organizationId}/accounts/${accountId}/default`);
+      setAccounts((prev) =>
+        prev.map((a) => ({
+          ...a,
+          isDefault: a.id === accountId,
+        }))
+      );
+    } catch (err: any) {
+      throw new Error(err.response?.data?.message || 'Failed to set default account');
+    }
+  };
+
+  const refreshHealth = async (accountId: string) => {
+    try {
+      const response = await api.post(
+        `/meta/organizations/${organizationId}/accounts/${accountId}/health`
+      );
+      
+      // Update account in list with new health data
+      if (response.data.data) {
+        await loadAccounts();
+      }
+      
+      return response.data.data;
+    } catch (err: any) {
+      throw new Error(err.response?.data?.message || 'Failed to refresh health');
+    }
+  };
+
+  const syncTemplates = async (accountId: string) => {
+    try {
+      const response = await api.post(
+        `/meta/organizations/${organizationId}/accounts/${accountId}/sync-templates`
+      );
+      return response.data.data;
+    } catch (err: any) {
+      throw new Error(err.response?.data?.message || 'Failed to sync templates');
+    }
+  };
+
+  const clearError = useCallback(() => {
+    setError(null);
+    setProgress(null);
+  }, []);
+
+  return {
+    accounts,
+    isLoading,
+    isConnecting,
+    error,
+    progress,
+    config,
+    sdkLoaded,
+    loadAccounts,
+    startConnection,
+    disconnectAccount,
+    setDefaultAccount,
+    refreshHealth,
+    syncTemplates,
+    completeConnection,
+    clearError,
+  };
+}
 
 export default useMetaConnection;
-export { useMetaConnection };
