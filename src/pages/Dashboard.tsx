@@ -81,6 +81,9 @@ const Dashboard: React.FC = () => {
   
   // WhatsApp accounts
   const [whatsappAccounts, setWhatsappAccounts] = useState<WhatsAppAccount[]>([]);
+  
+  // ✅ NEW: Meta connection status (source of truth)
+  const [metaConnected, setMetaConnected] = useState<boolean>(false);
 
   // Loading states
   const [loading, setLoading] = useState(true);
@@ -89,28 +92,12 @@ const Dashboard: React.FC = () => {
   const [showConnectModal, setShowConnectModal] = useState(false);
   
   const hasCacheRef = useRef(false);
+  const initialLoadDone = useRef(false);
 
   // ============================================
-  // FETCH WHATSAPP ACCOUNTS
+  // ✅ FIXED: CHECK META CONNECTION FIRST
   // ============================================
-  const fetchWhatsAppAccounts = useCallback(async () => {
-    try {
-      const response = await whatsapp.accounts();
-      
-      if (response.data?.success) {
-        const accounts = response.data.data || [];
-        setWhatsappAccounts(accounts);
-        console.log('📱 WhatsApp accounts:', accounts.length);
-      }
-    } catch (error) {
-      console.error('❌ Failed to fetch WhatsApp accounts:', error);
-    }
-  }, []);
-
-  // ============================================
-  // CHECK META CONNECTION
-  // ============================================
-  const checkMetaConnection = useCallback(async () => {
+  const checkMetaConnection = useCallback(async (): Promise<boolean> => {
     try {
       const response = await meta.getStatus();
       
@@ -119,17 +106,61 @@ const Dashboard: React.FC = () => {
         
         console.log('🔗 Meta connection status:', { isConnected, status });
         
-        if (isConnected) {
-          await fetchWhatsAppAccounts();
+        // ✅ Update state
+        setMetaConnected(isConnected);
+        
+        // ✅ If not connected, clear WhatsApp accounts
+        if (!isConnected) {
+          setWhatsappAccounts([]);
+          console.log('⚠️ Meta disconnected - clearing WhatsApp accounts');
         }
         
         return isConnected;
       }
     } catch (error) {
       console.error('❌ Failed to check Meta status:', error);
+      setMetaConnected(false);
+      setWhatsappAccounts([]);
     }
     return false;
-  }, [fetchWhatsAppAccounts]);
+  }, []);
+
+  // ============================================
+  // ✅ FIXED: FETCH WHATSAPP ACCOUNTS ONLY IF CONNECTED
+  // ============================================
+  const fetchWhatsAppAccounts = useCallback(async (forceCheck = false) => {
+    try {
+      // ✅ Check connection first if needed
+      let isConnected = metaConnected;
+      
+      if (forceCheck || !initialLoadDone.current) {
+        isConnected = await checkMetaConnection();
+      }
+      
+      // ✅ Only fetch if actually connected
+      if (!isConnected) {
+        console.log('⏭️ Skipping WhatsApp accounts fetch - not connected');
+        setWhatsappAccounts([]);
+        return;
+      }
+      
+      const response = await whatsapp.accounts();
+      
+      if (response.data?.success) {
+        const accounts = response.data.data || [];
+        setWhatsappAccounts(accounts);
+        console.log('📱 WhatsApp accounts:', accounts.length);
+      }
+    } catch (error: any) {
+      console.error('❌ Failed to fetch WhatsApp accounts:', error);
+      
+      // ✅ If unauthorized or not found, clear accounts
+      if (error.response?.status === 401 || error.response?.status === 404) {
+        setWhatsappAccounts([]);
+        setMetaConnected(false);
+      }
+    }
+  }, [metaConnected, checkMetaConnection]);
 
   // ============================================
   // INITIAL LOAD FROM CACHE
@@ -143,6 +174,7 @@ const Dashboard: React.FC = () => {
         if (cached?.billingUsage !== undefined) setBillingUsage(cached.billingUsage);
         if (cached?.widgets) setWidgets(cached.widgets);
         if (cached?.chartPeriod) setChartPeriod(cached.chartPeriod);
+        // ✅ DON'T cache connection status - always check fresh
         hasCacheRef.current = true;
         setLoading(false);
       }
@@ -200,7 +232,7 @@ const Dashboard: React.FC = () => {
       setBillingUsage(billData);
       setWidgets(wData);
 
-      // Save to cache
+      // ✅ Save to cache (but NOT connection status)
       localStorage.setItem(
         CACHE_KEY,
         JSON.stringify({
@@ -222,6 +254,33 @@ const Dashboard: React.FC = () => {
   }, [chartPeriod]);
 
   // ============================================
+  // ✅ FIXED: SINGLE INITIAL LOAD EFFECT
+  // ============================================
+  useEffect(() => {
+    if (initialLoadDone.current) return;
+    
+    const initializeDashboard = async () => {
+      console.log('🚀 Initializing dashboard...');
+      
+      // 1. Check Meta connection status first
+      const isConnected = await checkMetaConnection();
+      
+      // 2. Only fetch WhatsApp accounts if connected
+      if (isConnected) {
+        await fetchWhatsAppAccounts(false);
+      }
+      
+      // 3. Fetch dashboard data
+      await fetchDashboardData();
+      
+      initialLoadDone.current = true;
+      console.log('✅ Dashboard initialized');
+    };
+    
+    initializeDashboard();
+  }, [checkMetaConnection, fetchWhatsAppAccounts, fetchDashboardData]);
+
+  // ============================================
   // LISTEN FOR META CONNECTION EVENTS
   // ============================================
   useEffect(() => {
@@ -236,20 +295,17 @@ const Dashboard: React.FC = () => {
       
       if (messageTypes.includes(event.data?.type)) {
         console.log('✅ Meta connected via popup:', event.data.type);
+        
         // Refresh everything
+        setMetaConnected(true);
         checkMetaConnection();
-        fetchWhatsAppAccounts();
+        fetchWhatsAppAccounts(true);
         refreshConnection();
         fetchDashboardData({ showFullLoader: false });
       }
     };
 
     window.addEventListener('message', handleMessage);
-    
-    // Initial load
-    checkMetaConnection();
-    fetchWhatsAppAccounts();
-    
     return () => window.removeEventListener('message', handleMessage);
   }, [checkMetaConnection, fetchWhatsAppAccounts, refreshConnection, fetchDashboardData]);
 
@@ -257,48 +313,76 @@ const Dashboard: React.FC = () => {
   // REFETCH WHEN PERIOD CHANGES
   // ============================================
   useEffect(() => {
-    if (hasCacheRef.current) {
-      fetchDashboardData({ showFullLoader: false });
-    } else {
-      fetchDashboardData();
-    }
-  }, [fetchDashboardData]);
+    if (!initialLoadDone.current) return;
+    
+    fetchDashboardData({ showFullLoader: false });
+  }, [chartPeriod, fetchDashboardData]);
 
   // ============================================
-  // ACTIONS
+  // ✅ FIXED: ACTIONS
   // ============================================
   const handleSync = async () => {
     try {
       setRefreshing(true);
-      await Promise.all([
-        refreshConnection(),
-        fetchWhatsAppAccounts(),
-      ]);
+      
+      // Check connection first
+      const isConnected = await checkMetaConnection();
+      
+      if (isConnected) {
+        await Promise.all([
+          refreshConnection(),
+          fetchWhatsAppAccounts(true),
+        ]);
+      }
+      
       await fetchDashboardData({ showFullLoader: false });
     } finally {
       setRefreshing(false);
     }
   };
 
+  // ✅ FIXED: Proper disconnect with cache clear
   const handleDisconnect = async () => {
     try {
       setDisconnecting(true);
+      
+      // 1. Call disconnect API
       await disconnect();
+      
+      // 2. Clear all related state
       setWhatsappAccounts([]);
+      setMetaConnected(false);
+      
+      // 3. Clear cache
+      localStorage.removeItem(CACHE_KEY);
+      
+      // 4. Refresh connection state
       await refreshConnection();
+      
+      // 5. Refresh dashboard data
       await fetchDashboardData({ showFullLoader: false });
+      
+      console.log('✅ Disconnected and cleared all data');
+    } catch (error) {
+      console.error('❌ Disconnect error:', error);
     } finally {
       setDisconnecting(false);
     }
   };
 
+  // ✅ FIXED: Connection success handler
   const handleConnectSuccess = async () => {
     console.log('🎉 Connection successful, refreshing data...');
+    
+    setShowConnectModal(false);
+    setMetaConnected(true);
+    
     await Promise.all([
       checkMetaConnection(),
-      fetchWhatsAppAccounts(),
+      fetchWhatsAppAccounts(true),
       refreshConnection(),
     ]);
+    
     await fetchDashboardData({ showFullLoader: false });
   };
 
@@ -329,10 +413,11 @@ const Dashboard: React.FC = () => {
     return { show: remaining <= 20, remaining };
   }, [billingUsage]);
 
-  // Check if connected (from hook or accounts)
+  // ✅ FIXED: isConnected now uses metaConnected as source of truth
   const isConnected = useMemo(() => {
-    return connection.isConnected || whatsappAccounts.length > 0;
-  }, [connection.isConnected, whatsappAccounts]);
+    // metaConnected is the primary source of truth
+    return metaConnected || connection.isConnected;
+  }, [metaConnected, connection.isConnected]);
 
   // Stats cards configuration
   const statsCards = [
@@ -474,8 +559,8 @@ const Dashboard: React.FC = () => {
         </div>
       )}
 
-      {/* Connected Accounts Summary */}
-      {whatsappAccounts.length > 0 && (
+      {/* Connected Accounts Summary - Only show if actually connected */}
+      {isConnected && whatsappAccounts.length > 0 && (
         <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-xl p-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -527,10 +612,11 @@ const Dashboard: React.FC = () => {
         <RecentActivity activities={widgets?.recentActivity || []} />
       </div>
 
-      {/* Meta Connect Modal */}
+      {/* ✅ FIXED: Meta Connect Modal with onSuccess prop */}
       <MetaConnectModal 
         isOpen={showConnectModal} 
-        onClose={() => setShowConnectModal(false)} 
+        onClose={() => setShowConnectModal(false)}
+        onSuccess={handleConnectSuccess}
       />
     </div>
   );
