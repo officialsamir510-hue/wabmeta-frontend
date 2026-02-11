@@ -2,9 +2,9 @@
 
 import axios, { 
   AxiosError, 
-  AxiosInstance, 
-  AxiosRequestConfig,
-  InternalAxiosRequestConfig 
+  type AxiosInstance, 
+  type AxiosRequestConfig,
+  type InternalAxiosRequestConfig 
 } from 'axios';
 
 // ============================================
@@ -672,6 +672,48 @@ export const billing = {
     razorpay_payment_id: string;
     razorpay_signature: string;
   }) => api.post<ApiResponse>('/billing/razorpay/verify', data),
+};
+// ---------- SETTINGS ----------  ⬅️ YE ADD KAREIN
+export const settings = {
+  getAll: () => api.get<ApiResponse>('/settings'),
+  
+  update: (data: any) => api.put<ApiResponse>('/settings', data),
+  
+  getWebhooks: () => api.get<ApiResponse>('/settings/webhooks'),
+  
+  updateWebhooks: (data: any) => api.put<ApiResponse>('/settings/webhooks', data),
+  
+  testWebhook: () => api.post<ApiResponse>('/settings/webhooks/test'),
+  
+  getApiKeys: () => api.get<ApiResponse>('/settings/api-keys'),
+  
+  generateApiKey: (data: { name: string }) => 
+    api.post<ApiResponse>('/settings/api-keys', data),
+  
+  revokeApiKey: (id: string) => 
+    api.delete<ApiResponse>(`/settings/api-keys/${id}`),
+};
+
+// ---------- TEAM ----------  ⬅️ YE ADD KAREIN
+export const team = {
+  getMembers: () => api.get<ApiResponse>('/team/members'),
+  
+  inviteMember: (data: { email: string; role: string }) => 
+    api.post<ApiResponse>('/team/invite', data),
+  
+  updateMemberRole: (memberId: string, role: string) => 
+    api.put<ApiResponse>(`/team/members/${memberId}`, { role }),
+  
+  removeMember: (memberId: string) => 
+    api.delete<ApiResponse>(`/team/members/${memberId}`),
+  
+  getInvitations: () => api.get<ApiResponse>('/team/invitations'),
+  
+  cancelInvitation: (id: string) => 
+    api.delete<ApiResponse>(`/team/invitations/${id}`),
+  
+  resendInvitation: (id: string) => 
+    api.post<ApiResponse>(`/team/invitations/${id}/resend`),
 };
 
 // ---------- DASHBOARD ----------
