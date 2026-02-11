@@ -328,76 +328,112 @@ const CreateCampaign: React.FC = () => {
   };
 
   // ==========================================
-  // SUBMIT CAMPAIGN
-  // ==========================================
-  const handleSend = async () => {
-    setSending(true);
-    setApiError(null);
+// SUBMIT CAMPAIGN - FIXED
+// ==========================================
+const handleSend = async () => {
+  setSending(true);
+  setApiError(null);
 
-    try {
-      // ✅ Now using the robust function with fallback
-      const whatsappAccountId = await getConnectedWhatsAppAccountId();
+  try {
+    // ✅ Get WhatsApp account with full details
+    const accountsRes = await whatsappApi.accounts();
+    const accounts = Array.isArray(accountsRes.data) 
+      ? accountsRes.data 
+      : Array.isArray(accountsRes.data?.data) 
+        ? accountsRes.data.data 
+        : [];
 
-      let audienceContactIds: string[] = [];
+    console.log("🔍 All WhatsApp Accounts:", accounts);
 
-      // Determine contact IDs based on audience selection
-      if (formData.audienceType === "all") {
-        audienceContactIds = contacts.map((c) => c.id);
-      } else if (formData.audienceType === "tags") {
-        audienceContactIds = contacts
-          .filter((c) => formData.selectedTags.some((tag) => c.tags.includes(tag)))
-          .map((c) => c.id);
-      } else if (formData.audienceType === "manual") {
-        audienceContactIds = formData.selectedContacts;
-      }
-
-      if (audienceContactIds.length === 0) {
-        throw new Error("No recipients selected. Please check your audience filters.");
-      }
-
-      // Prepare scheduledAt date
-      const scheduledAt =
-        formData.scheduleType === "later"
-          ? new Date(`${formData.scheduledDate}T${formData.scheduledTime}:00`).toISOString()
-          : undefined;
-
-      const payload: any = {
-        whatsappAccountId,
-        name: formData.name.trim(),
-        description: formData.description?.trim() || undefined,
-        templateId: formData.templateId,
-        contactIds: audienceContactIds,
-        audienceFilter:
-          formData.audienceType === "tags"
-            ? { tags: formData.selectedTags }
-            : formData.audienceType === "all"
-            ? { all: true }
-            : undefined,
-        variableMapping:
-          Object.keys(formData.variableMapping).length > 0
-            ? formData.variableMapping
-            : undefined,
-        scheduledAt,
-      };
-
-      console.log("📤 Sending campaign payload:", payload);
-
-      const response = await campaignApi.create(payload);
-      console.log("✅ Campaign created:", response.data);
-
-      navigate("/dashboard/campaigns");
-    } catch (error: any) {
-      console.error("❌ Campaign creation error:", error);
-      const errorMessage =
-        error.response?.data?.message ||
-        error.response?.data?.error?.message ||
-        error.message ||
-        "Failed to create campaign";
-      setApiError(errorMessage);
-    } finally {
-      setSending(false);
+    if (!accounts || accounts.length === 0) {
+      throw new Error("No WhatsApp accounts found. Please connect WhatsApp first.");
     }
-  };
+
+    // Get connected/default account
+    const whatsappAccount = accounts.find((a: any) => 
+      String(a.status || '').toUpperCase() === 'CONNECTED' || 
+      a.isDefault === true
+    ) || accounts[0];
+
+    if (!whatsappAccount?.id) {
+      throw new Error("No valid WhatsApp account found.");
+    }
+
+    console.log("✅ Using WhatsApp Account:", {
+      id: whatsappAccount.id,
+      phoneNumberId: whatsappAccount.phoneNumberId,
+      phoneNumber: whatsappAccount.phoneNumber,
+    });
+
+    // Determine contact IDs
+    let audienceContactIds: string[] = [];
+
+    if (formData.audienceType === "all") {
+      audienceContactIds = contacts.map((c) => c.id);
+    } else if (formData.audienceType === "tags") {
+      audienceContactIds = contacts
+        .filter((c) => formData.selectedTags.some((tag) => c.tags.includes(tag)))
+        .map((c) => c.id);
+    } else if (formData.audienceType === "manual") {
+      audienceContactIds = formData.selectedContacts;
+    }
+
+    if (audienceContactIds.length === 0) {
+      throw new Error("No recipients selected. Please check your audience filters.");
+    }
+
+    // Prepare scheduledAt
+    const scheduledAt =
+      formData.scheduleType === "later"
+        ? new Date(`${formData.scheduledDate}T${formData.scheduledTime}:00`).toISOString()
+        : undefined;
+
+    // ✅ FIXED PAYLOAD - Include both whatsappAccountId AND phoneNumberId
+    const payload = {
+      name: formData.name.trim(),
+      description: formData.description?.trim() || undefined,
+      templateId: formData.templateId,
+      contactIds: audienceContactIds,
+      
+      // ✅ CRITICAL: Both IDs
+      whatsappAccountId: whatsappAccount.id,
+      phoneNumberId: whatsappAccount.phoneNumberId,
+      
+      // ✅ Additional context
+      audienceFilter:
+        formData.audienceType === "tags"
+          ? { tags: formData.selectedTags }
+          : formData.audienceType === "all"
+          ? { all: true }
+          : undefined,
+      variableMapping:
+        Object.keys(formData.variableMapping).length > 0
+          ? formData.variableMapping
+          : undefined,
+      scheduledAt,
+    };
+
+    console.log("📤 Campaign Payload:", JSON.stringify(payload, null, 2));
+
+    const response = await campaignApi.create(payload);
+    console.log("✅ Campaign created:", response.data);
+
+    navigate("/dashboard/campaigns");
+    
+  } catch (error: any) {
+    console.error("❌ Campaign creation error:", error);
+    
+    const errorMessage =
+      error.response?.data?.message ||
+      error.response?.data?.error ||
+      error.message ||
+      "Failed to create campaign";
+    
+    setApiError(errorMessage);
+  } finally {
+    setSending(false);
+  }
+};
 
   // ==========================================
   // LOADING STATE
