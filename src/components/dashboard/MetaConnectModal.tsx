@@ -60,16 +60,42 @@ const MetaConnectModal: React.FC<MetaConnectModalProps> = ({
         throw new Error('Failed to get authorization URL');
       }
 
+      // ✅ CRITICAL FIX - Ensure config_id is present for embedded signup
+      let finalAuthUrl = authUrl;
+      const CONFIG_ID = '736708392598776'; // Your Meta embedded signup config ID
+      
+      // Check if config_id is missing and add it
+      if (!authUrl.includes('config_id=')) {
+        console.warn('⚠️ config_id missing from backend, adding manually');
+        
+        // Remove display=popup if exists (not needed for embedded signup)
+        finalAuthUrl = authUrl.replace('&display=popup', '');
+        finalAuthUrl = authUrl.replace('display=popup&', '');
+        finalAuthUrl = authUrl.replace('display=popup', '');
+        
+        // Add config_id before response_type or at appropriate position
+        if (finalAuthUrl.includes('response_type=')) {
+          finalAuthUrl = finalAuthUrl.replace('response_type=', `config_id=${CONFIG_ID}&response_type=`);
+        } else {
+          // Fallback: just append it
+          finalAuthUrl = finalAuthUrl + `&config_id=${CONFIG_ID}`;
+        }
+      }
+      
+      // Debug log (only first 200 chars for security)
+      console.log('✅ Final OAuth URL:', finalAuthUrl.substring(0, 200) + '...');
+      console.log('   Contains config_id:', finalAuthUrl.includes('config_id='));
+
       console.log('✅ Opening Meta auth popup...');
 
-      // Open popup with exact URL from backend
+      // Open popup with exact URL
       const width = 650;
       const height = 750;
       const left = (window.screen.width / 2) - (width / 2);
       const top = (window.screen.height / 2) - (height / 2);
       
       const popup = window.open(
-        authUrl,
+        finalAuthUrl, // ✅ Use finalAuthUrl instead of authUrl
         'MetaAuth',
         `width=${width},height=${height},left=${left},top=${top},scrollbars=yes,resizable=yes,status=yes`
       );
@@ -136,7 +162,8 @@ const MetaConnectModal: React.FC<MetaConnectModalProps> = ({
                 handleAuthCode(code, state);
               } else if (error) {
                 console.error('❌ OAuth error:', error);
-                setError(`Authorization failed: ${error}`);
+                const errorDescription = urlParams.get('error_description');
+                setError(`Authorization failed: ${errorDescription || error}`);
                 setIsConnecting(false);
               }
               
@@ -150,11 +177,14 @@ const MetaConnectModal: React.FC<MetaConnectModalProps> = ({
         }
       }, 500);
 
+      // Store interval reference for cleanup
+      const cleanupUrlCheck = () => clearInterval(urlCheckInterval);
+
       // Timeout after 5 minutes
       setTimeout(() => {
         if (checkIntervalRef.current) {
           clearInterval(checkIntervalRef.current);
-          clearInterval(urlCheckInterval);
+          cleanupUrlCheck();
           checkIntervalRef.current = null;
           
           if (popupRef.current && !popupRef.current.closed) {
