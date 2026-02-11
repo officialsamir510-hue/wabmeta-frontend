@@ -22,7 +22,7 @@ const AuthLayout: React.FC<AuthLayoutProps> = ({
   ];
 
   return (
-    <div className="min-h-screen flex bg-white">
+    <div className="min-h-screen flex bg-white relative z-0">
       {/* LEFT SIDE - BRANDING (Ye wala part gayab ho gaya hoga) */}
       <div className="hidden lg:flex lg:w-1/2 bg-linear-to-br from-primary-600 via-primary-500 to-whatsapp-teal relative overflow-hidden">
         {/* Background Pattern */}
@@ -97,7 +97,7 @@ const AuthLayout: React.FC<AuthLayoutProps> = ({
       </div>
 
       {/* RIGHT SIDE - FORM */}
-      <div className="w-full lg:w-1/2 flex items-center justify-center p-6 sm:p-12 bg-gray-50">
+      <div className="w-full lg:w-1/2 flex items-center justify-center p-6 sm:p-12 bg-gray-50 transform-none">
         <div className="w-full max-w-md bg-white p-8 rounded-2xl shadow-sm border border-gray-100">
           {/* Mobile Logo */}
           <div className="lg:hidden flex justify-center mb-8">

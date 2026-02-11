@@ -3,7 +3,6 @@
 import axios, { 
   AxiosError, 
   type AxiosInstance, 
-  type AxiosRequestConfig,
   type InternalAxiosRequestConfig 
 } from 'axios';
 
@@ -431,8 +430,11 @@ export const auth = {
     organizationName?: string;
   }) => api.post<ApiResponse>('/auth/register', data),
 
-  login: (data: { email: string; password: string }) => 
-    api.post<ApiResponse<{ accessToken: string; refreshToken: string; user: any }>>('/auth/login', data),
+  login: (data: { email: string; password: string; }, p0: { headers: { "x-platform": string; }; }) => 
+    api.post<ApiResponse<{
+      organization: any;
+      tokens: any; accessToken: string; refreshToken: string; user: any 
+}>>('/auth/login', data),
 
   googleLogin: (data: { credential: string }) => 
     api.post<ApiResponse<{ accessToken: string; refreshToken: string; user: any }>>('/auth/google', data),

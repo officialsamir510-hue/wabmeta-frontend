@@ -43,13 +43,6 @@ export interface EmbeddedSignupConfig {
   features: string[];
 }
 
-export interface ConnectionProgress {
-  step: ConnectionStep;
-  status: 'pending' | 'in_progress' | 'completed' | 'error';
-  message: string;
-  data?: any;
-}
-
 export type ConnectionStep =
   | 'INIT'
   | 'TOKEN_EXCHANGE'
@@ -58,6 +51,13 @@ export type ConnectionStep =
   | 'SUBSCRIBE_WEBHOOK'
   | 'SAVING'
   | 'COMPLETED';
+
+export interface ConnectionProgress {
+  step: ConnectionStep;
+  status: 'pending' | 'in_progress' | 'completed' | 'error';
+  message: string;
+  data?: any;
+}
 
 export interface MetaCallbackState {
   organizationId: string;

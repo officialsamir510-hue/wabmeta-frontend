@@ -1,7 +1,6 @@
 import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Mail, Lock, ArrowRight, Phone, AlertCircle } from "lucide-react";
-import AuthLayout from "../components/auth/AuthLayout";
 import Input from "../components/common/Input";
 import Button from "../components/common/Button";
 import Checkbox from "../components/common/Checkbox";
@@ -104,7 +103,7 @@ const Login: React.FC = () => {
   };
 
   return (
-    <AuthLayout title="Welcome back" subtitle="Enter your credentials to access your account">
+    <>
       {apiError && (
         <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl flex items-center space-x-3 text-red-600 animate-fade-in">
           <AlertCircle className="w-5 h-5 shrink-0" />
@@ -224,7 +223,7 @@ const Login: React.FC = () => {
           </Link>
         </p>
       </form>
-    </AuthLayout>
+    </>
   );
 };
 

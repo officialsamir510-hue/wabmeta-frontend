@@ -1,8 +1,14 @@
 // src/context/SocketContext.tsx
+import React, { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from 'react';
 
-import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
-import { io, Socket } from 'socket.io-client';
-import { useAuth } from './AuthContext';
+// Socket type (we'll make it optional)
+interface Socket {
+  connected: boolean;
+  emit: (event: string, data?: any) => void;
+  on: (event: string, callback: (...args: any[]) => void) => void;
+  off: (event: string, callback?: (...args: any[]) => void) => void;
+  disconnect: () => void;
+}
 
 interface SocketContextType {
   socket: Socket | null;
@@ -12,104 +18,109 @@ interface SocketContextType {
   emitTyping: (conversationId: string, isTyping: boolean) => void;
 }
 
-const SocketContext = createContext<SocketContextType>({
+// ✅ ALWAYS provide default values
+const defaultContext: SocketContextType = {
   socket: null,
   isConnected: false,
   joinConversation: () => {},
   leaveConversation: () => {},
   emitTyping: () => {},
-});
+};
 
-export const useSocket = () => useContext(SocketContext);
+// ✅ Create context with default values (NOT undefined)
+const SocketContext = createContext<SocketContextType>(defaultContext);
+
+// ✅ Safe hook that ALWAYS returns valid object
+export function useSocket(): SocketContextType {
+  const context = useContext(SocketContext);
+  // Always return a valid object, never undefined
+  return context || defaultContext;
+}
 
 const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:5000';
 
-export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { isAuthenticated, user } = useAuth();
+export const SocketProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [socket, setSocket] = useState<Socket | null>(null);
-  const [isConnected, setIsConnected] = useState(false);
+  const [isConnected, setIsConnected] = useState<boolean>(false);
 
   useEffect(() => {
-    if (!isAuthenticated || !user) {
-      if (socket) {
-        socket.disconnect();
-        setSocket(null);
+    let socketInstance: any = null;
+
+    const initSocket = async () => {
+      try {
+        const token = localStorage.getItem('accessToken');
+        if (!token) {
+          setIsConnected(false);
+          return;
+        }
+
+        // Dynamic import to prevent build issues
+        const { io } = await import('socket.io-client');
+        
+        socketInstance = io(SOCKET_URL, {
+          auth: { token },
+          transports: ['websocket', 'polling'],
+          reconnection: true,
+          reconnectionAttempts: 5,
+          reconnectionDelay: 1000,
+        });
+
+        socketInstance.on('connect', () => {
+          console.log('[Socket] Connected');
+          setIsConnected(true);
+        });
+
+        socketInstance.on('disconnect', () => {
+          console.log('[Socket] Disconnected');
+          setIsConnected(false);
+        });
+
+        socketInstance.on('connect_error', (err: any) => {
+          console.error('[Socket] Error:', err.message);
+          setIsConnected(false);
+        });
+
+        setSocket(socketInstance);
+      } catch (error) {
+        console.error('[Socket] Init failed:', error);
         setIsConnected(false);
       }
-      return;
-    }
+    };
 
-    const token = localStorage.getItem('accessToken');
-    if (!token) return;
-
-    // Create socket connection
-    const newSocket = io(SOCKET_URL, {
-      auth: { token },
-      transports: ['websocket', 'polling'],
-      reconnection: true,
-      reconnectionAttempts: 5,
-      reconnectionDelay: 1000,
-    });
-
-    newSocket.on('connect', () => {
-      console.log('[Socket] Connected');
-      setIsConnected(true);
-    });
-
-    newSocket.on('disconnect', (reason) => {
-      console.log('[Socket] Disconnected:', reason);
-      setIsConnected(false);
-    });
-
-    newSocket.on('connect_error', (error) => {
-      console.error('[Socket] Connection error:', error.message);
-      setIsConnected(false);
-    });
-
-    setSocket(newSocket);
+    initSocket();
 
     return () => {
-      newSocket.disconnect();
+      if (socketInstance) {
+        socketInstance.disconnect();
+      }
+      setSocket(null);
+      setIsConnected(false);
     };
-  }, [isAuthenticated, user]);
+  }, []);
 
-  const joinConversation = useCallback(
-    (conversationId: string) => {
-      if (socket && isConnected) {
-        socket.emit('join:conversation', conversationId);
-      }
-    },
-    [socket, isConnected]
-  );
+  const joinConversation = useCallback((conversationId: string) => {
+    socket?.emit('join:conversation', conversationId);
+  }, [socket]);
 
-  const leaveConversation = useCallback(
-    (conversationId: string) => {
-      if (socket && isConnected) {
-        socket.emit('leave:conversation', conversationId);
-      }
-    },
-    [socket, isConnected]
-  );
+  const leaveConversation = useCallback((conversationId: string) => {
+    socket?.emit('leave:conversation', conversationId);
+  }, [socket]);
 
-  const emitTyping = useCallback(
-    (conversationId: string, isTyping: boolean) => {
-      if (socket && isConnected) {
-        socket.emit(isTyping ? 'typing:start' : 'typing:stop', { conversationId });
-      }
-    },
-    [socket, isConnected]
-  );
+  const emitTyping = useCallback((conversationId: string, isTyping: boolean) => {
+    socket?.emit(isTyping ? 'typing:start' : 'typing:stop', { conversationId });
+  }, [socket]);
+
+  // ✅ Always provide valid value object
+  const value: SocketContextType = {
+    socket,
+    isConnected,
+    joinConversation,
+    leaveConversation,
+    emitTyping,
+  };
 
   return (
-    <SocketContext.Provider
-      value={{
-        socket,
-        isConnected,
-        joinConversation,
-        leaveConversation,
-        emitTyping,
-      }}
-    >
+    <SocketContext.Provider value={value}>
       {children}
     </SocketContext.Provider>
   );
