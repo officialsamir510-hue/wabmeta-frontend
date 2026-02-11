@@ -20,6 +20,11 @@ const MetaConnectModal: React.FC<MetaConnectModalProps> = ({
   const [error, setError] = useState<string | null>(null);
   const popupRef = useRef<Window | null>(null);
   const checkIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const urlCheckIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  
+  // ✅ NEW: Track if code has been processed to prevent duplicate calls
+  const codeProcessedRef = useRef<boolean>(false);
+  const processingCodeRef = useRef<string | null>(null);
 
   // Cleanup on close/unmount
   useEffect(() => {
@@ -30,28 +35,44 @@ const MetaConnectModal: React.FC<MetaConnectModalProps> = ({
   }, [isOpen]);
 
   const cleanup = () => {
+    // Close popup if open
     if (popupRef.current && !popupRef.current.closed) {
       popupRef.current.close();
     }
     popupRef.current = null;
     
+    // Clear all intervals
     if (checkIntervalRef.current) {
       clearInterval(checkIntervalRef.current);
       checkIntervalRef.current = null;
     }
     
+    if (urlCheckIntervalRef.current) {
+      clearInterval(urlCheckIntervalRef.current);
+      urlCheckIntervalRef.current = null;
+    }
+    
+    // Reset state
     setIsConnecting(false);
     setError(null);
+    
+    // ✅ Reset code tracking
+    codeProcessedRef.current = false;
+    processingCodeRef.current = null;
   };
 
   const handleConnect = async () => {
     try {
       setIsConnecting(true);
       setError(null);
+      
+      // ✅ Reset code tracking for new connection attempt
+      codeProcessedRef.current = false;
+      processingCodeRef.current = null;
 
       console.log('🔗 Getting auth URL from backend...');
 
-      // Get auth URL from backend (with embedded mode by default)
+      // Get auth URL from backend
       const response = await meta.getAuthUrl({ mode: 'embedded' });
       const authUrl = response.data?.data?.url || response.data?.data?.authUrl;
       const state = response.data?.data?.state;
@@ -60,42 +81,35 @@ const MetaConnectModal: React.FC<MetaConnectModalProps> = ({
         throw new Error('Failed to get authorization URL');
       }
 
-      // ✅ CRITICAL FIX - Ensure config_id is present for embedded signup
+      // ✅ Ensure config_id is present for embedded signup
       let finalAuthUrl = authUrl;
-      const CONFIG_ID = '736708392598776'; // Your Meta embedded signup config ID
+      const CONFIG_ID = '736708392598776';
       
-      // Check if config_id is missing and add it
       if (!authUrl.includes('config_id=')) {
         console.warn('⚠️ config_id missing from backend, adding manually');
-        
-        // Remove display=popup if exists (not needed for embedded signup)
         finalAuthUrl = authUrl.replace('&display=popup', '');
-        finalAuthUrl = authUrl.replace('display=popup&', '');
-        finalAuthUrl = authUrl.replace('display=popup', '');
         
-        // Add config_id before response_type or at appropriate position
         if (finalAuthUrl.includes('response_type=')) {
-          finalAuthUrl = finalAuthUrl.replace('response_type=', `config_id=${CONFIG_ID}&response_type=`);
+          finalAuthUrl = finalAuthUrl.replace(
+            'response_type=', 
+            `config_id=${CONFIG_ID}&response_type=`
+          );
         } else {
-          // Fallback: just append it
           finalAuthUrl = finalAuthUrl + `&config_id=${CONFIG_ID}`;
         }
       }
       
-      // Debug log (only first 200 chars for security)
-      console.log('✅ Final OAuth URL:', finalAuthUrl.substring(0, 200) + '...');
-      console.log('   Contains config_id:', finalAuthUrl.includes('config_id='));
-
       console.log('✅ Opening Meta auth popup...');
+      console.log('   URL has config_id:', finalAuthUrl.includes('config_id='));
 
-      // Open popup with exact URL
+      // Open popup
       const width = 650;
       const height = 750;
       const left = (window.screen.width / 2) - (width / 2);
       const top = (window.screen.height / 2) - (height / 2);
       
       const popup = window.open(
-        finalAuthUrl, // ✅ Use finalAuthUrl instead of authUrl
+        finalAuthUrl,
         'MetaAuth',
         `width=${width},height=${height},left=${left},top=${top},scrollbars=yes,resizable=yes,status=yes`
       );
@@ -105,94 +119,96 @@ const MetaConnectModal: React.FC<MetaConnectModalProps> = ({
       }
 
       popupRef.current = popup;
-
-      // Focus the popup
       popup.focus();
 
-      // Check popup status periodically
-      checkIntervalRef.current = setInterval(async () => {
+      // ✅ FIXED: Single URL check interval with duplicate prevention
+      urlCheckIntervalRef.current = setInterval(() => {
         try {
-          // Check if popup is closed
+          // Check if popup exists and is not closed
           if (!popupRef.current || popupRef.current.closed) {
-            console.log('🔍 Popup closed, checking connection status...');
+            console.log('🔍 Popup closed');
+            clearInterval(urlCheckIntervalRef.current!);
+            urlCheckIntervalRef.current = null;
             
-            clearInterval(checkIntervalRef.current!);
-            checkIntervalRef.current = null;
-
-            // Check if connection was successful by querying backend
-            const statusResponse = await meta.getStatus();
-            const isConnected = statusResponse.data?.data?.isConnected;
-
-            if (isConnected) {
-              console.log('✅ WhatsApp connected successfully!');
-              toast.success('WhatsApp Business connected successfully!');
-              onSuccess?.();
-              onClose();
-            } else {
-              console.log('⚠️ Connection not completed');
-              setError('Connection was not completed. Please try again.');
+            // ✅ If code wasn't processed, check connection status
+            if (!codeProcessedRef.current) {
+              checkConnectionAfterPopupClose();
             }
-            
-            setIsConnecting(false);
+            return;
           }
-        } catch (err) {
-          console.error('Status check error:', err);
-          setIsConnecting(false);
-        }
-      }, 1000);
 
-      // Also listen for URL changes (for redirect detection)
-      const urlCheckInterval = setInterval(() => {
-        try {
-          if (popupRef.current && !popupRef.current.closed) {
-            // Try to access the URL (will fail for cross-origin)
-            const currentUrl = popupRef.current.location.href;
+          // Try to access the URL (will fail for cross-origin)
+          const currentUrl = popupRef.current.location.href;
+          
+          // Check if redirected back to our domain
+          if (currentUrl.includes(window.location.hostname) || 
+              currentUrl.includes('wabmeta.com')) {
             
-            // Check if redirected back to our domain
-            if (currentUrl.includes(window.location.hostname)) {
-              console.log('🔄 Detected redirect back to app');
+            console.log('🔄 Detected redirect back to app');
+            
+            // Extract code from URL
+            const urlParams = new URLSearchParams(
+              new URL(currentUrl).search
+            );
+            const code = urlParams.get('code');
+            const errorParam = urlParams.get('error');
+            const errorDescription = urlParams.get('error_description');
+            
+            // ✅ Prevent duplicate processing
+            if (code && !codeProcessedRef.current && processingCodeRef.current !== code) {
+              console.log('✅ Got authorization code (first time)');
               
-              // Extract code from URL if possible
-              const urlParams = new URLSearchParams(popupRef.current.location.search);
-              const code = urlParams.get('code');
-              const error = urlParams.get('error');
+              // Mark as processing
+              processingCodeRef.current = code;
+              codeProcessedRef.current = true;
               
-              if (code) {
-                console.log('✅ Got authorization code');
-                handleAuthCode(code, state);
-              } else if (error) {
-                console.error('❌ OAuth error:', error);
-                const errorDescription = urlParams.get('error_description');
-                setError(`Authorization failed: ${errorDescription || error}`);
-                setIsConnecting(false);
-              }
+              // Clear interval BEFORE processing
+              clearInterval(urlCheckIntervalRef.current!);
+              urlCheckIntervalRef.current = null;
               
-              // Close popup and clear interval
+              // Close popup BEFORE processing
               popupRef.current.close();
-              clearInterval(urlCheckInterval);
+              popupRef.current = null;
+              
+              // Process the code
+              handleAuthCode(code, state);
+              
+            } else if (errorParam) {
+              console.error('❌ OAuth error:', errorParam);
+              
+              // Clear interval
+              clearInterval(urlCheckIntervalRef.current!);
+              urlCheckIntervalRef.current = null;
+              
+              // Close popup
+              popupRef.current?.close();
+              popupRef.current = null;
+              
+              setError(`Authorization failed: ${errorDescription || errorParam}`);
+              setIsConnecting(false);
             }
           }
         } catch (e) {
-          // Cross-origin error is expected, ignore it
+          // Cross-origin error is expected when popup is on Facebook domain
+          // This is normal, just ignore
         }
       }, 500);
 
-      // Store interval reference for cleanup
-      const cleanupUrlCheck = () => clearInterval(urlCheckInterval);
-
       // Timeout after 5 minutes
       setTimeout(() => {
-        if (checkIntervalRef.current) {
-          clearInterval(checkIntervalRef.current);
-          cleanupUrlCheck();
-          checkIntervalRef.current = null;
+        if (urlCheckIntervalRef.current) {
+          clearInterval(urlCheckIntervalRef.current);
+          urlCheckIntervalRef.current = null;
           
           if (popupRef.current && !popupRef.current.closed) {
             popupRef.current.close();
           }
+          popupRef.current = null;
           
-          setError('Connection timeout. Please try again.');
-          setIsConnecting(false);
+          if (!codeProcessedRef.current) {
+            setError('Connection timeout. Please try again.');
+            setIsConnecting(false);
+          }
         }
       }, 5 * 60 * 1000);
 
@@ -204,9 +220,45 @@ const MetaConnectModal: React.FC<MetaConnectModalProps> = ({
     }
   };
 
+  // ✅ NEW: Check connection status after popup closes (fallback)
+  const checkConnectionAfterPopupClose = async () => {
+    try {
+      console.log('🔍 Checking connection status after popup close...');
+      
+      // Wait a bit for backend to process
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
+      const statusResponse = await meta.getStatus();
+      const isConnected = statusResponse.data?.data?.isConnected;
+
+      if (isConnected) {
+        console.log('✅ WhatsApp connected successfully!');
+        toast.success('WhatsApp Business connected successfully!');
+        onSuccess?.();
+        onClose();
+      } else {
+        console.log('⚠️ Connection not completed');
+        setError('Connection was not completed. Please try again.');
+      }
+    } catch (err) {
+      console.error('Status check error:', err);
+      setError('Failed to verify connection. Please try again.');
+    } finally {
+      setIsConnecting(false);
+    }
+  };
+
+  // ✅ FIXED: Handle auth code with duplicate prevention
   const handleAuthCode = async (code: string, state?: string) => {
+    // ✅ Double-check to prevent duplicate calls
+    if (processingCodeRef.current && processingCodeRef.current !== code) {
+      console.warn('⚠️ Different code received, ignoring');
+      return;
+    }
+    
     try {
       console.log('🔗 Sending auth code to backend...');
+      console.log('   Code:', code.substring(0, 20) + '...');
       
       // Send code to backend
       const response = await meta.connect({ 
@@ -214,18 +266,37 @@ const MetaConnectModal: React.FC<MetaConnectModalProps> = ({
         state: state || ''
       });
 
-      if (response.data?.data) {
-        console.log('✅ Connection successful');
+      if (response.data?.success || response.data?.data) {
+        console.log('✅ Connection successful!');
         toast.success('WhatsApp Business connected successfully!');
-        cleanup();
+        
+        // ✅ Call success callback
         onSuccess?.();
+        
+        // ✅ Close modal
         onClose();
       } else {
-        throw new Error('Invalid response from server');
+        throw new Error(response.data?.error || 'Invalid response from server');
       }
     } catch (err: any) {
       console.error('❌ Backend connection error:', err);
-      setError(err.response?.data?.message || err.message || 'Failed to complete connection');
+      
+      const errorMessage = err.response?.data?.error || 
+                          err.response?.data?.message || 
+                          err.message || 
+                          'Failed to complete connection';
+      
+      // ✅ Check if it's the "already used" error
+      if (errorMessage.includes('already been used') || 
+          errorMessage.includes('already used')) {
+        console.log('⚠️ Code already used - checking if connection succeeded...');
+        
+        // The code might have been processed successfully, check status
+        await checkConnectionAfterPopupClose();
+        return;
+      }
+      
+      setError(errorMessage);
       setIsConnecting(false);
     }
   };
