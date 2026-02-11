@@ -30,7 +30,10 @@ import {
   whatsapp 
 } from "../services/api";
 
-// Types
+// ============================================
+// TYPES
+// ============================================
+
 type StatsData = {
   contacts: number;
   messagesSent: number;
@@ -61,20 +64,31 @@ type WhatsAppAccount = {
   phoneNumberId?: string;
 };
 
+// ============================================
+// CONSTANTS
+// ============================================
+
 const CACHE_KEY = "wabmeta_dashboard_cache_v3";
 
-const Dashboard: React.FC = () => {
-  // Meta connection hook
-  const { connection, refreshConnection, disconnect } = useMetaConnection();
+// ============================================
+// COMPONENT
+// ============================================
 
-  // State
+const Dashboard: React.FC = () => {
+  // ✅ Meta connection hook (no organizationId argument)
+  const { connection, refreshConnection, disconnect } = _useMetaConnection(); 
+
+  // ============================================
+  // STATE
+  // ============================================
+
+  // Dashboard data
   const [statsData, setStatsData] = useState<StatsData>({
     contacts: 0,
     messagesSent: 0,
     deliveryRate: 0,
     responseRate: 0,
   });
-
   const [billingUsage, setBillingUsage] = useState<any>(null);
   const [widgets, setWidgets] = useState<WidgetsResponse | null>(null);
   const [chartPeriod, setChartPeriod] = useState<'7' | '30' | '90'>('7');
@@ -82,7 +96,7 @@ const Dashboard: React.FC = () => {
   // WhatsApp accounts
   const [whatsappAccounts, setWhatsappAccounts] = useState<WhatsAppAccount[]>([]);
   
-  // ✅ NEW: Meta connection status (source of truth)
+  // Connection status
   const [metaConnected, setMetaConnected] = useState<boolean>(false);
 
   // Loading states
@@ -91,107 +105,130 @@ const Dashboard: React.FC = () => {
   const [disconnecting, setDisconnecting] = useState(false);
   const [showConnectModal, setShowConnectModal] = useState(false);
   
+  // Refs
   const hasCacheRef = useRef(false);
   const initialLoadDone = useRef(false);
 
   // ============================================
-  // ✅ FIXED: CHECK META CONNECTION FIRST
+  // CACHE MANAGEMENT
   // ============================================
+
+  // Load from cache on mount
+  useEffect(() => {
+    try {
+      const cachedRaw = localStorage.getItem(CACHE_KEY);
+      if (cachedRaw) {
+        const cached = JSON.parse(cachedRaw);
+        
+        if (cached?.statsData) setStatsData(cached.statsData);
+        if (cached?.billingUsage !== undefined) setBillingUsage(cached.billingUsage);
+        if (cached?.widgets) setWidgets(cached.widgets);
+        if (cached?.chartPeriod) setChartPeriod(cached.chartPeriod);
+        
+        hasCacheRef.current = true;
+        setLoading(false);
+        
+        console.log('📦 Loaded from cache');
+      }
+    } catch (e) {
+      console.error('❌ Cache read error:', e);
+    }
+  }, []);
+
+  // ============================================
+  // META CONNECTION CHECK
+  // ============================================
+
   const checkMetaConnection = useCallback(async (): Promise<boolean> => {
     try {
       const response = await meta.getStatus();
       
       if (response.data?.success && response.data?.data) {
-        const { isConnected, status } = response.data.data;
+        const { status } = response.data.data;
+        const isConnected = status === 'CONNECTED';
         
         console.log('🔗 Meta connection status:', { isConnected, status });
         
-        // ✅ Update state
         setMetaConnected(isConnected);
         
-        // ✅ If not connected, clear WhatsApp accounts
         if (!isConnected) {
           setWhatsappAccounts([]);
-          console.log('⚠️ Meta disconnected - clearing WhatsApp accounts');
+          console.log('⚠️ Meta not connected - clearing WhatsApp accounts');
         }
         
         return isConnected;
       }
-    } catch (error) {
-      console.error('❌ Failed to check Meta status:', error);
+    } catch (error: any) {
+      console.error('❌ Meta status check failed:', error);
+      
+      // 404 means not connected yet (not an error)
+      if (error.response?.status === 404) {
+        console.log('ℹ️ No Meta connection found (404)');
+      }
+      
       setMetaConnected(false);
       setWhatsappAccounts([]);
     }
+    
     return false;
   }, []);
 
   // ============================================
-  // ✅ FIXED: FETCH WHATSAPP ACCOUNTS ONLY IF CONNECTED
+  // WHATSAPP ACCOUNTS
   // ============================================
+
   const fetchWhatsAppAccounts = useCallback(async (forceCheck = false) => {
     try {
-      // ✅ Check connection first if needed
       let isConnected = metaConnected;
       
+      // Check connection status if needed
       if (forceCheck || !initialLoadDone.current) {
         isConnected = await checkMetaConnection();
       }
       
-      // ✅ Only fetch if actually connected
+      // Only fetch if connected
       if (!isConnected) {
         console.log('⏭️ Skipping WhatsApp accounts fetch - not connected');
         setWhatsappAccounts([]);
         return;
       }
       
+      // Fetch accounts
       const response = await whatsapp.accounts();
       
       if (response.data?.success) {
         const accounts = response.data.data || [];
         setWhatsappAccounts(accounts);
-        console.log('📱 WhatsApp accounts:', accounts.length);
+        console.log('📱 WhatsApp accounts loaded:', accounts.length);
       }
     } catch (error: any) {
-      console.error('❌ Failed to fetch WhatsApp accounts:', error);
+      console.error('❌ WhatsApp accounts fetch failed:', error);
       
-      // ✅ If unauthorized or not found, clear accounts
+      // Clear accounts on auth errors
       if (error.response?.status === 401 || error.response?.status === 404) {
         setWhatsappAccounts([]);
         setMetaConnected(false);
+        console.log('⚠️ Cleared accounts due to auth error');
       }
     }
   }, [metaConnected, checkMetaConnection]);
 
   // ============================================
-  // INITIAL LOAD FROM CACHE
+  // DASHBOARD DATA
   // ============================================
-  useEffect(() => {
-    try {
-      const cachedRaw = localStorage.getItem(CACHE_KEY);
-      if (cachedRaw) {
-        const cached = JSON.parse(cachedRaw);
-        if (cached?.statsData) setStatsData(cached.statsData);
-        if (cached?.billingUsage !== undefined) setBillingUsage(cached.billingUsage);
-        if (cached?.widgets) setWidgets(cached.widgets);
-        if (cached?.chartPeriod) setChartPeriod(cached.chartPeriod);
-        // ✅ DON'T cache connection status - always check fresh
-        hasCacheRef.current = true;
-        setLoading(false);
-      }
-    } catch (e) {
-      console.error('Cache read error:', e);
-    }
-  }, []);
 
-  // ============================================
-  // FETCH DASHBOARD DATA
-  // ============================================
   const fetchDashboardData = useCallback(async (opts?: { showFullLoader?: boolean }) => {
     const showFullLoader = opts?.showFullLoader ?? !hasCacheRef.current;
-    if (showFullLoader) setLoading(true);
-    else setRefreshing(true);
+    
+    if (showFullLoader) {
+      setLoading(true);
+    } else {
+      setRefreshing(true);
+    }
 
     try {
+      console.log('📊 Fetching dashboard data...');
+
       // Widgets promise with type safety
       const widgetsPromise = "getWidgets" in dashboard
         ? (dashboard as { getWidgets: (days: number) => Promise<{ data: { data: WidgetsResponse | null } }> })
@@ -209,14 +246,14 @@ const Dashboard: React.FC = () => {
 
       const [contactsRes, campaignsRes, inboxRes, billingRes, widgetsRes] = results;
 
-      // Process stats
+      // Extract data
       const cData = contactsRes.status === "fulfilled" ? contactsRes.value.data?.data : null;
       const campData = campaignsRes.status === "fulfilled" ? campaignsRes.value.data?.data : null;
       const inData = inboxRes.status === "fulfilled" ? inboxRes.value.data?.data : null;
       const billData = billingRes.status === "fulfilled" ? billingRes.value.data?.data : null;
       const wData = widgetsRes.status === "fulfilled" ? widgetsRes.value.data?.data : null;
 
-      // Calculate delivery rate
+      // Calculate metrics
       const totalSent = campData?.totalMessagesSent || 0;
       const totalDelivered = campData?.totalMessagesDelivered || 0;
       const deliveryRate = totalSent > 0 ? Math.round((totalDelivered / totalSent) * 100) : 0;
@@ -228,11 +265,12 @@ const Dashboard: React.FC = () => {
         responseRate: inData?.responseRate || 0,
       };
 
+      // Update state
       setStatsData(nextStats);
       setBillingUsage(billData);
       setWidgets(wData);
 
-      // ✅ Save to cache (but NOT connection status)
+      // Save to cache
       localStorage.setItem(
         CACHE_KEY,
         JSON.stringify({
@@ -245,8 +283,10 @@ const Dashboard: React.FC = () => {
       );
 
       hasCacheRef.current = true;
+      console.log('✅ Dashboard data loaded');
+      
     } catch (error) {
-      console.error("❌ Dashboard Data Error:", error);
+      console.error('❌ Dashboard data fetch error:', error);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -254,18 +294,19 @@ const Dashboard: React.FC = () => {
   }, [chartPeriod]);
 
   // ============================================
-  // ✅ FIXED: SINGLE INITIAL LOAD EFFECT
+  // INITIAL LOAD
   // ============================================
+
   useEffect(() => {
     if (initialLoadDone.current) return;
     
     const initializeDashboard = async () => {
       console.log('🚀 Initializing dashboard...');
       
-      // 1. Check Meta connection status first
+      // 1. Check Meta connection
       const isConnected = await checkMetaConnection();
       
-      // 2. Only fetch WhatsApp accounts if connected
+      // 2. Fetch WhatsApp accounts if connected
       if (isConnected) {
         await fetchWhatsAppAccounts(false);
       }
@@ -283,6 +324,7 @@ const Dashboard: React.FC = () => {
   // ============================================
   // LISTEN FOR META CONNECTION EVENTS
   // ============================================
+
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
       if (event.origin !== window.location.origin) return;
@@ -310,8 +352,9 @@ const Dashboard: React.FC = () => {
   }, [checkMetaConnection, fetchWhatsAppAccounts, refreshConnection, fetchDashboardData]);
 
   // ============================================
-  // REFETCH WHEN PERIOD CHANGES
+  // REFETCH ON PERIOD CHANGE
   // ============================================
+
   useEffect(() => {
     if (!initialLoadDone.current) return;
     
@@ -319,13 +362,15 @@ const Dashboard: React.FC = () => {
   }, [chartPeriod, fetchDashboardData]);
 
   // ============================================
-  // ✅ FIXED: ACTIONS
+  // ACTIONS
   // ============================================
+
   const handleSync = async () => {
     try {
       setRefreshing(true);
+      console.log('🔄 Manual refresh triggered');
       
-      // Check connection first
+      // Check connection
       const isConnected = await checkMetaConnection();
       
       if (isConnected) {
@@ -336,43 +381,49 @@ const Dashboard: React.FC = () => {
       }
       
       await fetchDashboardData({ showFullLoader: false });
+      
+      console.log('✅ Refresh complete');
+    } catch (error) {
+      console.error('❌ Refresh failed:', error);
     } finally {
       setRefreshing(false);
     }
   };
 
-  // ✅ FIXED: Proper disconnect with cache clear
   const handleDisconnect = async () => {
+    if (!confirm('Are you sure you want to disconnect your WhatsApp account?')) {
+      return;
+    }
+
     try {
       setDisconnecting(true);
+      console.log('🔌 Disconnecting...');
       
-      // 1. Call disconnect API
+      // Call disconnect API
       await disconnect();
       
-      // 2. Clear all related state
+      // Clear state
       setWhatsappAccounts([]);
       setMetaConnected(false);
       
-      // 3. Clear cache
+      // Clear cache
       localStorage.removeItem(CACHE_KEY);
       
-      // 4. Refresh connection state
+      // Refresh
       await refreshConnection();
-      
-      // 5. Refresh dashboard data
       await fetchDashboardData({ showFullLoader: false });
       
-      console.log('✅ Disconnected and cleared all data');
+      console.log('✅ Disconnected successfully');
     } catch (error) {
-      console.error('❌ Disconnect error:', error);
+      console.error('❌ Disconnect failed:', error);
+      alert('Failed to disconnect. Please try again.');
     } finally {
       setDisconnecting(false);
     }
   };
 
-  // ✅ FIXED: Connection success handler
   const handleConnectSuccess = async () => {
-    console.log('🎉 Connection successful, refreshing data...');
+    console.log('🎉 Connection successful, refreshing...');
     
     setShowConnectModal(false);
     setMetaConnected(true);
@@ -387,8 +438,9 @@ const Dashboard: React.FC = () => {
   };
 
   // ============================================
-  // MEMOIZED DATA
+  // COMPUTED VALUES
   // ============================================
+
   const messageChartData = useMemo(() => {
     const rows = widgets?.messagesOverview || [];
     return rows.map((r) => ({
@@ -409,13 +461,13 @@ const Dashboard: React.FC = () => {
     const msg = billingUsage?.messages;
     if (!msg || !msg.limit || msg.limit <= 0) return { show: false, remaining: 0 };
     if (msg.unlimited) return { show: false, remaining: 0 };
+    
     const remaining = Math.max(Number(msg.limit) - Number(msg.used || 0), 0);
     return { show: remaining <= 20, remaining };
   }, [billingUsage]);
 
-  // ✅ FIXED: isConnected now uses metaConnected as source of truth
+  // ✅ Connection status (primary source of truth)
   const isConnected = useMemo(() => {
-    // metaConnected is the primary source of truth
     return metaConnected || connection.isConnected;
   }, [metaConnected, connection.isConnected]);
 
@@ -458,12 +510,13 @@ const Dashboard: React.FC = () => {
   // ============================================
   // LOADING STATE
   // ============================================
+
   if (loading && !hasCacheRef.current) {
     return (
       <div className="flex items-center justify-center h-screen">
         <div className="text-center">
           <Loader2 className="w-10 h-10 text-primary-500 animate-spin mx-auto mb-4" />
-          <p className="text-gray-500">Loading dashboard...</p>
+          <p className="text-gray-500 dark:text-gray-400">Loading dashboard...</p>
         </div>
       </div>
     );
@@ -472,6 +525,7 @@ const Dashboard: React.FC = () => {
   // ============================================
   // RENDER
   // ============================================
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -484,15 +538,17 @@ const Dashboard: React.FC = () => {
             Here's what's happening with your business today.
           </p>
         </div>
+        
         <div className="flex items-center space-x-3">
           <button 
             onClick={handleSync} 
-            className="p-2 bg-white dark:bg-slate-800 border border-gray-200 dark:border-gray-700 rounded-xl hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors" 
+            className="p-2 bg-white dark:bg-slate-800 border border-gray-200 dark:border-gray-700 rounded-xl hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" 
             disabled={refreshing}
             title="Refresh data"
           >
             <RefreshCw className={`w-5 h-5 text-gray-600 dark:text-gray-400 ${refreshing ? "animate-spin" : ""}`} />
           </button>
+          
           <Link 
             to="/dashboard/campaigns/new" 
             className="inline-flex items-center space-x-2 px-4 py-2.5 bg-primary-500 hover:bg-primary-600 text-white font-medium rounded-xl transition-colors"
@@ -503,7 +559,7 @@ const Dashboard: React.FC = () => {
         </div>
       </div>
 
-      {/* Connection Status */}
+      {/* Connection Status or Connect Banner */}
       {isConnected ? (
         <ConnectionStatus 
           connection={connection} 
@@ -526,17 +582,16 @@ const Dashboard: React.FC = () => {
                 </p>
               </div>
             </div>
-            <div className="flex gap-3">
-              <button 
-                onClick={() => setShowConnectModal(true)} 
-                className="px-6 py-3 bg-[#1877F2] hover:bg-[#1565D8] text-white font-semibold rounded-xl shadow-lg transition-all hover:scale-105 flex items-center gap-2"
-              >
-                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
-                </svg>
-                Connect with Meta
-              </button>
-            </div>
+            
+            <button 
+              onClick={() => setShowConnectModal(true)} 
+              className="px-6 py-3 bg-[#1877F2] hover:bg-[#1565D8] text-white font-semibold rounded-xl shadow-lg transition-all hover:scale-105 flex items-center gap-2"
+            >
+              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+              </svg>
+              Connect with Meta
+            </button>
           </div>
         </div>
       )}
@@ -559,12 +614,12 @@ const Dashboard: React.FC = () => {
         </div>
       )}
 
-      {/* Connected Accounts Summary - Only show if actually connected */}
+      {/* Connected Accounts Summary */}
       {isConnected && whatsappAccounts.length > 0 && (
         <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-xl p-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <CheckCircle2 className="w-5 h-5 text-green-600" />
+              <CheckCircle2 className="w-5 h-5 text-green-600 dark:text-green-400" />
               <span className="text-green-800 dark:text-green-200 font-medium">
                 {whatsappAccounts.length} WhatsApp account{whatsappAccounts.length > 1 ? 's' : ''} connected
               </span>
@@ -612,7 +667,7 @@ const Dashboard: React.FC = () => {
         <RecentActivity activities={widgets?.recentActivity || []} />
       </div>
 
-      {/* ✅ FIXED: Meta Connect Modal with onSuccess prop */}
+      {/* Meta Connect Modal */}
       <MetaConnectModal 
         isOpen={showConnectModal} 
         onClose={() => setShowConnectModal(false)}

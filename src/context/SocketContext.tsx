@@ -1,7 +1,6 @@
 // src/context/SocketContext.tsx
 import React, { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from 'react';
 
-// Socket type (we'll make it optional)
 interface Socket {
   connected: boolean;
   emit: (event: string, data?: any) => void;
@@ -18,7 +17,6 @@ interface SocketContextType {
   emitTyping: (conversationId: string, isTyping: boolean) => void;
 }
 
-// ✅ ALWAYS provide default values
 const defaultContext: SocketContextType = {
   socket: null,
   isConnected: false,
@@ -27,17 +25,34 @@ const defaultContext: SocketContextType = {
   emitTyping: () => {},
 };
 
-// ✅ Create context with default values (NOT undefined)
 const SocketContext = createContext<SocketContextType>(defaultContext);
 
-// ✅ Safe hook that ALWAYS returns valid object
 export function useSocket(): SocketContextType {
   const context = useContext(SocketContext);
-  // Always return a valid object, never undefined
   return context || defaultContext;
 }
 
-const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:5000';
+// ✅ FIX: Use VITE_API_URL, not VITE_SOCKET_URL
+const getSocketUrl = (): string => {
+  const apiUrl = import.meta.env.VITE_API_URL;
+  
+  if (apiUrl) {
+    // Remove /api/v1 suffix if present
+    return apiUrl.replace(/\/api.*$/, '');
+  }
+  
+  // Production default
+  if (import.meta.env.PROD) {
+    return 'https://wabmeta-api.onrender.com';
+  }
+  
+  // Development default
+  return 'http://localhost:5000';
+};
+
+const SOCKET_URL = getSocketUrl();
+
+console.log('🔌 Socket URL:', SOCKET_URL);
 
 export const SocketProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [socket, setSocket] = useState<Socket | null>(null);
@@ -48,13 +63,14 @@ export const SocketProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
     const initSocket = async () => {
       try {
-        const token = localStorage.getItem('accessToken');
+        const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
+        
         if (!token) {
+          console.log('[Socket] No token, skipping connection');
           setIsConnected(false);
           return;
         }
 
-        // Dynamic import to prevent build issues
         const { io } = await import('socket.io-client');
         
         socketInstance = io(SOCKET_URL, {
@@ -63,20 +79,21 @@ export const SocketProvider: React.FC<{ children: ReactNode }> = ({ children }) 
           reconnection: true,
           reconnectionAttempts: 5,
           reconnectionDelay: 1000,
+          reconnectionDelayMax: 5000,
         });
 
         socketInstance.on('connect', () => {
-          console.log('[Socket] Connected');
+          console.log('[Socket] ✅ Connected:', socketInstance.id);
           setIsConnected(true);
         });
 
-        socketInstance.on('disconnect', () => {
-          console.log('[Socket] Disconnected');
+        socketInstance.on('disconnect', (reason: string) => {
+          console.log('[Socket] ⚠️ Disconnected:', reason);
           setIsConnected(false);
         });
 
         socketInstance.on('connect_error', (err: any) => {
-          console.error('[Socket] Error:', err.message);
+          console.warn('[Socket] ❌ Error:', err.message);
           setIsConnected(false);
         });
 
@@ -110,7 +127,6 @@ export const SocketProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     socket?.emit(isTyping ? 'typing:start' : 'typing:stop', { conversationId });
   }, [socket]);
 
-  // ✅ Always provide valid value object
   const value: SocketContextType = {
     socket,
     isConnected,

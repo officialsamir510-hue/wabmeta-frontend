@@ -430,7 +430,7 @@ export const auth = {
     organizationName?: string;
   }) => api.post<ApiResponse>('/auth/register', data),
 
-  login: (data: { email: string; password: string; }, p0: { headers: { "x-platform": string; }; }) => 
+  login: (data: { email: string; password: string; }, _p0: { headers: { "x-platform": string; }; }) => 
     api.post<ApiResponse<{
       organization: any;
       tokens: any; accessToken: string; refreshToken: string; user: any 
@@ -577,9 +577,12 @@ export const campaigns = {
   stats: () => api.get<ApiResponse>('/campaigns/stats'),
 };
 
+// Replace this section in api.ts
+
 // ---------- WHATSAPP ----------
 export const whatsapp = {
-  getAccounts: () => api.get<ApiResponse>('/whatsapp/accounts'),
+  // ✅ FIX: Correct endpoint
+  accounts: () => api.get<ApiResponse>('/whatsapp/accounts'),
 
   getAccount: (id: string) => api.get<ApiResponse>(`/whatsapp/accounts/${id}`),
 
