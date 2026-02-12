@@ -18,19 +18,30 @@ import {
   AlertCircle
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
-import { campaigns as campaignsApi } from '../services/api'; // ✅ Correct import
+import { campaigns as campaignsApi } from '../services/api';
 import toast from 'react-hot-toast';
+
+// ✅ Safe number helpers
+const safeNumber = (value: any): number => {
+  if (value === null || value === undefined) return 0;
+  const num = Number(value);
+  return isNaN(num) ? 0 : num;
+};
+
+const safeLocaleString = (value: any): string => {
+  return safeNumber(value).toLocaleString();
+};
 
 interface Campaign {
   id: string;
   name: string;
   description?: string;
   status: 'DRAFT' | 'SCHEDULED' | 'RUNNING' | 'PAUSED' | 'COMPLETED' | 'FAILED';
-  totalContacts: number;
-  sentCount: number;
-  deliveredCount: number;
-  readCount: number;
-  failedCount: number;
+  totalContacts?: number;
+  sentCount?: number;
+  deliveredCount?: number;
+  readCount?: number;
+  failedCount?: number;
   scheduledAt?: string;
   startedAt?: string;
   completedAt?: string;
@@ -41,17 +52,24 @@ interface Campaign {
 }
 
 interface CampaignStats {
-  total: number;
-  active: number;
-  scheduled: number;
-  completed: number;
-  totalSent: number;
-  totalDelivered: number;
+  total?: number;
+  active?: number;
+  scheduled?: number;
+  completed?: number;
+  totalSent?: number;
+  totalDelivered?: number;
 }
 
 const Campaigns: React.FC = () => {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
-  const [stats, setStats] = useState<CampaignStats | null>(null);
+  const [stats, setStats] = useState<CampaignStats>({
+    total: 0,
+    active: 0,
+    scheduled: 0,
+    completed: 0,
+    totalSent: 0,
+    totalDelivered: 0
+  });
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -94,10 +112,19 @@ const Campaigns: React.FC = () => {
     try {
       const response = await campaignsApi.stats();
       if (response.data.success) {
-        setStats(response.data.data);
+        const statsData = response.data.data || {};
+        setStats({
+          total: safeNumber(statsData.total),
+          active: safeNumber(statsData.active),
+          scheduled: safeNumber(statsData.scheduled),
+          completed: safeNumber(statsData.completed),
+          totalSent: safeNumber(statsData.totalSent),
+          totalDelivered: safeNumber(statsData.totalDelivered)
+        });
       }
     } catch (error) {
       console.error('Fetch stats error:', error);
+      // Keep default values
     }
   };
 
@@ -154,15 +181,15 @@ const Campaigns: React.FC = () => {
 
   const getStatusBadge = (status: Campaign['status']) => {
     const badges = {
-      DRAFT: { color: 'bg-gray-100 text-gray-700', icon: Clock },
-      SCHEDULED: { color: 'bg-blue-100 text-blue-700', icon: Calendar },
-      RUNNING: { color: 'bg-green-100 text-green-700', icon: Play },
-      PAUSED: { color: 'bg-yellow-100 text-yellow-700', icon: Pause },
-      COMPLETED: { color: 'bg-purple-100 text-purple-700', icon: CheckCircle },
-      FAILED: { color: 'bg-red-100 text-red-700', icon: XCircle }
+      DRAFT: { color: 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300', icon: Clock },
+      SCHEDULED: { color: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400', icon: Calendar },
+      RUNNING: { color: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400', icon: Play },
+      PAUSED: { color: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400', icon: Pause },
+      COMPLETED: { color: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400', icon: CheckCircle },
+      FAILED: { color: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400', icon: XCircle }
     };
 
-    const badge = badges[status];
+    const badge = badges[status] || badges.DRAFT;
     const Icon = badge.icon;
 
     return (
@@ -174,8 +201,11 @@ const Campaigns: React.FC = () => {
   };
 
   const getProgress = (campaign: Campaign) => {
-    if (campaign.totalContacts === 0) return 0;
-    return Math.round((campaign.sentCount / campaign.totalContacts) * 100);
+    const total = safeNumber(campaign.totalContacts);
+    const sent = safeNumber(campaign.sentCount);
+
+    if (total === 0) return 0;
+    return Math.min(Math.round((sent / total) * 100), 100);
   };
 
   if (loading) {
@@ -223,66 +253,64 @@ const Campaigns: React.FC = () => {
         </Link>
       </div>
 
-      {/* Stats */}
-      {stats && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="bg-white dark:bg-gray-800 rounded-xl p-6 border border-gray-200 dark:border-gray-700">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600 dark:text-gray-400">Total Campaigns</p>
-                <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">
-                  {stats.total}
-                </p>
-              </div>
-              <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-                <BarChart3 className="w-6 h-6 text-blue-600 dark:text-blue-400" />
-              </div>
+      {/* Stats - ✅ Safe numbers */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="bg-white dark:bg-gray-800 rounded-xl p-6 border border-gray-200 dark:border-gray-700">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-gray-600 dark:text-gray-400">Total Campaigns</p>
+              <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">
+                {safeNumber(stats.total)}
+              </p>
             </div>
-          </div>
-
-          <div className="bg-white dark:bg-gray-800 rounded-xl p-6 border border-gray-200 dark:border-gray-700">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600 dark:text-gray-400">Active</p>
-                <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">
-                  {stats.active}
-                </p>
-              </div>
-              <div className="p-3 bg-green-50 dark:bg-green-900/20 rounded-lg">
-                <Play className="w-6 h-6 text-green-600 dark:text-green-400" />
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white dark:bg-gray-800 rounded-xl p-6 border border-gray-200 dark:border-gray-700">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600 dark:text-gray-400">Messages Sent</p>
-                <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">
-                  {stats.totalSent.toLocaleString()}
-                </p>
-              </div>
-              <div className="p-3 bg-purple-50 dark:bg-purple-900/20 rounded-lg">
-                <Send className="w-6 h-6 text-purple-600 dark:text-purple-400" />
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white dark:bg-gray-800 rounded-xl p-6 border border-gray-200 dark:border-gray-700">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600 dark:text-gray-400">Delivered</p>
-                <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">
-                  {stats.totalDelivered.toLocaleString()}
-                </p>
-              </div>
-              <div className="p-3 bg-green-50 dark:bg-green-900/20 rounded-lg">
-                <CheckCircle className="w-6 h-6 text-green-600 dark:text-green-400" />
-              </div>
+            <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+              <BarChart3 className="w-6 h-6 text-blue-600 dark:text-blue-400" />
             </div>
           </div>
         </div>
-      )}
+
+        <div className="bg-white dark:bg-gray-800 rounded-xl p-6 border border-gray-200 dark:border-gray-700">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-gray-600 dark:text-gray-400">Active</p>
+              <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">
+                {safeNumber(stats.active)}
+              </p>
+            </div>
+            <div className="p-3 bg-green-50 dark:bg-green-900/20 rounded-lg">
+              <Play className="w-6 h-6 text-green-600 dark:text-green-400" />
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white dark:bg-gray-800 rounded-xl p-6 border border-gray-200 dark:border-gray-700">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-gray-600 dark:text-gray-400">Messages Sent</p>
+              <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">
+                {safeLocaleString(stats.totalSent)}
+              </p>
+            </div>
+            <div className="p-3 bg-purple-50 dark:bg-purple-900/20 rounded-lg">
+              <Send className="w-6 h-6 text-purple-600 dark:text-purple-400" />
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white dark:bg-gray-800 rounded-xl p-6 border border-gray-200 dark:border-gray-700">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-gray-600 dark:text-gray-400">Delivered</p>
+              <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">
+                {safeLocaleString(stats.totalDelivered)}
+              </p>
+            </div>
+            <div className="p-3 bg-green-50 dark:bg-green-900/20 rounded-lg">
+              <CheckCircle className="w-6 h-6 text-green-600 dark:text-green-400" />
+            </div>
+          </div>
+        </div>
+      </div>
 
       {/* Filters */}
       <div className="bg-white dark:bg-gray-800 rounded-xl p-4 border border-gray-200 dark:border-gray-700">
@@ -311,10 +339,17 @@ const Campaigns: React.FC = () => {
             <option value="COMPLETED">Completed</option>
             <option value="FAILED">Failed</option>
           </select>
+
+          <button
+            onClick={fetchCampaigns}
+            className="px-4 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors"
+          >
+            <Search className="w-5 h-5" />
+          </button>
         </div>
       </div>
 
-      {/* Campaigns List */}
+      {/* Campaigns List - ✅ Safe numbers */}
       <div className="space-y-4">
         {campaigns.length > 0 ? (
           campaigns.map((campaign) => (
@@ -335,7 +370,7 @@ const Campaigns: React.FC = () => {
                       {campaign.description}
                     </p>
                   )}
-                  {campaign.template && (
+                  {campaign.template?.name && (
                     <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">
                       Template: {campaign.template.name}
                     </p>
@@ -345,7 +380,7 @@ const Campaigns: React.FC = () => {
                 <div className="flex items-center gap-2">
                   <Link
                     to={`/dashboard/campaigns/${campaign.id}`}
-                    className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
+                    className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
                   >
                     <Eye className="w-5 h-5 text-gray-600 dark:text-gray-400" />
                   </Link>
@@ -354,7 +389,7 @@ const Campaigns: React.FC = () => {
                     <button
                       onClick={() => handleAction('start', campaign.id)}
                       disabled={actionLoading === campaign.id}
-                      className="p-2 hover:bg-green-50 dark:hover:bg-green-900/20 rounded-lg"
+                      className="p-2 hover:bg-green-50 dark:hover:bg-green-900/20 rounded-lg transition-colors"
                     >
                       {actionLoading === campaign.id ? (
                         <Loader2 className="w-5 h-5 animate-spin text-green-600" />
@@ -368,7 +403,7 @@ const Campaigns: React.FC = () => {
                     <button
                       onClick={() => handleAction('pause', campaign.id)}
                       disabled={actionLoading === campaign.id}
-                      className="p-2 hover:bg-yellow-50 dark:hover:bg-yellow-900/20 rounded-lg"
+                      className="p-2 hover:bg-yellow-50 dark:hover:bg-yellow-900/20 rounded-lg transition-colors"
                     >
                       <Pause className="w-5 h-5 text-yellow-600" />
                     </button>
@@ -377,7 +412,7 @@ const Campaigns: React.FC = () => {
                   {campaign.status === 'PAUSED' && (
                     <button
                       onClick={() => handleAction('resume', campaign.id)}
-                      className="p-2 hover:bg-green-50 dark:hover:bg-green-900/20 rounded-lg"
+                      className="p-2 hover:bg-green-50 dark:hover:bg-green-900/20 rounded-lg transition-colors"
                     >
                       <Play className="w-5 h-5 text-green-600" />
                     </button>
@@ -385,37 +420,37 @@ const Campaigns: React.FC = () => {
 
                   <button
                     onClick={() => handleDelete(campaign.id)}
-                    className="p-2 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg"
+                    className="p-2 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
                   >
                     <XCircle className="w-5 h-5 text-red-600" />
                   </button>
                 </div>
               </div>
 
-              {/* Stats */}
+              {/* Stats - ✅ Safe numbers */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
                 <div>
                   <p className="text-xs text-gray-500 dark:text-gray-500">Recipients</p>
                   <p className="text-lg font-semibold text-gray-900 dark:text-white">
-                    {campaign.totalContacts.toLocaleString()}
+                    {safeLocaleString(campaign.totalContacts)}
                   </p>
                 </div>
                 <div>
                   <p className="text-xs text-gray-500 dark:text-gray-500">Sent</p>
-                  <p className="text-lg font-semibold text-green-600">
-                    {campaign.sentCount.toLocaleString()}
+                  <p className="text-lg font-semibold text-green-600 dark:text-green-400">
+                    {safeLocaleString(campaign.sentCount)}
                   </p>
                 </div>
                 <div>
                   <p className="text-xs text-gray-500 dark:text-gray-500">Delivered</p>
-                  <p className="text-lg font-semibold text-blue-600">
-                    {campaign.deliveredCount.toLocaleString()}
+                  <p className="text-lg font-semibold text-blue-600 dark:text-blue-400">
+                    {safeLocaleString(campaign.deliveredCount)}
                   </p>
                 </div>
                 <div>
                   <p className="text-xs text-gray-500 dark:text-gray-500">Read</p>
-                  <p className="text-lg font-semibold text-purple-600">
-                    {campaign.readCount.toLocaleString()}
+                  <p className="text-lg font-semibold text-purple-600 dark:text-purple-400">
+                    {safeLocaleString(campaign.readCount)}
                   </p>
                 </div>
               </div>
@@ -429,7 +464,7 @@ const Campaigns: React.FC = () => {
                   </div>
                   <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
                     <div
-                      className="bg-green-600 h-2 rounded-full transition-all"
+                      className="bg-green-600 h-2 rounded-full transition-all duration-300"
                       style={{ width: `${getProgress(campaign)}%` }}
                     />
                   </div>
