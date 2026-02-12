@@ -17,7 +17,7 @@ import {
   Sun
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import api, { settings as settingsApi, users as usersApi } from '../services/api';
+import api, { users as usersApi } from '../services/api';
 import toast from 'react-hot-toast';
 
 interface Tab {
@@ -27,30 +27,32 @@ interface Tab {
 }
 
 interface UserSettings {
-  timezone?: string;
-  language?: string;
-  theme?: string;
-  notifications?: {
-    email?: boolean;
-    push?: boolean;
-    sms?: boolean;
-    marketing?: boolean;
+  timezone: string;
+  language: string;
+  theme: string;
+  notifications: {
+    email: boolean;
+    push: boolean;
+    sms: boolean;
+    marketing: boolean;
   };
 }
 
 interface UserProfile {
-  firstName?: string;
-  lastName?: string;
-  email?: string;
-  phone?: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string;
   avatar?: string;
 }
 
 const Settings: React.FC = () => {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState('general');
-  const [loading, setLoading] = useState(true);
+  const [loading] = useState(false); // ✅ Changed to false - no API call initially
   const [saving, setSaving] = useState(false);
+
+  // ✅ Initialize with default values (no API call)
   const [settings, setSettings] = useState<UserSettings>({
     timezone: 'UTC',
     language: 'en',
@@ -62,6 +64,7 @@ const Settings: React.FC = () => {
       marketing: false
     }
   });
+
   const [profile, setProfile] = useState<UserProfile>({
     firstName: '',
     lastName: '',
@@ -79,78 +82,51 @@ const Settings: React.FC = () => {
   ];
 
   useEffect(() => {
-    fetchSettings();
-  }, []);
+    loadSettingsFromStorage();
+    loadProfileFromUser();
+  }, [user]);
 
-  const fetchSettings = async () => {
+  // ✅ Load settings from localStorage (no API call)
+  const loadSettingsFromStorage = () => {
     try {
-      setLoading(true);
-
-      // Fetch settings and profile in parallel
-      const [settingsRes, profileRes] = await Promise.allSettled([
-        settingsApi.getAll(),
-        usersApi.getProfile()
-      ]);
-
-      // Handle settings
-      if (settingsRes.status === 'fulfilled' && settingsRes.value.data.success) {
-        const data = settingsRes.value.data.data;
-        setSettings({
-          timezone: data?.timezone || 'UTC',
-          language: data?.language || 'en',
-          theme: data?.theme || 'light',
-          notifications: {
-            email: data?.notifications?.email ?? true,
-            push: data?.notifications?.push ?? false,
-            sms: data?.notifications?.sms ?? false,
-            marketing: data?.notifications?.marketing ?? false
-          }
-        });
+      const savedSettings = localStorage.getItem('wabmeta_settings');
+      if (savedSettings) {
+        setSettings(JSON.parse(savedSettings));
       }
-
-      // Handle profile
-      if (profileRes.status === 'fulfilled' && profileRes.value.data.success) {
-        const data = profileRes.value.data.data;
-        setProfile({
-          firstName: data?.firstName || '',
-          lastName: data?.lastName || '',
-          email: data?.email || user?.email || '',
-          phone: data?.phone || ''
-        });
-      } else if (user) {
-        // Fallback to auth user data
-        setProfile({
-          firstName: (user as any).firstName || '',
-          lastName: (user as any).lastName || '',
-          email: user.email || '',
-          phone: (user as any).phone || ''
-        });
-      }
-
     } catch (error) {
-      console.error('Failed to fetch settings:', error);
-      toast.error('Failed to load settings');
-    } finally {
-      setLoading(false);
+      console.error('Failed to load settings from storage:', error);
     }
   };
 
+  // ✅ Load profile from auth user
+  const loadProfileFromUser = () => {
+    if (user) {
+      setProfile({
+        firstName: (user as any).firstName || (user as any).name?.split(' ')[0] || '',
+        lastName: (user as any).lastName || (user as any).name?.split(' ').slice(1).join(' ') || '',
+        email: user.email || '',
+        phone: (user as any).phone || ''
+      });
+    }
+  };
+
+  // ✅ Save settings to localStorage
   const updateSettings = async (data: Partial<UserSettings>) => {
     try {
       setSaving(true);
-      const response = await settingsApi.update(data);
-      if (response.data.success) {
-        setSettings(prev => ({ ...prev, ...data }));
-        toast.success('Settings saved successfully');
-      }
+      const updatedSettings = { ...settings, ...data };
+      setSettings(updatedSettings);
+      localStorage.setItem('wabmeta_settings', JSON.stringify(updatedSettings));
+      toast.success('Settings saved successfully');
     } catch (error) {
-      console.error('Failed to update settings:', error);
+      console.error('Failed to save settings:', error);
       toast.error('Failed to save settings');
     } finally {
       setSaving(false);
     }
   };
 
+  // ✅ Update profile via API
   const updateProfile = async (data: Partial<UserProfile>) => {
     try {
       setSaving(true);
@@ -159,9 +135,9 @@ const Settings: React.FC = () => {
         setProfile(prev => ({ ...prev, ...data }));
         toast.success('Profile updated successfully');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to update profile:', error);
-      toast.error('Failed to update profile');
+      toast.error(error.response?.data?.message || 'Failed to update profile');
     } finally {
       setSaving(false);
     }
@@ -178,31 +154,13 @@ const Settings: React.FC = () => {
 
     switch (activeTab) {
       case 'general':
-        return (
-          <GeneralSettingsPanel
-            settings={settings}
-            onUpdate={updateSettings}
-            saving={saving}
-          />
-        );
+        return <GeneralSettingsPanel settings={settings} onUpdate={updateSettings} saving={saving} />;
       case 'profile':
-        return (
-          <ProfileSettingsPanel
-            profile={profile}
-            onUpdate={updateProfile}
-            saving={saving}
-          />
-        );
+        return <ProfileSettingsPanel profile={profile} onUpdate={updateProfile} saving={saving} />;
       case 'business':
         return <BusinessSettingsPanel />;
       case 'notifications':
-        return (
-          <NotificationSettingsPanel
-            settings={settings}
-            onUpdate={updateSettings}
-            saving={saving}
-          />
-        );
+        return <NotificationSettingsPanel settings={settings} onUpdate={updateSettings} saving={saving} />;
       case 'security':
         return <SecuritySettingsPanel />;
       case 'api':
@@ -217,13 +175,10 @@ const Settings: React.FC = () => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Settings</h1>
-          <p className="mt-2 text-gray-600 dark:text-gray-400">
-            Manage your account and application settings
-          </p>
+          <p className="mt-2 text-gray-600 dark:text-gray-400">Manage your account and application settings</p>
         </div>
 
         <div className="flex flex-col lg:flex-row gap-8">
-          {/* Sidebar */}
           <div className="lg:w-64 shrink-0">
             <nav className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-4">
               <ul className="space-y-1">
@@ -245,7 +200,6 @@ const Settings: React.FC = () => {
             </nav>
           </div>
 
-          {/* Content */}
           <div className="flex-1">
             <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6">
               {renderContent()}
@@ -260,20 +214,20 @@ const Settings: React.FC = () => {
 // =============================================
 // General Settings Panel
 // =============================================
-interface GeneralSettingsPanelProps {
+const GeneralSettingsPanel: React.FC<{
   settings: UserSettings;
   onUpdate: (data: Partial<UserSettings>) => Promise<void>;
   saving: boolean;
-}
+}> = ({ settings, onUpdate, saving }) => {
+  const [timezone, setTimezone] = useState(settings.timezone);
+  const [language, setLanguage] = useState(settings.language);
+  const [theme, setTheme] = useState(settings.theme);
 
-const GeneralSettingsPanel: React.FC<GeneralSettingsPanelProps> = ({
-  settings,
-  onUpdate,
-  saving
-}) => {
-  const [timezone, setTimezone] = useState(settings.timezone || 'UTC');
-  const [language, setLanguage] = useState(settings.language || 'en');
-  const [theme, setTheme] = useState(settings.theme || 'light');
+  useEffect(() => {
+    setTimezone(settings.timezone);
+    setLanguage(settings.language);
+    setTheme(settings.theme);
+  }, [settings]);
 
   const handleSave = () => {
     onUpdate({ timezone, language, theme });
@@ -283,56 +237,40 @@ const GeneralSettingsPanel: React.FC<GeneralSettingsPanelProps> = ({
     <div className="space-y-6">
       <div>
         <h2 className="text-xl font-semibold text-gray-900 dark:text-white">General Settings</h2>
-        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-          Configure your general application preferences
-        </p>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Configure your preferences</p>
       </div>
 
       <div className="space-y-4">
-        {/* Timezone */}
         <div>
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-            <Globe className="w-4 h-4 inline mr-2" />
-            Timezone
+            <Globe className="w-4 h-4 inline mr-2" />Timezone
           </label>
           <select
             value={timezone}
             onChange={(e) => setTimezone(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-green-500"
+            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
           >
             <option value="UTC">UTC</option>
             <option value="Asia/Kolkata">Asia/Kolkata (IST)</option>
             <option value="America/New_York">America/New_York (EST)</option>
-            <option value="America/Los_Angeles">America/Los_Angeles (PST)</option>
             <option value="Europe/London">Europe/London (GMT)</option>
-            <option value="Asia/Dubai">Asia/Dubai (GST)</option>
-            <option value="Asia/Singapore">Asia/Singapore (SGT)</option>
           </select>
         </div>
 
-        {/* Language */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-            Language
-          </label>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Language</label>
           <select
             value={language}
             onChange={(e) => setLanguage(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-green-500"
+            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
           >
             <option value="en">English</option>
             <option value="hi">Hindi</option>
-            <option value="es">Spanish</option>
-            <option value="fr">French</option>
-            <option value="de">German</option>
           </select>
         </div>
 
-        {/* Theme */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-            Theme
-          </label>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Theme</label>
           <div className="flex gap-3">
             {[
               { id: 'light', name: 'Light', icon: Sun },
@@ -342,33 +280,26 @@ const GeneralSettingsPanel: React.FC<GeneralSettingsPanelProps> = ({
               <button
                 key={id}
                 onClick={() => setTheme(id)}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg border transition-colors ${theme === id
-                    ? 'border-green-500 bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400'
-                    : 'border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg border ${theme === id
+                    ? 'border-green-500 bg-green-50 dark:bg-green-900/20 text-green-700'
+                    : 'border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300'
                   }`}
               >
-                <Icon className="w-4 h-4" />
-                {name}
+                <Icon className="w-4 h-4" />{name}
               </button>
             ))}
           </div>
         </div>
       </div>
 
-      <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
-        <button
-          onClick={handleSave}
-          disabled={saving}
-          className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
-        >
-          {saving ? (
-            <Loader2 className="w-4 h-4 animate-spin" />
-          ) : (
-            <Save className="w-4 h-4" />
-          )}
-          Save Changes
-        </button>
-      </div>
+      <button
+        onClick={handleSave}
+        disabled={saving}
+        className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
+      >
+        {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+        Save Changes
+      </button>
     </div>
   );
 };
@@ -376,20 +307,20 @@ const GeneralSettingsPanel: React.FC<GeneralSettingsPanelProps> = ({
 // =============================================
 // Profile Settings Panel
 // =============================================
-interface ProfileSettingsPanelProps {
+const ProfileSettingsPanel: React.FC<{
   profile: UserProfile;
   onUpdate: (data: Partial<UserProfile>) => Promise<void>;
   saving: boolean;
-}
+}> = ({ profile, onUpdate, saving }) => {
+  const [firstName, setFirstName] = useState(profile.firstName);
+  const [lastName, setLastName] = useState(profile.lastName);
+  const [phone, setPhone] = useState(profile.phone);
 
-const ProfileSettingsPanel: React.FC<ProfileSettingsPanelProps> = ({
-  profile,
-  onUpdate,
-  saving
-}) => {
-  const [firstName, setFirstName] = useState(profile.firstName || '');
-  const [lastName, setLastName] = useState(profile.lastName || '');
-  const [phone, setPhone] = useState(profile.phone || '');
+  useEffect(() => {
+    setFirstName(profile.firstName);
+    setLastName(profile.lastName);
+    setPhone(profile.phone);
+  }, [profile]);
 
   const handleSave = () => {
     onUpdate({ firstName, lastName, phone });
@@ -399,82 +330,60 @@ const ProfileSettingsPanel: React.FC<ProfileSettingsPanelProps> = ({
     <div className="space-y-6">
       <div>
         <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Profile Settings</h2>
-        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-          Update your personal information
-        </p>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Update your personal information</p>
       </div>
 
       <div className="space-y-4">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              First Name
-            </label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">First Name</label>
             <input
               type="text"
               value={firstName}
               onChange={(e) => setFirstName(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-green-500"
-              placeholder="Your first name"
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              Last Name
-            </label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Last Name</label>
             <input
               type="text"
               value={lastName}
               onChange={(e) => setLastName(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-green-500"
-              placeholder="Your last name"
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
             />
           </div>
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-            Email
-          </label>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Email</label>
           <input
             type="email"
-            value={profile.email || ''}
+            value={profile.email}
             disabled
-            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-100 dark:bg-gray-600 text-gray-500 dark:text-gray-400 cursor-not-allowed"
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-100 text-gray-500 cursor-not-allowed"
           />
-          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-            Email cannot be changed
-          </p>
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-            Phone Number
-          </label>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Phone</label>
           <input
             type="tel"
             value={phone}
             onChange={(e) => setPhone(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-green-500"
-            placeholder="+91 98765 43210"
+            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
           />
         </div>
       </div>
 
-      <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
-        <button
-          onClick={handleSave}
-          disabled={saving}
-          className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
-        >
-          {saving ? (
-            <Loader2 className="w-4 h-4 animate-spin" />
-          ) : (
-            <Save className="w-4 h-4" />
-          )}
-          Save Profile
-        </button>
-      </div>
+      <button
+        onClick={handleSave}
+        disabled={saving}
+        className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
+      >
+        {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+        Save Profile
+      </button>
     </div>
   );
 };
@@ -482,23 +391,16 @@ const ProfileSettingsPanel: React.FC<ProfileSettingsPanelProps> = ({
 // =============================================
 // Notification Settings Panel
 // =============================================
-interface NotificationSettingsPanelProps {
+const NotificationSettingsPanel: React.FC<{
   settings: UserSettings;
   onUpdate: (data: Partial<UserSettings>) => Promise<void>;
   saving: boolean;
-}
+}> = ({ settings, onUpdate, saving }) => {
+  const [notifications, setNotifications] = useState(settings.notifications);
 
-const NotificationSettingsPanel: React.FC<NotificationSettingsPanelProps> = ({
-  settings,
-  onUpdate,
-  saving
-}) => {
-  const [notifications, setNotifications] = useState(settings.notifications || {
-    email: true,
-    push: false,
-    sms: false,
-    marketing: false
-  });
+  useEffect(() => {
+    setNotifications(settings.notifications);
+  }, [settings]);
 
   const handleToggle = (key: keyof typeof notifications) => {
     const updated = { ...notifications, [key]: !notifications[key] };
@@ -506,39 +408,35 @@ const NotificationSettingsPanel: React.FC<NotificationSettingsPanelProps> = ({
     onUpdate({ notifications: updated });
   };
 
+  const notificationItems = [
+    { key: 'email' as const, title: 'Email Notifications', desc: 'Receive notifications via email' },
+    { key: 'push' as const, title: 'Push Notifications', desc: 'Receive browser notifications' },
+    { key: 'sms' as const, title: 'SMS Notifications', desc: 'Receive notifications via SMS' },
+    { key: 'marketing' as const, title: 'Marketing Emails', desc: 'Receive product updates' }
+  ];
+
   return (
     <div className="space-y-6">
       <div>
         <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Notification Settings</h2>
-        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-          Choose how you want to receive notifications
-        </p>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Choose how you want to receive notifications</p>
       </div>
 
       <div className="space-y-4">
-        {[
-          { key: 'email', title: 'Email Notifications', desc: 'Receive notifications via email' },
-          { key: 'push', title: 'Push Notifications', desc: 'Receive browser push notifications' },
-          { key: 'sms', title: 'SMS Notifications', desc: 'Receive notifications via SMS' },
-          { key: 'marketing', title: 'Marketing Emails', desc: 'Receive product updates and offers' }
-        ].map(({ key, title, desc }) => (
+        {notificationItems.map(({ key, title, desc }) => (
           <div key={key} className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
             <div>
               <h3 className="font-medium text-gray-900 dark:text-white">{title}</h3>
               <p className="text-sm text-gray-500 dark:text-gray-400">{desc}</p>
             </div>
             <button
-              onClick={() => handleToggle(key as keyof typeof notifications)}
+              onClick={() => handleToggle(key)}
               disabled={saving}
-              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${notifications[key as keyof typeof notifications]
-                  ? 'bg-green-600'
-                  : 'bg-gray-300 dark:bg-gray-600'
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${notifications[key] ? 'bg-green-600' : 'bg-gray-300 dark:bg-gray-600'
                 }`}
             >
-              <span
-                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${notifications[key as keyof typeof notifications] ? 'translate-x-6' : 'translate-x-1'
-                  }`}
-              />
+              <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${notifications[key] ? 'translate-x-6' : 'translate-x-1'
+                }`} />
             </button>
           </div>
         ))}
@@ -548,53 +446,38 @@ const NotificationSettingsPanel: React.FC<NotificationSettingsPanelProps> = ({
 };
 
 // =============================================
-// Business Settings Panel (Placeholder)
+// Other Panels (Placeholder)
 // =============================================
 const BusinessSettingsPanel: React.FC = () => (
   <div className="space-y-6">
-    <div>
-      <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Business Profile</h2>
-      <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-        Configure your business information for WhatsApp
-      </p>
-    </div>
-
+    <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Business Profile</h2>
     <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4">
       <p className="text-yellow-700 dark:text-yellow-400">
         Business profile settings are synced with your WhatsApp Business Account.
-        Connect your WhatsApp account to manage these settings.
       </p>
     </div>
   </div>
 );
 
-// =============================================
-// Security Settings Panel
-// =============================================
 const SecuritySettingsPanel: React.FC = () => {
-  const [showPassword, setShowPassword] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [saving, setSaving] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const handleChangePassword = async () => {
     if (newPassword !== confirmPassword) {
       toast.error('Passwords do not match');
       return;
     }
-
     if (newPassword.length < 8) {
       toast.error('Password must be at least 8 characters');
       return;
     }
-
     try {
       setSaving(true);
-      await api.post('/auth/change-password', {
-        currentPassword,
-        newPassword
-      });
+      await api.post('/auth/change-password', { currentPassword, newPassword });
       toast.success('Password changed successfully');
       setCurrentPassword('');
       setNewPassword('');
@@ -608,21 +491,10 @@ const SecuritySettingsPanel: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Security Settings</h2>
-        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-          Manage your account security
-        </p>
-      </div>
-
-      {/* Change Password */}
+      <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Security Settings</h2>
       <div className="space-y-4">
-        <h3 className="font-medium text-gray-900 dark:text-white">Change Password</h3>
-
         <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-            Current Password
-          </label>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Current Password</label>
           <div className="relative">
             <input
               type={showPassword ? 'text' : 'password'}
@@ -630,117 +502,36 @@ const SecuritySettingsPanel: React.FC = () => {
               onChange={(e) => setCurrentPassword(e.target.value)}
               className="w-full px-3 py-2 pr-10 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
             />
-            <button
-              type="button"
-              onClick={() => setShowPassword(!showPassword)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500"
-            >
+            <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2">
               {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
             </button>
           </div>
         </div>
-
         <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-            New Password
-          </label>
-          <input
-            type="password"
-            value={newPassword}
-            onChange={(e) => setNewPassword(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-          />
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">New Password</label>
+          <input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)}
+            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white" />
         </div>
-
         <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-            Confirm New Password
-          </label>
-          <input
-            type="password"
-            value={confirmPassword}
-            onChange={(e) => setConfirmPassword(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-          />
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Confirm Password</label>
+          <input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)}
+            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white" />
         </div>
-
-        <button
-          onClick={handleChangePassword}
-          disabled={saving || !currentPassword || !newPassword}
-          className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
-        >
+        <button onClick={handleChangePassword} disabled={saving || !currentPassword || !newPassword}
+          className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50">
           {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Shield className="w-4 h-4" />}
           Change Password
         </button>
-      </div>
-
-      {/* Two-Factor Authentication */}
-      <div className="pt-6 border-t border-gray-200 dark:border-gray-700">
-        <div className="flex items-center justify-between">
-          <div>
-            <h3 className="font-medium text-gray-900 dark:text-white">Two-Factor Authentication</h3>
-            <p className="text-sm text-gray-500 dark:text-gray-400">
-              Add an extra layer of security to your account
-            </p>
-          </div>
-          <button className="px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600">
-            Enable 2FA
-          </button>
-        </div>
       </div>
     </div>
   );
 };
 
-// =============================================
-// API Settings Panel
-// =============================================
 const ApiSettingsPanel: React.FC = () => (
   <div className="space-y-6">
-    <div>
-      <h2 className="text-xl font-semibold text-gray-900 dark:text-white">API & Webhooks</h2>
-      <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-        Manage API keys and webhook configurations
-      </p>
-    </div>
-
+    <h2 className="text-xl font-semibold text-gray-900 dark:text-white">API & Webhooks</h2>
     <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
-      <p className="text-blue-700 dark:text-blue-400">
-        API documentation is available at{' '}
-        <a href="https://docs.wabmeta.com" target="_blank" rel="noopener noreferrer" className="underline">
-          docs.wabmeta.com
-        </a>
-      </p>
-    </div>
-
-    <div className="space-y-4">
-      <div className="p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
-        <div className="flex items-center justify-between">
-          <div>
-            <h3 className="font-medium text-gray-900 dark:text-white">API Keys</h3>
-            <p className="text-sm text-gray-500 dark:text-gray-400">
-              Generate API keys to access WabMeta API
-            </p>
-          </div>
-          <button className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">
-            Generate Key
-          </button>
-        </div>
-      </div>
-
-      <div className="p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
-        <div className="flex items-center justify-between">
-          <div>
-            <h3 className="font-medium text-gray-900 dark:text-white">Webhooks</h3>
-            <p className="text-sm text-gray-500 dark:text-gray-400">
-              Configure webhooks for real-time events
-            </p>
-          </div>
-          <button className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">
-            Add Webhook
-          </button>
-        </div>
-      </div>
+      <p className="text-blue-700 dark:text-blue-400">API documentation available at docs.wabmeta.com</p>
     </div>
   </div>
 );
