@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard,
@@ -21,6 +21,7 @@ import {
 import Logo from "../common/Logo";
 import { useApp } from "../../context/AppContext";
 import { usePlanAccess } from "../../hooks/usePlanAccess";
+import type { User } from "../../types/auth";
 
 interface SidebarProps {
   collapsed: boolean;
@@ -91,18 +92,19 @@ const prefetchRouteChunk = (href: string) => {
 };
 
 // helper
-const getDisplayName = (u: any): string => {
+const getDisplayName = (u: User | null): string => {
   if (!u) return "Guest";
+  // @ts-ignore - legacy support for firstName/lastName if not in User type yet, or just name
   const full = [u.firstName, u.lastName].filter(Boolean).join(" ").trim();
   if (full) return full;
-  if (typeof u.name === "string" && u.name.trim()) return u.name.trim();
-  if (typeof u.email === "string" && u.email.trim()) return u.email.trim();
+  if (u.name && u.name.trim()) return u.name.trim();
+  if (u.email && u.email.trim()) return u.email.trim();
   return "User";
 };
 
-const getEmail = (u: any): string => {
+const getEmail = (u: User | null): string => {
   if (!u) return "";
-  if (typeof u.email === "string") return u.email;
+  if (u.email) return u.email;
   return "";
 };
 
@@ -114,20 +116,17 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, setCollapsed }) => {
   const { unreadCount, totalContacts } = useApp();
   const { hasAccess } = usePlanAccess();
 
-  const [user, setUser] = useState<any | null>(null);
-
-  useEffect(() => {
+  const [user] = useState<User | null>(() => {
     const storedUser = localStorage.getItem("wabmeta_user");
     if (storedUser) {
       try {
-        setUser(JSON.parse(storedUser));
+        return JSON.parse(storedUser);
       } catch {
-        setUser(null);
+        return null;
       }
-    } else {
-      setUser(null);
     }
-  }, []);
+    return null;
+  });
 
   const displayName = getDisplayName(user);
   const email = getEmail(user);
@@ -202,16 +201,14 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, setCollapsed }) => {
 
   return (
     <aside
-      className={`fixed left-0 top-0 z-40 h-screen bg-white dark:bg-slate-900 border-r border-gray-200 dark:border-slate-800 transition-all duration-300 ease-in-out ${
-        collapsed ? "w-20" : "w-64"
-      }`}
+      className={`fixed left-0 top-0 z-40 h-screen bg-white dark:bg-slate-900 border-r border-gray-200 dark:border-slate-800 transition-all duration-300 ease-in-out ${collapsed ? "w-20" : "w-64"
+        }`}
     >
       <div className="flex flex-col h-full">
         {/* Logo Section */}
         <div
-          className={`flex items-center h-16 px-4 border-b border-gray-200 dark:border-slate-800 ${
-            collapsed ? "justify-center" : "justify-between"
-          }`}
+          className={`flex items-center h-16 px-4 border-b border-gray-200 dark:border-slate-800 ${collapsed ? "justify-center" : "justify-between"
+            }`}
         >
           <Link to="/dashboard" className="flex items-center" onMouseEnter={() => prefetchRouteChunk("/dashboard")}>
             <Logo variant={collapsed ? "icon" : "full"} />
@@ -267,20 +264,17 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, setCollapsed }) => {
                         onClick={(e) => {
                           if (isLocked) e.preventDefault();
                         }}
-                        className={`flex items-center px-3 py-2.5 rounded-xl transition-all duration-200 ${
-                          active
-                            ? "bg-primary-50 dark:bg-primary-900/10 text-primary-600 dark:text-primary-300"
-                            : "text-gray-600 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-800 hover:text-gray-900 dark:hover:text-white"
-                        } ${collapsed ? "justify-center" : ""} ${
-                          isLocked ? "opacity-60 cursor-not-allowed" : ""
-                        }`}
+                        className={`flex items-center px-3 py-2.5 rounded-xl transition-all duration-200 ${active
+                          ? "bg-primary-50 dark:bg-primary-900/10 text-primary-600 dark:text-primary-300"
+                          : "text-gray-600 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-800 hover:text-gray-900 dark:hover:text-white"
+                          } ${collapsed ? "justify-center" : ""} ${isLocked ? "opacity-60 cursor-not-allowed" : ""
+                          }`}
                       >
                         <item.icon
-                          className={`w-5 h-5 shrink-0 ${
-                            active
-                              ? "text-primary-500"
-                              : "text-gray-400 group-hover:text-gray-600 dark:group-hover:text-slate-200"
-                          }`}
+                          className={`w-5 h-5 shrink-0 ${active
+                            ? "text-primary-500"
+                            : "text-gray-400 group-hover:text-gray-600 dark:group-hover:text-slate-200"
+                            }`}
                         />
 
                         {!collapsed && (
@@ -291,9 +285,8 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, setCollapsed }) => {
                               <Lock className="w-3.5 h-3.5 ml-auto text-gray-400" />
                             ) : item.badge ? (
                               <span
-                                className={`ml-auto px-2 py-0.5 text-xs font-semibold rounded-full text-white ${
-                                  item.badgeColor || "bg-gray-500"
-                                }`}
+                                className={`ml-auto px-2 py-0.5 text-xs font-semibold rounded-full text-white ${item.badgeColor || "bg-gray-500"
+                                  }`}
                               >
                                 {item.badge}
                               </span>
@@ -316,9 +309,8 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, setCollapsed }) => {
                           )}
                           {!isLocked && item.badge && (
                             <span
-                              className={`ml-2 px-1.5 py-0.5 text-xs rounded-full ${
-                                item.badgeColor || "bg-gray-600"
-                              }`}
+                              className={`ml-2 px-1.5 py-0.5 text-xs rounded-full ${item.badgeColor || "bg-gray-600"
+                                }`}
                             >
                               {item.badge}
                             </span>
@@ -344,9 +336,8 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, setCollapsed }) => {
             <Link
               to="/dashboard/help"
               onMouseEnter={() => prefetchRouteChunk("/dashboard/help")}
-              className={`flex items-center px-3 py-2.5 text-gray-600 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-800 hover:text-gray-900 dark:hover:text-white rounded-xl transition-colors ${
-                collapsed ? "justify-center" : ""
-              }`}
+              className={`flex items-center px-3 py-2.5 text-gray-600 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-800 hover:text-gray-900 dark:hover:text-white rounded-xl transition-colors ${collapsed ? "justify-center" : ""
+                }`}
             >
               <HelpCircle className="w-5 h-5 text-gray-400" />
               {!collapsed && <span className="ml-3 font-medium">Help & Support</span>}
@@ -367,9 +358,8 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, setCollapsed }) => {
           >
             <button
               onClick={handleLogout}
-              className={`w-full flex items-center px-3 py-2.5 text-gray-600 dark:text-slate-300 hover:bg-red-50 dark:hover:bg-red-900/20 hover:text-red-600 rounded-xl transition-colors mt-1 ${
-                collapsed ? "justify-center" : ""
-              }`}
+              className={`w-full flex items-center px-3 py-2.5 text-gray-600 dark:text-slate-300 hover:bg-red-50 dark:hover:bg-red-900/20 hover:text-red-600 rounded-xl transition-colors mt-1 ${collapsed ? "justify-center" : ""
+                }`}
             >
               <LogOut className="w-5 h-5" />
               {!collapsed && <span className="ml-3 font-medium">Logout</span>}

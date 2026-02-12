@@ -67,8 +67,8 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
 
   // Scroll to bottom
   const scrollToBottom = (smooth = true) => {
-    messagesEndRef.current?.scrollIntoView({ 
-      behavior: smooth ? 'smooth' : 'auto' 
+    messagesEndRef.current?.scrollIntoView({
+      behavior: smooth ? 'smooth' : 'auto'
     });
   };
 
@@ -83,10 +83,10 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
   const handleScroll = () => {
     if (messagesContainerRef.current) {
       const { scrollTop, scrollHeight, clientHeight } = messagesContainerRef.current;
-      
+
       // Show/hide scroll to bottom button
       setShowScrollBottom(scrollHeight - scrollTop - clientHeight > 100);
-      
+
       // Load more messages when scrolled to top
       if (scrollTop < 100 && hasMore && !isLoadingMore && onLoadMore) {
         setIsLoadingMore(true);
@@ -99,7 +99,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
   // Handle send message (simplified signature to match parent)
   const handleSend = (content: string) => {
     if (sending || !content.trim()) return;
-    
+
     onSendMessage(content);
     setReplyTo(null);
     setShowQuickReplies(false);
@@ -124,46 +124,49 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
   const { contact } = conversation;
 
   // Group messages by date
-  const groupedMessages = messages.reduce((groups: { date: string; messages: Message[] }[], message) => {
-    const messageDate = new Date(message.timestamp || Date.now());
-    const today = new Date();
-    const yesterday = new Date(today);
-    yesterday.setDate(yesterday.getDate() - 1);
-    
-    let dateLabel = '';
-    if (messageDate.toDateString() === today.toDateString()) {
-      dateLabel = 'Today';
-    } else if (messageDate.toDateString() === yesterday.toDateString()) {
-      dateLabel = 'Yesterday';
-    } else {
-      dateLabel = messageDate.toLocaleDateString('en-US', { 
-        month: 'short', 
-        day: 'numeric',
-        year: messageDate.getFullYear() !== today.getFullYear() ? 'numeric' : undefined
-      });
-    }
-    
-    const lastGroup = groups[groups.length - 1];
-    
-    if (lastGroup && lastGroup.date === dateLabel) {
-      lastGroup.messages.push(message);
-    } else {
-      groups.push({ date: dateLabel, messages: [message] });
-    }
-    
-    return groups;
-  }, []);
+  const groupedMessages = React.useMemo(() => {
+    return messages.reduce((groups: { date: string; messages: Message[] }[], message) => {
+      // eslint-disable-next-line react-hooks/purity
+      const messageDate = new Date(message.timestamp || Date.now());
+      const today = new Date();
+      const yesterday = new Date(today);
+      yesterday.setDate(yesterday.getDate() - 1);
 
-  // Check if window is open (24-hour window) - simplified
-  const isWindowOpen = (conversation as any).isWindowOpen !== false;
-  const windowExpiresAt = (conversation as any).windowExpiresAt ? new Date((conversation as any).windowExpiresAt) : null;
+      let dateLabel = '';
+      if (messageDate.toDateString() === today.toDateString()) {
+        dateLabel = 'Today';
+      } else if (messageDate.toDateString() === yesterday.toDateString()) {
+        dateLabel = 'Yesterday';
+      } else {
+        dateLabel = messageDate.toLocaleDateString('en-US', {
+          month: 'short',
+          day: 'numeric',
+          year: messageDate.getFullYear() !== today.getFullYear() ? 'numeric' : undefined
+        });
+      }
+
+      const lastGroup = groups[groups.length - 1];
+
+      if (lastGroup && lastGroup.date === dateLabel) {
+        lastGroup.messages.push(message);
+      } else {
+        groups.push({ date: dateLabel, messages: [message] });
+      }
+
+      return groups;
+    }, []);
+  }, [messages]);
+
+  // Check if window is open (24-hour window)
+  const isWindowOpen = conversation.isWindowOpen !== false;
+  const windowExpiresAt = conversation.windowExpiresAt ? new Date(conversation.windowExpiresAt) : null;
   const windowExpired = windowExpiresAt ? windowExpiresAt < new Date() : false;
 
   return (
     <div className="flex flex-col h-full bg-[#efeae2]">
       {/* Chat Header */}
       <div className="flex items-center justify-between px-4 py-3 bg-white border-b border-gray-200">
-        <div 
+        <div
           className="flex items-center space-x-3 cursor-pointer"
           onClick={onToggleInfo}
         >
@@ -189,19 +192,19 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
         </div>
 
         <div className="flex items-center space-x-1">
-          <button 
+          <button
             className="p-2 hover:bg-gray-100 rounded-full transition-colors"
             title="Voice Call"
           >
             <Phone className="w-5 h-5 text-gray-600" />
           </button>
-          <button 
+          <button
             className="p-2 hover:bg-gray-100 rounded-full transition-colors"
             title="Video Call"
           >
             <Video className="w-5 h-5 text-gray-600" />
           </button>
-          <button 
+          <button
             className="p-2 hover:bg-gray-100 rounded-full transition-colors"
             title="Search Messages"
           >
@@ -209,14 +212,13 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
           </button>
           <button
             onClick={onToggleInfo}
-            className={`p-2 rounded-full transition-colors ${
-              showInfo ? 'bg-green-100 text-green-600' : 'hover:bg-gray-100 text-gray-600'
-            }`}
+            className={`p-2 rounded-full transition-colors ${showInfo ? 'bg-green-100 text-green-600' : 'hover:bg-gray-100 text-gray-600'
+              }`}
             title="Contact Info"
           >
             <Info className="w-5 h-5" />
           </button>
-          
+
           {/* More Menu */}
           <div className="relative">
             <button
@@ -228,7 +230,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
 
             {showMenu && (
               <>
-                <div 
+                <div
                   className="fixed inset-0 z-10"
                   onClick={() => setShowMenu(false)}
                 ></div>
@@ -258,7 +260,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
       </div>
 
       {/* Messages Area */}
-      <div 
+      <div
         ref={messagesContainerRef}
         onScroll={handleScroll}
         className="flex-1 overflow-y-auto p-4 relative"
@@ -272,7 +274,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
             <Loader2 className="w-6 h-6 text-gray-500 animate-spin" />
           </div>
         )}
-        
+
         {/* Loading State */}
         {loading && messages.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full">
@@ -297,7 +299,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
                     {group.date}
                   </span>
                 </div>
-                
+
                 {/* Messages */}
                 {group.messages.map((message) => (
                   <MessageBubble
@@ -311,7 +313,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
             ))}
           </>
         )}
-        
+
         <div ref={messagesEndRef} />
       </div>
 
@@ -355,11 +357,10 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
         {(isWindowOpen && !windowExpired) && (
           <button
             onClick={() => setShowQuickReplies(!showQuickReplies)}
-            className={`absolute -top-12 left-4 flex items-center space-x-1 px-3 py-1.5 rounded-full text-sm font-medium transition-all ${
-              showQuickReplies 
-                ? 'bg-green-500 text-white shadow-lg' 
-                : 'bg-white text-gray-700 hover:bg-gray-100 shadow'
-            }`}
+            className={`absolute -top-12 left-4 flex items-center space-x-1 px-3 py-1.5 rounded-full text-sm font-medium transition-all ${showQuickReplies
+              ? 'bg-green-500 text-white shadow-lg'
+              : 'bg-white text-gray-700 hover:bg-gray-100 shadow'
+              }`}
           >
             <Zap className="w-4 h-4" />
             <span>Quick Replies</span>

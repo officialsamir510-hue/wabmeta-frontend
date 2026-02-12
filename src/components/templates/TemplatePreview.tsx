@@ -23,6 +23,37 @@ const TemplatePreview: React.FC<TemplatePreviewProps> = ({
   isModal = false,
   onClose
 }) => {
+
+
+  if (isModal) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div
+          className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+          onClick={onClose}
+        ></div>
+        <div className="relative bg-gray-900 rounded-3xl p-6 animate-fade-in">
+          <button
+            onClick={onClose}
+            className="absolute top-4 right-4 p-2 bg-white/10 hover:bg-white/20 rounded-full text-white transition-colors z-10"
+          >
+            <X className="w-5 h-5" />
+          </button>
+          <PreviewContent />
+        </div>
+      </div>
+    );
+  }
+
+  return <PreviewContent />;
+};
+
+interface PreviewContentProps {
+  template: TemplateFormData;
+  sampleVariables: Record<string, string>;
+}
+
+const PreviewContent: React.FC<PreviewContentProps> = ({ template, sampleVariables }) => {
   // Replace variables in text
   const replaceVariables = (text: string): string => {
     let result = text;
@@ -59,7 +90,7 @@ const TemplatePreview: React.FC<TemplatePreviewProps> = ({
     );
   };
 
-  const PreviewContent = () => (
+  return (
     <div className="w-full max-w-sm mx-auto">
       {/* Phone Frame */}
       <div className="bg-[#0b141a] rounded-[2.5rem] p-3 shadow-2xl">
@@ -80,7 +111,7 @@ const TemplatePreview: React.FC<TemplatePreviewProps> = ({
         </div>
 
         {/* Chat Background */}
-        <div 
+        <div
           className="min-h-100 p-4 relative"
           style={{
             backgroundColor: '#0b141a',
@@ -96,9 +127,9 @@ const TemplatePreview: React.FC<TemplatePreviewProps> = ({
                   {template.header.type === 'image' && (
                     <div className="aspect-video bg-gray-700 flex items-center justify-center">
                       {template.header.mediaUrl ? (
-                        <img 
-                          src={template.header.mediaUrl} 
-                          alt="Header" 
+                        <img
+                          src={template.header.mediaUrl}
+                          alt="Header"
                           className="w-full h-full object-cover"
                         />
                       ) : (
@@ -179,36 +210,14 @@ const TemplatePreview: React.FC<TemplatePreviewProps> = ({
           </div>
           <div className="w-10 h-10 bg-[#00a884] rounded-full flex items-center justify-center">
             <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
-              <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+              <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z" />
+              <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z" />
             </svg>
           </div>
         </div>
       </div>
     </div>
   );
-
-  if (isModal) {
-    return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-        <div 
-          className="absolute inset-0 bg-black/50 backdrop-blur-sm"
-          onClick={onClose}
-        ></div>
-        <div className="relative bg-gray-900 rounded-3xl p-6 animate-fade-in">
-          <button
-            onClick={onClose}
-            className="absolute top-4 right-4 p-2 bg-white/10 hover:bg-white/20 rounded-full text-white transition-colors z-10"
-          >
-            <X className="w-5 h-5" />
-          </button>
-          <PreviewContent />
-        </div>
-      </div>
-    );
-  }
-
-  return <PreviewContent />;
 };
 
 export default TemplatePreview;

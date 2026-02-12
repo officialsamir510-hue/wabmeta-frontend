@@ -1,0 +1,110 @@
+src/App.tsx(87,29): error TS2339: Property 'role' does not exist on type 'User'.
+src/components/admin/AdminProtectedRoute.tsx(26,38): error TS2339: Property 'getProfile' does not exist on type '{ login: (data: { email: string; password: string; }) => Promise<AxiosResponse<ApiResponse<{ token: string; }>, any, {}>>; getDashboard: () => Promise<AxiosResponse<ApiResponse<...>, any, {}>>; ... 4 more ...; updatePlan: (id: string, data: any) => Promise<...>; }'.
+src/components/auth/SocialLoginButtons.tsx(27,35): error TS2339: Property 'tokens' does not exist on type '{ accessToken: string; refreshToken: string; user: any; }'.
+src/components/auth/SocialLoginButtons.tsx(28,36): error TS2339: Property 'tokens' does not exist on type '{ accessToken: string; refreshToken: string; user: any; }'.
+src/components/auth/SocialLoginButtons.tsx(30,36): error TS2339: Property 'organization' does not exist on type '{ accessToken: string; refreshToken: string; user: any; }'.
+src/components/billing/PaymentMethods.tsx(100,24): error TS6133: 'brand' is declared but its value is never read.
+src/components/campaigns/CsvAudienceUploader.tsx(2,18): error TS6133: 'FileText' is declared but its value is never read.
+src/components/chatbot/FlowCanvas.tsx(23,15): error TS2305: Module '"../../types/chatbot"' has no exported member 'ChatbotNodeData'.
+src/components/chatbot/NodeConfigPanel.tsx(4,15): error TS2305: Module '"../../types/chatbot"' has no exported member 'ChatbotNodeData'.
+src/components/chatbot/NodeConfigPanel.tsx(36,45): error TS7006: Parameter '_' implicitly has an 'any' type.
+src/components/chatbot/NodeConfigPanel.tsx(36,48): error TS7006: Parameter 'i' implicitly has an 'any' type.
+src/components/chatbot/NodeConfigPanel.tsx(99,37): error TS7006: Parameter 'option' implicitly has an 'any' type.
+src/components/chatbot/NodeConfigPanel.tsx(99,45): error TS7006: Parameter 'index' implicitly has an 'any' type.
+src/components/common/NoWhatsAppConnected.tsx(95,23): error TS6133: 'account' is declared but its value is never read.
+src/components/common/WhatsAppAccountSelector.tsx(8,3): error TS6133: 'AlertCircle' is declared but its value is never read.
+src/components/common/WhatsAppAccountSelector.tsx(13,10): error TS1484: 'WhatsAppAccount' is a type and must be imported using a type-only import when 'verbatimModuleSyntax' is enabled.
+src/components/common/WhatsAppAccountSelector.tsx(32,3): error TS6133: 'isLoading' is declared but its value is never read.
+src/components/common/WhatsAppAccountSelector.tsx(52,17): error TS2339: Property 'connectionStatus' does not exist on type 'WhatsAppAccount'.
+src/components/common/WhatsAppAccountSelector.tsx(54,24): error TS2339: Property 'connectionStatus' does not exist on type 'WhatsAppAccount'.
+src/components/common/WhatsAppAccountSelector.tsx(108,34): error TS2339: Property 'displayPhoneNumber' does not exist on type 'WhatsAppAccount'.
+src/components/common/WhatsAppAccountSelector.tsx(161,34): error TS2339: Property 'displayPhoneNumber' does not exist on type 'WhatsAppAccount'.
+src/components/dashboard/ChartCard.tsx(17,10): error TS6133: 'TrendingUp' is declared but its value is never read.
+src/components/dashboard/ChartCard.tsx(17,33): error TS6133: 'Activity' is declared but its value is never read.
+src/components/dashboard/MetaConnectModal.tsx(4,63): error TS6133: 'RefreshCw' is declared but its value is never read.
+src/components/dashboard/MetaConnectModal.tsx(6,10): error TS1484: 'ConnectionProgress' is a type and must be imported using a type-only import when 'verbatimModuleSyntax' is enabled.
+src/components/dashboard/MetaConnectModal.tsx(6,10): error TS6133: 'ConnectionProgress' is declared but its value is never read.
+src/components/dashboard/MetaConnectModal.tsx(6,30): error TS1484: 'WhatsAppAccount' is a type and must be imported using a type-only import when 'verbatimModuleSyntax' is enabled.
+src/components/dashboard/MetaConnectModal.tsx(218,38): error TS2339: Property 'displayPhoneNumber' does not exist on type 'WhatsAppAccount'.
+src/components/dashboard/MetaConnectModal.tsx(232,39): error TS2339: Property 'connectionStatus' does not exist on type 'WhatsAppAccount'.
+src/context/AppContext.tsx(97,46): error TS2339: Property 'data' does not exist on type '{}'.
+src/context/AuthContext.tsx(83,33): error TS2554: Expected 2 arguments, but got 1.
+src/hooks/useChatbot.ts(67,39): error TS2339: Property 'duplicate' does not exist on type '{ getAll: (params?: any) => Promise<AxiosResponse<ApiResponse<any>, any, {}>>; create: (data: any) => Promise<AxiosResponse<ApiResponse<any>, any, {}>>; ... 4 more ...; deactivate: (id: string) => Promise<...>; }'.
+src/hooks/useMetaConnection.ts(7,3): error TS1484: 'WhatsAppAccount' is a type and must be imported using a type-only import when 'verbatimModuleSyntax' is enabled.
+src/hooks/useMetaConnection.ts(8,3): error TS1484: 'EmbeddedSignupConfig' is a type and must be imported using a type-only import when 'verbatimModuleSyntax' is enabled.
+src/hooks/useMetaConnection.ts(9,3): error TS1484: 'ConnectionProgress' is a type and must be imported using a type-only import when 'verbatimModuleSyntax' is enabled.
+src/hooks/useMetaConnection.ts(10,3): error TS1484: 'FBLoginResponse' is a type and must be imported using a type-only import when 'verbatimModuleSyntax' is enabled.
+src/hooks/useMetaConnection.ts(35,9): error TS6133: 'navigate' is declared but its value is never read.
+src/pages/admin/AdminDashboard.tsx(9,3): error TS6133: 'TrendingUp' is declared but its value is never read.
+src/pages/admin/AdminDashboard.tsx(10,3): error TS6133: 'TrendingDown' is declared but its value is never read.
+src/pages/admin/AdminLogin.tsx(27,22): error TS2339: Property 'admin' does not exist on type '{ token: string; }'.
+src/pages/admin/UserManagement.tsx(6,12): error TS6133: 'Monitor' is declared but its value is never read.
+src/pages/admin/UserManagement.tsx(6,21): error TS6133: 'Smartphone' is declared but its value is never read.
+src/pages/admin/UserManagement.tsx(6,33): error TS6133: 'Globe' is declared but its value is never read.
+src/pages/admin/UserManagement.tsx(44,63): error TS2339: Property 'users' does not exist on type 'ApiResponse<any>'.
+src/pages/admin/UserManagement.tsx(72,19): error TS2339: Property 'suspendUser' does not exist on type '{ login: (data: { email: string; password: string; }) => Promise<AxiosResponse<ApiResponse<{ token: string; }>, any, {}>>; getDashboard: () => Promise<AxiosResponse<ApiResponse<...>, any, {}>>; ... 4 more ...; updatePlan: (id: string, data: any) => Promise<...>; }'.
+src/pages/admin/UserManagement.tsx(87,19): error TS2339: Property 'activateUser' does not exist on type '{ login: (data: { email: string; password: string; }) => Promise<AxiosResponse<ApiResponse<{ token: string; }>, any, {}>>; getDashboard: () => Promise<AxiosResponse<ApiResponse<...>, any, {}>>; ... 4 more ...; updatePlan: (id: string, data: any) => Promise<...>; }'.
+src/pages/admin/UserManagement.tsx(102,19): error TS2339: Property 'deleteUser' does not exist on type '{ login: (data: { email: string; password: string; }) => Promise<AxiosResponse<ApiResponse<{ token: string; }>, any, {}>>; getDashboard: () => Promise<AxiosResponse<ApiResponse<...>, any, {}>>; ... 4 more ...; updatePlan: (id: string, data: any) => Promise<...>; }'.
+src/pages/Billing.tsx(94,20): error TS2339: Property 'getPaymentMethods' does not exist on type '{ getCurrentPlan: () => Promise<AxiosResponse<ApiResponse<any>, any, {}>>; getPlans: () => Promise<AxiosResponse<ApiResponse<any>, any, {}>>; ... 5 more ...; verifyRazorpayPayment: (data: { ...; }) => Promise<...>; }'.
+src/pages/Billing.tsx(151,24): error TS2339: Property 'addPaymentMethod' does not exist on type '{ getCurrentPlan: () => Promise<AxiosResponse<ApiResponse<any>, any, {}>>; getPlans: () => Promise<AxiosResponse<ApiResponse<any>, any, {}>>; ... 5 more ...; verifyRazorpayPayment: (data: { ...; }) => Promise<...>; }'.
+src/pages/Billing.tsx(160,24): error TS2339: Property 'deletePaymentMethod' does not exist on type '{ getCurrentPlan: () => Promise<AxiosResponse<ApiResponse<any>, any, {}>>; getPlans: () => Promise<AxiosResponse<ApiResponse<any>, any, {}>>; ... 5 more ...; verifyRazorpayPayment: (data: { ...; }) => Promise<...>; }'.
+src/pages/Billing.tsx(169,24): error TS2339: Property 'setDefaultPaymentMethod' does not exist on type '{ getCurrentPlan: () => Promise<AxiosResponse<ApiResponse<any>, any, {}>>; getPlans: () => Promise<AxiosResponse<ApiResponse<any>, any, {}>>; ... 5 more ...; verifyRazorpayPayment: (data: { ...; }) => Promise<...>; }'.
+src/pages/Campaigns.tsx(13,3): error TS6133: 'MoreVertical' is declared but its value is never read.
+src/pages/Campaigns.tsx(71,43): error TS2339: Property 'on' does not exist on type 'SocketContextType'.
+src/pages/Campaigns.tsx(71,47): error TS2339: Property 'off' does not exist on type 'SocketContextType'.
+src/pages/Campaigns.tsx(375,11): error TS2322: Type '{ title: string; description: string; variant: string; }' is not assignable to type 'IntrinsicAttributes & NoWhatsAppConnectedProps'.
+  Property 'variant' does not exist on type 'IntrinsicAttributes & NoWhatsAppConnectedProps'.
+src/pages/ChatbotBuilder.tsx(11,3): error TS6133: 'Eye' is declared but its value is never read.
+src/pages/ChatbotBuilder.tsx(26,3): error TS1484: 'Connection' is a type and must be imported using a type-only import when 'verbatimModuleSyntax' is enabled.
+src/pages/ChatbotBuilder.tsx(27,3): error TS1484: 'Edge' is a type and must be imported using a type-only import when 'verbatimModuleSyntax' is enabled.
+src/pages/ChatbotBuilder.tsx(27,3): error TS6133: 'Edge' is declared but its value is never read.
+src/pages/ChatbotBuilder.tsx(28,3): error TS1484: 'Node' is a type and must be imported using a type-only import when 'verbatimModuleSyntax' is enabled.
+src/pages/ChatbotBuilder.tsx(29,3): error TS1484: 'NodeTypes' is a type and must be imported using a type-only import when 'verbatimModuleSyntax' is enabled.
+src/pages/ChatbotBuilder.tsx(30,3): error TS6133: 'Panel' is declared but its value is never read.
+src/pages/ChatbotBuilder.tsx(53,9): error TS6133: 'navigate' is declared but its value is never read.
+src/pages/ChatbotBuilder.tsx(100,36): error TS6133: 'event' is declared but its value is never read.
+src/pages/ChatbotBuilder.tsx(158,30): error TS2322: Type 'Node<any, string | undefined>[]' is not assignable to type 'FlowNode[]'.
+  Type 'Node<any, string | undefined>' is not assignable to type 'FlowNode'.
+    Types of property 'type' are incompatible.
+      Type 'string | undefined' is not assignable to type '"button" | "start" | "action" | "message" | "condition" | "delay"'.
+        Type 'undefined' is not assignable to type '"button" | "start" | "action" | "message" | "condition" | "delay"'.
+src/pages/ChatbotBuilder.tsx(158,37): error TS2322: Type 'Edge<any>[]' is not assignable to type 'FlowEdge[]'.
+  Type 'Edge<any>' is not assignable to type 'FlowEdge'.
+    Type 'DefaultEdge<any>' is not assignable to type 'FlowEdge'.
+      Types of property 'sourceHandle' are incompatible.
+        Type 'string | null | undefined' is not assignable to type 'string | undefined'.
+          Type 'null' is not assignable to type 'string | undefined'.
+src/pages/ChatbotList.tsx(4,10): error TS6133: 'Link' is declared but its value is never read.
+src/pages/ChatbotList.tsx(14,3): error TS6133: 'MoreVertical' is declared but its value is never read.
+src/pages/ChatbotList.tsx(20,3): error TS6133: 'Settings' is declared but its value is never read.
+src/pages/ChatbotList.tsx(31,5): error TS6133: 'refresh' is declared but its value is never read.
+src/pages/ContactDetails.tsx(42,31): error TS2339: Property 'contact' does not exist on type 'ApiResponse<any>'.
+src/pages/ContactDetails.tsx(47,36): error TS2339: Property 'contacts' does not exist on type 'ApiResponse<any>'.
+src/pages/CreateCampaign.tsx(95,7): error TS6133: 'getConnectedWhatsAppAccountId' is declared but its value is never read.
+src/pages/CreateTemplate.tsx(28,11): error TS6196: 'TemplateButton' is declared but never used.
+src/pages/Dashboard.tsx(22,1): error TS6133: 'useMetaConnection' is declared but its value is never read.
+src/pages/Dashboard.tsx(79,57): error TS2552: Cannot find name '_useMetaConnection'. Did you mean 'checkMetaConnection'?
+src/pages/Dashboard.tsx(674,9): error TS2322: Type '{ isOpen: boolean; onClose: () => void; onSuccess: () => Promise<void>; }' is not assignable to type 'IntrinsicAttributes & MetaConnectModalProps'.
+  Property 'onSuccess' does not exist on type 'IntrinsicAttributes & MetaConnectModalProps'.
+src/pages/ImportContacts.tsx(9,3): error TS6133: 'ArrowRight' is declared but its value is never read.
+src/pages/Inbox.tsx(153,10): error TS6133: 'hasMoreMessages' is declared but its value is never read.
+src/pages/Inbox.tsx(170,39): error TS2551: Property 'conversations' does not exist on type '{ getConversations: (params?: any) => Promise<AxiosResponse<ApiResponse<any>, any, {}>>; getConversation: (id: string) => Promise<AxiosResponse<ApiResponse<any>, any, {}>>; getMessages: (conversationId: string, params?: any) => Promise<...>; sendMessage: (conversationId: string, data: { ...; }) => Promise<...>; mark...'. Did you mean 'getConversations'?
+src/pages/Inbox.tsx(312,22): error TS2339: Property 'archive' does not exist on type '{ getConversations: (params?: any) => Promise<AxiosResponse<ApiResponse<any>, any, {}>>; getConversation: (id: string) => Promise<AxiosResponse<ApiResponse<any>, any, {}>>; getMessages: (conversationId: string, params?: any) => Promise<...>; sendMessage: (conversationId: string, data: { ...; }) => Promise<...>; mark...'.
+src/pages/Login.tsx(71,13): error TS6133: 'refreshToken' is declared but its value is never read.
+src/pages/Login.tsx(214,11): error TS2322: Type '{ onGoogleLogin: () => void; onFacebookLogin: () => void; loading: boolean; }' is not assignable to type 'IntrinsicAttributes & SocialLoginButtonsProps'.
+  Property 'onGoogleLogin' does not exist on type 'IntrinsicAttributes & SocialLoginButtonsProps'.
+src/pages/MetaCallback.tsx(5,41): error TS6133: 'AlertTriangle' is declared but its value is never read.
+src/pages/Notifications.tsx(19,3): error TS6133: 'MoreHorizontal' is declared but its value is never read.
+src/pages/Profile.tsx(19,3): error TS6133: 'Trash2' is declared but its value is never read.
+src/pages/Profile.tsx(71,39): error TS2339: Property 'getProfile' does not exist on type '{ getAll: () => Promise<AxiosResponse<ApiResponse<any>, any, {}>>; update: (data: any) => Promise<AxiosResponse<ApiResponse<any>, any, {}>>; ... 5 more ...; revokeApiKey: (id: string) => Promise<...>; }'.
+src/pages/Profile.tsx(100,48): error TS2339: Property 'user' does not exist on type 'ApiResponse<any>'.
+src/pages/Profile.tsx(162,39): error TS2339: Property 'updateProfile' does not exist on type '{ getAll: () => Promise<AxiosResponse<ApiResponse<any>, any, {}>>; update: (data: any) => Promise<AxiosResponse<ApiResponse<any>, any, {}>>; ... 5 more ...; revokeApiKey: (id: string) => Promise<...>; }'.
+src/pages/Reports.tsx(35,25): error TS2339: Property 'messagesSent' does not exist on type 'ApiResponse<any>'.
+src/pages/Reports.tsx(42,25): error TS2339: Property 'deliveryRate' does not exist on type 'ApiResponse<any>'.
+src/pages/Reports.tsx(49,25): error TS2339: Property 'responseRate' does not exist on type 'ApiResponse<any>'.
+src/pages/Reports.tsx(56,25): error TS2339: Property 'cost' does not exist on type 'ApiResponse<any>'.
+src/pages/Reports.tsx(65,50): error TS2339: Property 'campaigns' does not exist on type 'ApiResponse<any>'.
+src/pages/Signup.tsx(264,33): error TS2322: Type '{ onGoogleLogin: () => void; onFacebookLogin: () => void; }' is not assignable to type 'IntrinsicAttributes & SocialLoginButtonsProps'.
+  Property 'onGoogleLogin' does not exist on type 'IntrinsicAttributes & SocialLoginButtonsProps'.
+src/pages/VerifyEmail.tsx(43,30): error TS2339: Property 'verifyOTP' does not exist on type '{ register: (data: { email: string; password: string; firstName: string; lastName?: string | undefined; phone?: string | undefined; organizationName?: string | undefined; }) => Promise<AxiosResponse<ApiResponse<any>, any, {}>>; ... 10 more ...; changePassword: (data: { ...; }) => Promise<...>; }'.
+src/pages/VerifyEmail.tsx(85,18): error TS2339: Property 'sendOTP' does not exist on type '{ register: (data: { email: string; password: string; firstName: string; lastName?: string | undefined; phone?: string | undefined; organizationName?: string | undefined; }) => Promise<AxiosResponse<ApiResponse<any>, any, {}>>; ... 10 more ...; changePassword: (data: { ...; }) => Promise<...>; }'.

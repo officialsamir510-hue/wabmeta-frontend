@@ -1,14 +1,13 @@
 // src/pages/ChatbotBuilder.tsx
 
 import React, { useState, useCallback, useEffect } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, Link } from 'react-router-dom';
 import {
   ArrowLeft,
   Save,
   Play,
   Pause,
   Settings,
-  Eye,
   Zap,
   MessageSquare,
   Plus,
@@ -17,22 +16,23 @@ import {
   CheckCircle,
 } from 'lucide-react';
 import ReactFlow, {
+
   Background,
   Controls,
   MiniMap,
   addEdge,
   useNodesState,
   useEdgesState,
-  Connection,
-  Edge,
-  Node,
-  NodeTypes,
-  Panel,
+  type Connection,
+  type Edge,
+  type Node,
+  type NodeTypes,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 
 import { useChatbot } from '../hooks/useChatbot';
 import { chatbot as chatbotApi } from '../services/api';
+import type { FlowNode, FlowEdge } from '../types/chatbot';
 
 // Import custom nodes
 import StartNode from '../components/chatbot/nodes/StartNode';
@@ -50,7 +50,6 @@ const nodeTypes: NodeTypes = {
 
 const ChatbotBuilder: React.FC = () => {
   const { id } = useParams<{ id: string }>();
-  const navigate = useNavigate();
 
   const { chatbot, loading, saving, error, updateChatbot, updateFlowData, saveChatbot } = useChatbot(id!);
 
@@ -76,8 +75,9 @@ const ChatbotBuilder: React.FC = () => {
   // Initialize flow from chatbot data
   useEffect(() => {
     if (chatbot) {
-      setNodes(chatbot.flowData?.nodes || []);
-      setEdges(chatbot.flowData?.edges || []);
+      setNodes((chatbot.flowData?.nodes as FlowNode[]) || []);
+      setEdges((chatbot.flowData?.edges as FlowEdge[]) || []);
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setName(chatbot.name);
       setDescription(chatbot.description || '');
       setWelcomeMessage(chatbot.welcomeMessage || '');
@@ -155,7 +155,7 @@ const ChatbotBuilder: React.FC = () => {
   // Save chatbot
   const handleSave = async () => {
     try {
-      await updateFlowData({ nodes, edges });
+      await updateFlowData({ nodes: nodes as FlowNode[], edges: edges as FlowEdge[] });
       await updateChatbot({
         name,
         description,
@@ -165,7 +165,7 @@ const ChatbotBuilder: React.FC = () => {
         isDefault,
       });
       await saveChatbot();
-      
+
       setHasUnsavedChanges(false);
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3000);
@@ -252,20 +252,18 @@ const ChatbotBuilder: React.FC = () => {
 
           <button
             onClick={() => setShowSettings(!showSettings)}
-            className={`p-2 rounded-lg transition-colors ${
-              showSettings ? 'bg-gray-100' : 'hover:bg-gray-100'
-            }`}
+            className={`p-2 rounded-lg transition-colors ${showSettings ? 'bg-gray-100' : 'hover:bg-gray-100'
+              }`}
           >
             <Settings className="w-5 h-5" />
           </button>
 
           <button
             onClick={handleToggleStatus}
-            className={`inline-flex items-center px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-              chatbot.status === 'ACTIVE'
-                ? 'bg-yellow-100 text-yellow-800 hover:bg-yellow-200'
-                : 'bg-green-100 text-green-800 hover:bg-green-200'
-            }`}
+            className={`inline-flex items-center px-4 py-2 rounded-lg text-sm font-medium transition-colors ${chatbot.status === 'ACTIVE'
+              ? 'bg-yellow-100 text-yellow-800 hover:bg-yellow-200'
+              : 'bg-green-100 text-green-800 hover:bg-green-200'
+              }`}
           >
             {chatbot.status === 'ACTIVE' ? (
               <>
@@ -300,7 +298,7 @@ const ChatbotBuilder: React.FC = () => {
         {/* Node Sidebar */}
         <div className="w-64 bg-white border-r p-4 overflow-y-auto">
           <h3 className="font-semibold text-gray-900 mb-4">Add Nodes</h3>
-          
+
           <div className="space-y-2">
             <button
               onClick={() => addNode('message')}
@@ -578,14 +576,12 @@ const ChatbotBuilder: React.FC = () => {
                     setIsDefault(!isDefault);
                     setHasUnsavedChanges(true);
                   }}
-                  className={`w-12 h-6 rounded-full transition-colors ${
-                    isDefault ? 'bg-green-600' : 'bg-gray-300'
-                  }`}
+                  className={`w-12 h-6 rounded-full transition-colors ${isDefault ? 'bg-green-600' : 'bg-gray-300'
+                    }`}
                 >
                   <div
-                    className={`w-5 h-5 bg-white rounded-full shadow transform transition-transform ${
-                      isDefault ? 'translate-x-6' : 'translate-x-0.5'
-                    }`}
+                    className={`w-5 h-5 bg-white rounded-full shadow transform transition-transform ${isDefault ? 'translate-x-6' : 'translate-x-0.5'
+                      }`}
                   />
                 </button>
               </div>

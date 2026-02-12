@@ -37,6 +37,8 @@ export interface Conversation {
   isPinned: boolean;
   isMuted: boolean;
   updatedAt: string;
+  isWindowOpen?: boolean;
+  windowExpiresAt?: string;
 }
 
 export interface QuickReply {

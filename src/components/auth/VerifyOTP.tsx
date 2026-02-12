@@ -14,20 +14,17 @@ const VerifyOTP: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [resendLoading, setResendLoading] = useState(false);
   const [countdown, setCountdown] = useState(30);
-  const [canResend, setCanResend] = useState(false);
+  const canResend = countdown === 0;
 
   const verificationType = location.state?.type || 'phone'; // 'phone' or 'email'
   const verificationValue = location.state?.value || '+91 98765 43210';
 
   useEffect(() => {
-    let timer: ReturnType<typeof setTimeout>;
-    if (countdown > 0 && !canResend) {
-      timer = setTimeout(() => setCountdown(countdown - 1), 1000);
-    } else {
-      setCanResend(true);
+    if (countdown > 0) {
+      const timer = setTimeout(() => setCountdown(prev => prev - 1), 1000);
+      return () => clearTimeout(timer);
     }
-    return () => clearTimeout(timer);
-  }, [countdown, canResend]);
+  }, [countdown]);
 
   const handleVerify = async () => {
     if (otp.length !== 6) {
@@ -54,13 +51,12 @@ const VerifyOTP: React.FC = () => {
 
   const handleResend = async () => {
     setResendLoading(true);
-    
+
     // Simulate API call
     await new Promise(resolve => setTimeout(resolve, 1500));
-    
+
     setResendLoading(false);
     setCountdown(30);
-    setCanResend(false);
     setError('');
     setOtp('');
   };
@@ -71,17 +67,16 @@ const VerifyOTP: React.FC = () => {
   };
 
   return (
-    <AuthLayout 
-      title="Verify your account" 
+    <AuthLayout
+      title="Verify your account"
       subtitle=""
       showBackButton
     >
       <div className="space-y-8">
         {/* Info Card */}
         <div className="bg-gray-50 rounded-2xl p-6 text-center">
-          <div className={`w-14 h-14 mx-auto mb-4 rounded-full flex items-center justify-center ${
-            verificationType === 'phone' ? 'bg-blue-100' : 'bg-green-100'
-          }`}>
+          <div className={`w-14 h-14 mx-auto mb-4 rounded-full flex items-center justify-center ${verificationType === 'phone' ? 'bg-blue-100' : 'bg-green-100'
+            }`}>
             {verificationType === 'phone' ? (
               <Phone className="w-7 h-7 text-blue-600" />
             ) : (
@@ -92,7 +87,7 @@ const VerifyOTP: React.FC = () => {
             We've sent a 6-digit code to
           </p>
           <p className="font-semibold text-gray-900 text-lg">
-            {verificationType === 'phone' 
+            {verificationType === 'phone'
               ? formatPhoneNumber(verificationValue)
               : verificationValue
             }

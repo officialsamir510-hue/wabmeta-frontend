@@ -37,29 +37,14 @@ const NotificationSettings: React.FC = () => {
 
   const handleSave = async () => {
     setSaving(true);
-    
+
     // Simulate API call
     await new Promise(resolve => setTimeout(resolve, 1000));
-    
+
     setSaving(false);
     setSuccess(true);
     setTimeout(() => setSuccess(false), 3000);
   };
-
-  const ToggleSwitch = ({ enabled, onChange }: { enabled: boolean; onChange: () => void }) => (
-    <button
-      onClick={onChange}
-      className={`relative w-11 h-6 rounded-full transition-colors ${
-        enabled ? 'bg-primary-500' : 'bg-gray-200'
-      }`}
-    >
-      <div
-        className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform shadow ${
-          enabled ? 'translate-x-6' : 'translate-x-1'
-        }`}
-      />
-    </button>
-  );
 
   return (
     <div className="space-y-6">
@@ -208,5 +193,18 @@ const NotificationSettings: React.FC = () => {
     </div>
   );
 };
+
+const ToggleSwitch = ({ enabled, onChange }: { enabled: boolean; onChange: () => void }) => (
+  <button
+    onClick={onChange}
+    className={`relative w-11 h-6 rounded-full transition-colors ${enabled ? 'bg-primary-500' : 'bg-gray-200'
+      }`}
+  >
+    <div
+      className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform shadow ${enabled ? 'translate-x-6' : 'translate-x-1'
+        }`}
+    />
+  </button>
+);
 
 export default NotificationSettings;

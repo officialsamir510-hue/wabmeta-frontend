@@ -40,7 +40,7 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
         const fName = nameParts[0] || '';
         const lName = nameParts.slice(1).join(' ') || '';
 
-        setFormData({
+        const newFormData = {
           firstName: fName,
           lastName: lName,
           phone: editContact.phone || '',
@@ -49,10 +49,15 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
           address: editContact.address || '',
           tags: editContact.tags || [],
           notes: editContact.notes || ''
-        });
+        };
+
+        // Simple comparison to avoid update if same (naive but effective for loop prevention)
+        if (JSON.stringify(formData) !== JSON.stringify(newFormData)) {
+          setFormData(newFormData);
+        }
       } else {
         // Reset Form for New Contact
-        setFormData({
+        const initialData = {
           firstName: '',
           lastName: '',
           phone: '',
@@ -61,7 +66,10 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
           address: '',
           tags: [],
           notes: ''
-        });
+        };
+        if (JSON.stringify(formData) !== JSON.stringify(initialData)) {
+          setFormData(initialData);
+        }
       }
       setErrors({});
     }
@@ -98,7 +106,7 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
   };
 
   // ... (Baaki render code same rahega) ...
-  
+
   const handleAddTag = (tag: string) => {
     if (tag && !formData.tags.includes(tag)) {
       setFormData({ ...formData, tags: [...formData.tags, tag] });
@@ -114,7 +122,7 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div 
+      <div
         className="absolute inset-0 bg-black/50 backdrop-blur-sm"
         onClick={onClose}
       ></div>

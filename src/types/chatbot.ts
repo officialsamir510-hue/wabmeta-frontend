@@ -1,28 +1,34 @@
 // src/types/chatbot.ts
 
+export interface ChatbotNodeData {
+  label?: string;
+  message?: string;
+  content?: string; // Add content field as used in NodeConfigPanel
+  options?: string[]; // Add options field for buttons
+  buttons?: Array<{
+    id: string;
+    text: string;
+    type: 'reply' | 'url' | 'phone';
+    value?: string;
+  }>;
+  condition?: {
+    field?: string; // Add field
+    operator?: string; // Add operator
+    type?: 'keyword' | 'contains' | 'exact' | 'regex';
+    value: string;
+  };
+  delay?: number;
+  action?: {
+    type: 'assign' | 'tag' | 'webhook' | 'variable';
+    value: string;
+  };
+}
+
 export interface FlowNode {
   id: string;
   type: 'start' | 'message' | 'button' | 'condition' | 'delay' | 'action';
   position: { x: number; y: number };
-  data: {
-    label?: string;
-    message?: string;
-    buttons?: Array<{
-      id: string;
-      text: string;
-      type: 'reply' | 'url' | 'phone';
-      value?: string;
-    }>;
-    condition?: {
-      type: 'keyword' | 'contains' | 'exact' | 'regex';
-      value: string;
-    };
-    delay?: number;
-    action?: {
-      type: 'assign' | 'tag' | 'webhook' | 'variable';
-      value: string;
-    };
-  };
+  data: ChatbotNodeData;
 }
 
 export interface FlowEdge {

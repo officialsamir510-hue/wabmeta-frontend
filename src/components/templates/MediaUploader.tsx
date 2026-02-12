@@ -10,6 +10,15 @@ interface MediaUploaderProps {
   onRemove: () => void;
 }
 
+const getIcon = (headerType: HeaderType) => {
+  switch (headerType) {
+    case 'image': return Image;
+    case 'video': return Video;
+    case 'document': return File;
+    default: return Upload;
+  }
+};
+
 const MediaUploader: React.FC<MediaUploaderProps> = ({
   headerType,
   mediaUrl,
@@ -40,16 +49,8 @@ const MediaUploader: React.FC<MediaUploaderProps> = ({
     }
   };
 
-  const getIcon = () => {
-    switch (headerType) {
-      case 'image': return Image;
-      case 'video': return Video;
-      case 'document': return File;
-      default: return Upload;
-    }
-  };
-
-  const Icon = getIcon();
+  // eslint-disable-next-line react/no-unstable-nested-components
+  const Icon = getIcon(headerType);
 
   const handleDrag = (e: React.DragEvent) => {
     e.preventDefault();
@@ -63,7 +64,7 @@ const MediaUploader: React.FC<MediaUploaderProps> = ({
 
   const validateFile = (file: File): boolean => {
     setError(null);
-    
+
     const maxSize = getMaxSize();
     if (file.size > maxSize) {
       setError(`File too large. Max size: ${maxSize / (1024 * 1024)}MB`);
@@ -77,10 +78,10 @@ const MediaUploader: React.FC<MediaUploaderProps> = ({
     if (!validateFile(file)) return;
 
     setUploading(true);
-    
+
     // Simulate upload
     await new Promise(resolve => setTimeout(resolve, 1500));
-    
+
     // Create object URL for preview
     const url = URL.createObjectURL(file);
     onMediaChange(url, file.name);
@@ -107,15 +108,15 @@ const MediaUploader: React.FC<MediaUploaderProps> = ({
     return (
       <div className="relative bg-gray-100 rounded-xl overflow-hidden">
         {headerType === 'image' && (
-          <img 
-            src={mediaUrl} 
-            alt="Header preview" 
+          <img
+            src={mediaUrl}
+            alt="Header preview"
             className="w-full h-48 object-cover"
           />
         )}
         {headerType === 'video' && (
-          <video 
-            src={mediaUrl} 
+          <video
+            src={mediaUrl}
             className="w-full h-48 object-cover"
             controls
           />
@@ -131,7 +132,7 @@ const MediaUploader: React.FC<MediaUploaderProps> = ({
             </div>
           </div>
         )}
-        
+
         <button
           onClick={onRemove}
           className="absolute top-2 right-2 p-2 bg-white/90 hover:bg-white rounded-full shadow-md transition-colors"
@@ -153,13 +154,12 @@ const MediaUploader: React.FC<MediaUploaderProps> = ({
       onDragLeave={handleDrag}
       onDragOver={handleDrag}
       onDrop={handleDrop}
-      className={`relative border-2 border-dashed rounded-xl p-6 text-center transition-all ${
-        dragActive
-          ? 'border-primary-500 bg-primary-50'
-          : error
-            ? 'border-red-300 bg-red-50'
-            : 'border-gray-300 hover:border-gray-400 bg-gray-50'
-      }`}
+      className={`relative border-2 border-dashed rounded-xl p-6 text-center transition-all ${dragActive
+        ? 'border-primary-500 bg-primary-50'
+        : error
+          ? 'border-red-300 bg-red-50'
+          : 'border-gray-300 hover:border-gray-400 bg-gray-50'
+        }`}
     >
       <input
         ref={inputRef}
@@ -182,9 +182,8 @@ const MediaUploader: React.FC<MediaUploaderProps> = ({
         </div>
       ) : (
         <div className="space-y-3">
-          <div className={`w-12 h-12 mx-auto rounded-full flex items-center justify-center ${
-            dragActive ? 'bg-primary-100' : 'bg-gray-200'
-          }`}>
+          <div className={`w-12 h-12 mx-auto rounded-full flex items-center justify-center ${dragActive ? 'bg-primary-100' : 'bg-gray-200'
+            }`}>
             <Icon className={`w-6 h-6 ${dragActive ? 'text-primary-600' : 'text-gray-500'}`} />
           </div>
           <div>

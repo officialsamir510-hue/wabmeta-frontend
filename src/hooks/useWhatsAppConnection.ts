@@ -45,8 +45,8 @@ export const useWhatsAppConnection = (): UseWhatsAppConnectionReturn => {
 
   const fetchAccounts = useCallback(async () => {
     try {
-      setError(null);
       const res = await whatsapp.accounts();
+      setError(null);
 
       // api.ts patterns: sometimes res.data.data, sometimes res.data
       const list = (res.data?.data ?? res.data ?? []) as any;

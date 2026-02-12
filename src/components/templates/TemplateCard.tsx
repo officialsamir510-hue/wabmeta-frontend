@@ -25,6 +25,43 @@ interface TemplateCardProps {
   onPreview: (template: Template) => void;
 }
 
+const getStatusConfig = (status: Template['status']) => {
+  switch (status) {
+    case 'approved':
+      return { icon: CheckCircle2, color: 'bg-green-100 text-green-700', label: 'Approved' };
+    case 'pending':
+      return { icon: Clock, color: 'bg-yellow-100 text-yellow-700', label: 'Pending' };
+    case 'rejected':
+      return { icon: XCircle, color: 'bg-red-100 text-red-700', label: 'Rejected' };
+    case 'draft':
+      return { icon: FileText, color: 'bg-gray-100 text-gray-700', label: 'Draft' };
+    default:
+      return { icon: Clock, color: 'bg-gray-100 text-gray-700', label: status };
+  }
+};
+
+const getCategoryConfig = (category: Template['category']) => {
+  switch (category) {
+    case 'marketing':
+      return { color: 'bg-purple-100 text-purple-700', label: 'Marketing' };
+    case 'utility':
+      return { color: 'bg-blue-100 text-blue-700', label: 'Utility' };
+    case 'authentication':
+      return { color: 'bg-orange-100 text-orange-700', label: 'Authentication' };
+    default:
+      return { color: 'bg-gray-100 text-gray-700', label: category };
+  }
+};
+
+const getHeaderIcon = (type: Template['header']['type']) => {
+  switch (type) {
+    case 'image': return Image;
+    case 'video': return Video;
+    case 'document': return File;
+    default: return FileText;
+  }
+};
+
 const TemplateCard: React.FC<TemplateCardProps> = ({
   template,
   onDelete,
@@ -33,45 +70,9 @@ const TemplateCard: React.FC<TemplateCardProps> = ({
 }) => {
   const [showMenu, setShowMenu] = useState(false);
 
-  const getStatusConfig = (status: Template['status']) => {
-    switch (status) {
-      case 'approved':
-        return { icon: CheckCircle2, color: 'bg-green-100 text-green-700', label: 'Approved' };
-      case 'pending':
-        return { icon: Clock, color: 'bg-yellow-100 text-yellow-700', label: 'Pending' };
-      case 'rejected':
-        return { icon: XCircle, color: 'bg-red-100 text-red-700', label: 'Rejected' };
-      case 'draft':
-        return { icon: FileText, color: 'bg-gray-100 text-gray-700', label: 'Draft' };
-      default:
-        return { icon: Clock, color: 'bg-gray-100 text-gray-700', label: status };
-    }
-  };
-
-  const getCategoryConfig = (category: Template['category']) => {
-    switch (category) {
-      case 'marketing':
-        return { color: 'bg-purple-100 text-purple-700', label: 'Marketing' };
-      case 'utility':
-        return { color: 'bg-blue-100 text-blue-700', label: 'Utility' };
-      case 'authentication':
-        return { color: 'bg-orange-100 text-orange-700', label: 'Authentication' };
-      default:
-        return { color: 'bg-gray-100 text-gray-700', label: category };
-    }
-  };
-
-  const getHeaderIcon = (type: Template['header']['type']) => {
-    switch (type) {
-      case 'image': return Image;
-      case 'video': return Video;
-      case 'document': return File;
-      default: return FileText;
-    }
-  };
-
   const statusConfig = getStatusConfig(template.status);
   const categoryConfig = getCategoryConfig(template.category);
+  // eslint-disable-next-line react/no-unstable-nested-components
   const HeaderIcon = getHeaderIcon(template.header.type);
 
   const truncateBody = (text: string, maxLength: number = 100) => {
@@ -106,7 +107,7 @@ const TemplateCard: React.FC<TemplateCardProps> = ({
 
           {showMenu && (
             <>
-              <div 
+              <div
                 className="fixed inset-0 z-10"
                 onClick={() => setShowMenu(false)}
               ></div>

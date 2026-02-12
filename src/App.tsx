@@ -5,9 +5,10 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-route
 import { Toaster } from 'react-hot-toast';
 
 // Context Providers
-import { AuthProvider, useAuth } from './context/AuthContext';
-import { ThemeProvider } from './context/ThemeContext';
-import { SocketProvider } from './context/SocketContext';
+import { AuthProvider } from './context/AuthProvider';
+import { useAuth } from './context/AuthContext';
+import { ThemeProvider } from './context/ThemeProvider';
+import { SocketProvider } from './context/SocketProvider';
 
 // Components
 import LoadingScreen from './components/common/LoadingScreen';
@@ -75,7 +76,7 @@ const AdminDashboard = lazy(() => import('./pages/admin/AdminDashboard'));
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
-  requiredRole?: 'OWNER' | 'ADMIN' | 'MEMBER' | 'VIEWER';
+  requiredRole?: 'user' | 'admin' | 'superadmin';
 }
 
 const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, requiredRole }) => {

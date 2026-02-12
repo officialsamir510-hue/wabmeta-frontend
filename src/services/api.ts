@@ -1,9 +1,9 @@
 // src/services/api.ts
 
-import axios, { 
-  AxiosError, 
-  type AxiosInstance, 
-  type InternalAxiosRequestConfig 
+import axios, {
+  AxiosError,
+  type AxiosInstance,
+  type InternalAxiosRequestConfig
 } from 'axios';
 
 // ============================================
@@ -44,17 +44,17 @@ const getApiBaseUrl = (): string => {
 
   if (envUrl) {
     const cleanUrl = envUrl.replace(/\/+$/, '');
-    
+
     // If already has /api/v1, use as-is
     if (cleanUrl.endsWith('/api/v1')) {
       return cleanUrl;
     }
-    
+
     // If has /api but not version, add version
     if (cleanUrl.endsWith('/api')) {
       return `${cleanUrl}/v1`;
     }
-    
+
     // Otherwise add full path
     return `${cleanUrl}/api/v1`;
   }
@@ -106,13 +106,13 @@ const isValidJWT = (token: string): boolean => {
 const getAccessToken = (): string | null => {
   // Try modern token first
   let token = localStorage.getItem(TOKEN_KEYS.ACCESS);
-  
+
   // Fallback to legacy tokens
   if (!token || !isValidJWT(token)) {
-    token = localStorage.getItem(TOKEN_KEYS.LEGACY_TOKEN) || 
-            localStorage.getItem(TOKEN_KEYS.LEGACY_WABMETA);
+    token = localStorage.getItem(TOKEN_KEYS.LEGACY_TOKEN) ||
+      localStorage.getItem(TOKEN_KEYS.LEGACY_WABMETA);
   }
-  
+
   return token && isValidJWT(token) ? token : null;
 };
 
@@ -142,7 +142,7 @@ const setAuthTokens = (accessToken: string, refreshToken?: string) => {
     localStorage.setItem(TOKEN_KEYS.LEGACY_TOKEN, accessToken);
     localStorage.setItem(TOKEN_KEYS.LEGACY_WABMETA, accessToken);
   }
-  
+
   if (refreshToken && isValidJWT(refreshToken)) {
     localStorage.setItem(TOKEN_KEYS.REFRESH, refreshToken);
   }
@@ -192,7 +192,7 @@ api.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
     const method = config.method?.toUpperCase() || 'GET';
     const url = config.url || '';
-    
+
     if (import.meta.env.DEV) {
       console.log(`📤 ${method} ${url}`);
     }
@@ -204,8 +204,8 @@ api.interceptors.request.use(
     const isAdminRoute = url.includes('/admin');
 
     // Get appropriate token
-    const token = isAdminRoute 
-      ? getAdminToken() 
+    const token = isAdminRoute
+      ? getAdminToken()
       : getAccessToken();
 
     // Add authorization header if token exists
@@ -239,7 +239,7 @@ const processQueue = (error: AxiosError | null, token: string | null = null) => 
       prom.resolve(token);
     }
   });
-  
+
   failedQueue = [];
 };
 
@@ -247,18 +247,18 @@ api.interceptors.response.use(
   (response) => {
     const status = response.status;
     const url = response.config.url || '';
-    
+
     if (import.meta.env.DEV) {
       console.log(`📥 ${status} ${url}`);
     }
-    
+
     return response;
   },
   async (error: AxiosError<ApiError>) => {
-    const originalRequest = error.config as InternalAxiosRequestConfig & { 
-      _retry?: boolean 
+    const originalRequest = error.config as InternalAxiosRequestConfig & {
+      _retry?: boolean
     };
-    
+
     const status = error.response?.status;
     const url = originalRequest?.url || '';
     const errorData = error.response?.data;
@@ -291,19 +291,19 @@ api.interceptors.response.use(
       // For admin routes, just redirect to admin login
       if (isAdminRoute) {
         localStorage.removeItem(TOKEN_KEYS.ADMIN);
-        
+
         // Only redirect if we're on an admin page
         if (window.location.pathname.startsWith('/admin')) {
           window.location.href = '/admin/login';
         }
-        
+
         return Promise.reject(error);
       }
 
       // For user routes, try to refresh token
       // But skip refresh for login, register, and refresh endpoints
-      const skipRefresh = 
-        url.includes('/auth/login') || 
+      const skipRefresh =
+        url.includes('/auth/login') ||
         url.includes('/auth/register') ||
         url.includes('/auth/refresh') ||
         url.includes('/auth/google');
@@ -315,7 +315,7 @@ api.interceptors.response.use(
 
       // Check if we have a refresh token
       const refreshToken = getRefreshToken();
-      
+
       if (!refreshToken) {
         console.warn('⚠️ No refresh token available');
         clearAuthData();
@@ -343,12 +343,12 @@ api.interceptors.response.use(
 
       try {
         console.log('🔄 Attempting token refresh...');
-        
+
         // Call refresh endpoint
         const response = await axios.post<ApiResponse<RefreshTokenResponse>>(
           `${API_BASE_URL}/auth/refresh`,
           { refreshToken },
-          { 
+          {
             withCredentials: true,
             headers: {
               'Content-Type': 'application/json',
@@ -380,16 +380,16 @@ api.interceptors.response.use(
 
       } catch (refreshError) {
         console.error('❌ Token refresh failed:', refreshError);
-        
+
         // Clear auth data
         clearAuthData();
-        
+
         // Process queued requests with error
         processQueue(refreshError as AxiosError, null);
-        
+
         // Redirect to login
         window.location.href = '/login';
-        
+
         return Promise.reject(refreshError);
       } finally {
         isRefreshing = false;
@@ -430,13 +430,13 @@ export const auth = {
     organizationName?: string;
   }) => api.post<ApiResponse>('/auth/register', data),
 
-  login: (data: { email: string; password: string; }, _p0: { headers: { "x-platform": string; }; }) => 
+  login: (data: { email: string; password: string; }) =>
     api.post<ApiResponse<{
       organization: any;
-      tokens: any; accessToken: string; refreshToken: string; user: any 
-}>>('/auth/login', data),
+      tokens: any; accessToken: string; refreshToken: string; user: any
+    }>>('/auth/login', data),
 
-  googleLogin: (data: { credential: string }) => 
+  googleLogin: (data: { credential: string }) =>
     api.post<ApiResponse<{ accessToken: string; refreshToken: string; user: any }>>('/auth/google', data),
 
   me: () => api.get<ApiResponse>('/auth/me'),
@@ -449,7 +449,7 @@ export const auth = {
 
   resetPassword: (data: { token: string; password: string }) => api.post<ApiResponse>('/auth/reset-password', data),
 
-  refresh: (refreshToken?: string) => 
+  refresh: (refreshToken?: string) =>
     api.post<ApiResponse<RefreshTokenResponse>>('/auth/refresh', { refreshToken }),
 
   logout: () => api.post<ApiResponse>('/auth/logout'),
@@ -497,7 +497,7 @@ export const organizations = {
 
   update: (id: string, data: any) => api.put<ApiResponse>(`/organizations/${id}`, data),
 
-  delete: (id: string, password: string) => 
+  delete: (id: string, password: string) =>
     api.delete<ApiResponse>(`/organizations/${id}`, { data: { password } }),
 
   inviteMember: (orgId: string, data: { email: string; role: string }) =>
@@ -526,7 +526,7 @@ export const contacts = {
 
   import: (data: any) => api.post<ApiResponse>('/contacts/import', data),
 
-  export: (format: string = 'csv') => 
+  export: (format: string = 'csv') =>
     api.get(`/contacts/export?format=${format}`, { responseType: 'blob' }),
 
   stats: () => api.get<ApiResponse>('/contacts/stats'),
@@ -546,7 +546,7 @@ export const templates = {
 
   delete: (id: string) => api.delete<ApiResponse>(`/templates/${id}`),
 
-  sync: (whatsappAccountId: string) => 
+  sync: (whatsappAccountId: string) =>
     api.post<ApiResponse>('/templates/sync', { whatsappAccountId }),
 
   submitForApproval: (id: string) => api.post<ApiResponse>(`/templates/${id}/submit`),
@@ -586,7 +586,7 @@ export const whatsapp = {
 
   getAccount: (id: string) => api.get<ApiResponse>(`/whatsapp/accounts/${id}`),
 
-  connect: (data: { code: string; state?: string }) => 
+  connect: (data: { code: string; state?: string }) =>
     api.post<ApiResponse>('/whatsapp/connect', data),
 
   disconnect: (id: string) => api.delete<ApiResponse>(`/whatsapp/accounts/${id}`),
@@ -601,10 +601,10 @@ export const whatsapp = {
 
 // ---------- META ----------
 export const meta = {
-  getAuthUrl: (mode: 'new' | 'existing' | 'both' = 'both') => 
+  getAuthUrl: (mode: 'new' | 'existing' | 'both' = 'both') =>
     api.get<ApiResponse<{ url: string }>>('/meta/auth/url', { params: { mode } }),
 
-  connect: (data: { code: string; state?: string }) => 
+  connect: (data: { code: string; state?: string }) =>
     api.post<ApiResponse>('/meta/connect', data),
 
   getStatus: () => api.get<ApiResponse>('/meta/status'),
@@ -681,43 +681,43 @@ export const billing = {
 // ---------- SETTINGS ----------  ⬅️ YE ADD KAREIN
 export const settings = {
   getAll: () => api.get<ApiResponse>('/settings'),
-  
+
   update: (data: any) => api.put<ApiResponse>('/settings', data),
-  
+
   getWebhooks: () => api.get<ApiResponse>('/settings/webhooks'),
-  
+
   updateWebhooks: (data: any) => api.put<ApiResponse>('/settings/webhooks', data),
-  
+
   testWebhook: () => api.post<ApiResponse>('/settings/webhooks/test'),
-  
+
   getApiKeys: () => api.get<ApiResponse>('/settings/api-keys'),
-  
-  generateApiKey: (data: { name: string }) => 
+
+  generateApiKey: (data: { name: string }) =>
     api.post<ApiResponse>('/settings/api-keys', data),
-  
-  revokeApiKey: (id: string) => 
+
+  revokeApiKey: (id: string) =>
     api.delete<ApiResponse>(`/settings/api-keys/${id}`),
 };
 
 // ---------- TEAM ----------  ⬅️ YE ADD KAREIN
 export const team = {
   getMembers: () => api.get<ApiResponse>('/team/members'),
-  
-  inviteMember: (data: { email: string; role: string }) => 
+
+  inviteMember: (data: { email: string; role: string }) =>
     api.post<ApiResponse>('/team/invite', data),
-  
-  updateMemberRole: (memberId: string, role: string) => 
+
+  updateMemberRole: (memberId: string, role: string) =>
     api.put<ApiResponse>(`/team/members/${memberId}`, { role }),
-  
-  removeMember: (memberId: string) => 
+
+  removeMember: (memberId: string) =>
     api.delete<ApiResponse>(`/team/members/${memberId}`),
-  
+
   getInvitations: () => api.get<ApiResponse>('/team/invitations'),
-  
-  cancelInvitation: (id: string) => 
+
+  cancelInvitation: (id: string) =>
     api.delete<ApiResponse>(`/team/invitations/${id}`),
-  
-  resendInvitation: (id: string) => 
+
+  resendInvitation: (id: string) =>
     api.post<ApiResponse>(`/team/invitations/${id}/resend`),
 };
 
@@ -727,13 +727,13 @@ export const dashboard = {
 
   getWidgets: (days: number = 7) => api.get<ApiResponse>('/dashboard/widgets', { params: { days } }),
 
-  getActivity: (limit: number = 10) => 
+  getActivity: (limit: number = 10) =>
     api.get<ApiResponse>('/dashboard/activity', { params: { limit } }),
 };
 
 // ---------- ADMIN ----------
 export const admin = {
-  login: (data: { email: string; password: string }) => 
+  login: (data: { email: string; password: string }) =>
     api.post<ApiResponse<{ token: string }>>('/admin/login', data),
 
   getDashboard: () => api.get<ApiResponse>('/admin/dashboard'),
@@ -792,11 +792,11 @@ export const handleApiError = (error: any): string => {
     const apiError = error.response?.data as ApiError;
     return apiError?.message || error.message || 'An error occurred';
   }
-  
+
   if (error instanceof Error) {
     return error.message;
   }
-  
+
   return 'An unknown error occurred';
 };
 

@@ -1,0 +1,647 @@
+
+> wabmeta@0.0.0 lint
+> eslint .
+
+
+C:\Users\Sameer Thakur\OneDrive\WabMeta\src\components\analytics\CampaignPerformance.tsx
+  5:15  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+C:\Users\Sameer Thakur\OneDrive\WabMeta\src\components\analytics\OverviewStats.tsx
+  14:10  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+C:\Users\Sameer Thakur\OneDrive\WabMeta\src\components\auth\SocialLoginButtons.tsx
+  16:58  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+C:\Users\Sameer Thakur\OneDrive\WabMeta\src\components\auth\VerifyOTP.tsx
+  27:7  error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+C:\Users\Sameer Thakur\OneDrive\WabMeta\src\components\auth\VerifyOTP.tsx:27:7
+  25 |       return () => clearTimeout(timer);
+  26 |     } else {
+> 27 |       setCanResend(true);
+     |       ^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  28 |     }
+  29 |   }, [countdown]);
+  30 |  react-hooks/set-state-in-effect
+
+C:\Users\Sameer Thakur\OneDrive\WabMeta\src\components\auth\WhatsAppSignup.tsx
+   7:9  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  26:8  error  Unexpected var, use let or const instead  no-var
+
+C:\Users\Sameer Thakur\OneDrive\WabMeta\src\components\billing\CurrentPlan.tsx
+   7:13  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   8:19  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  55:22  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  68:31  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  82:33  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  85:38  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  91:17  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+C:\Users\Sameer Thakur\OneDrive\WabMeta\src\components\billing\PaymentMethods.tsx
+   28:17  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   73:19  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  100:24  error  'brand' is defined but never used         @typescript-eslint/no-unused-vars
+
+C:\Users\Sameer Thakur\OneDrive\WabMeta\src\components\billing\UsageStats.tsx
+   5:14  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  57:27  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+C:\Users\Sameer Thakur\OneDrive\WabMeta\src\components\campaigns\CsvAudienceUploader.tsx
+   2:18  error  'FileText' is defined but never used      @typescript-eslint/no-unused-vars
+  62:17  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+C:\Users\Sameer Thakur\OneDrive\WabMeta\src\components\chatbot\NodeConfigPanel.tsx
+  17:7   error    Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+C:\Users\Sameer Thakur\OneDrive\WabMeta\src\components\chatbot\NodeConfigPanel.tsx:17:7
+  15 |   useEffect(() => {
+  16 |     if (node && node.data !== data) {
+> 17 |       setData(node.data);
+     |       ^^^^^^^ Avoid calling setState() directly within an effect
+  18 |     }
+  19 |   }, [node]);
+  20 |  react-hooks/set-state-in-effect
+  19:6   warning  React Hook useEffect has a missing dependency: 'data'. Either include it or remove the dependency array                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               react-hooks/exhaustive-deps
+  23:45  error    Unexpected any. Specify a different type                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              @typescript-eslint/no-explicit-any
+
+C:\Users\Sameer Thakur\OneDrive\WabMeta\src\components\chatbot\nodes\ButtonNode.tsx
+   4:31  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  13:34  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+C:\Users\Sameer Thakur\OneDrive\WabMeta\src\components\chatbot\nodes\ConditionNode.tsx
+  4:34  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+C:\Users\Sameer Thakur\OneDrive\WabMeta\src\components\chatbot\nodes\MessageNode.tsx
+  4:32  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+C:\Users\Sameer Thakur\OneDrive\WabMeta\src\components\common\NoWhatsAppConnected.tsx
+  95:23  error  'account' is defined but never used  @typescript-eslint/no-unused-vars
+
+C:\Users\Sameer Thakur\OneDrive\WabMeta\src\components\common\Table.tsx
+  6:30  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+C:\Users\Sameer Thakur\OneDrive\WabMeta\src\components\common\WhatsAppAccountSelector.tsx
+   8:3  error  'AlertCircle' is defined but never used  @typescript-eslint/no-unused-vars
+  32:3  error  'isLoading' is defined but never used    @typescript-eslint/no-unused-vars
+
+C:\Users\Sameer Thakur\OneDrive\WabMeta\src\components\contacts\AddContactModal.tsx
+   9:21  error    Unexpected any. Specify a different type                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          @typescript-eslint/no-explicit-any
+  10:17  error    Unexpected any. Specify a different type                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          @typescript-eslint/no-explicit-any
+  56:11  error    Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+C:\Users\Sameer Thakur\OneDrive\WabMeta\src\components\contacts\AddContactModal.tsx:56:11
+  54 |         // Simple comparison to avoid update if same (naive but effective for loop prevention)
+  55 |         if (JSON.stringify(formData) !== JSON.stringify(newFormData)) {
+> 56 |           setFormData(newFormData);
+     |           ^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  57 |         }
+  58 |       } else {
+  59 |         // Reset Form for New Contact  react-hooks/set-state-in-effect
+  76:6   warning  React Hook useEffect has a missing dependency: 'formData'. Either include it or remove the dependency array                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       react-hooks/exhaustive-deps
+
+C:\Users\Sameer Thakur\OneDrive\WabMeta\src\components\contacts\ImportUploader.tsx
+  55:17  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+C:\Users\Sameer Thakur\OneDrive\WabMeta\src\components\dashboard\ChartCard.tsx
+   17:10  error  'TrendingUp' is defined but never used    @typescript-eslint/no-unused-vars
+   17:33  error  'Activity' is defined but never used      @typescript-eslint/no-unused-vars
+   23:9   error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   52:52  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   57:28  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  116:62  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+C:\Users\Sameer Thakur\OneDrive\WabMeta\src\components\dashboard\MetaConnectModal.tsx
+   4:63  error    'RefreshCw' is defined but never used                                                                            @typescript-eslint/no-unused-vars
+   6:10  error    'ConnectionProgress' is defined but never used                                                                   @typescript-eslint/no-unused-vars
+  48:6   warning  React Hook useEffect has a missing dependency: 'loadAccounts'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+C:\Users\Sameer Thakur\OneDrive\WabMeta\src\components\dashboard\RecentActivity.tsx
+  30:14  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+C:\Users\Sameer Thakur\OneDrive\WabMeta\src\components\dashboard\Sidebar.tsx
+   97:3  error  Use "@ts-expect-error" instead of "@ts-ignore", as "@ts-ignore" will do nothing if the following line is error-free                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        @typescript-eslint/ban-ts-comment
+  126:9  error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+C:\Users\Sameer Thakur\OneDrive\WabMeta\src\components\dashboard\Sidebar.tsx:126:9
+  124 |       try {
+  125 |         const parsed: User = JSON.parse(storedUser);
+> 126 |         setUser(parsed);
+      |         ^^^^^^^ Avoid calling setState() directly within an effect
+  127 |       } catch {
+  128 |         setUser(null);
+  129 |       }  react-hooks/set-state-in-effect
+
+C:\Users\Sameer Thakur\OneDrive\WabMeta\src\components\inbox\ChatWindow.tsx
+  128:55  error  Error: Cannot call impure function during render
+
+`Date.now` is an impure function. Calling an impure function can produce unstable results that update unpredictably when the component happens to re-render. (https://react.dev/reference/rules/components-and-hooks-must-be-pure#components-and-hooks-must-be-idempotent).
+
+C:\Users\Sameer Thakur\OneDrive\WabMeta\src\components\inbox\ChatWindow.tsx:128:55
+  126 |   // Group messages by date
+  127 |   const groupedMessages = messages.reduce((groups: { date: string; messages: Message[] }[], message) => {
+> 128 |     const messageDate = new Date(message.timestamp || Date.now());
+      |                                                       ^^^^^^^^^^ Cannot call impure function
+  129 |     const today = new Date();
+  130 |     const yesterday = new Date(today);
+  131 |     yesterday.setDate(yesterday.getDate() - 1);  react-hooks/purity
+
+C:\Users\Sameer Thakur\OneDrive\WabMeta\src\components\inbox\ConversationList.tsx
+  104:64  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  125:60  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+C:\Users\Sameer Thakur\OneDrive\WabMeta\src\components\settings\BusinessProfile.tsx
+   7:17  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   8:20  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  72:19  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+C:\Users\Sameer Thakur\OneDrive\WabMeta\src\components\settings\GeneralSettings.tsx
+   7:12  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   8:20  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  51:19  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+C:\Users\Sameer Thakur\OneDrive\WabMeta\src\components\settings\NotificationSettings.tsx
+  211:0  error  Parsing error: Declaration or statement expected
+
+C:\Users\Sameer Thakur\OneDrive\WabMeta\src\components\settings\SecuritySettings.tsx
+  76:19  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+C:\Users\Sameer Thakur\OneDrive\WabMeta\src\components\templates\MediaUploader.tsx
+  175:14  error  Error: Cannot create components during render
+
+Components created during render will reset their state each time they are created. Declare components outside of render.
+
+C:\Users\Sameer Thakur\OneDrive\WabMeta\src\components\templates\MediaUploader.tsx:175:14
+  173 |         <div className="space-y-3">
+  174 |           <div className="w-12 h-12 mx-auto rounded-full bg-primary-100 flex items-center justify-center animate-pulse">
+> 175 |             <Icon className="w-6 h-6 text-primary-600" />
+      |              ^^^^ This component is created during render
+  176 |           </div>
+  177 |           <p className="text-sm text-gray-600">Uploading...</p>
+  178 |           <div className="w-32 h-2 bg-gray-200 rounded-full mx-auto overflow-hidden">
+
+C:\Users\Sameer Thakur\OneDrive\WabMeta\src\components\templates\MediaUploader.tsx:52:16
+  50 |   };
+  51 |
+> 52 |   const Icon = getIcon(headerType);
+     |                ^^^^^^^^^^^^^^^^^^^ The component is created during render here
+  53 |
+  54 |   const handleDrag = (e: React.DragEvent) => {
+  55 |     e.preventDefault();  react-hooks/static-components
+  186:14  error  Error: Cannot create components during render
+
+Components created during render will reset their state each time they are created. Declare components outside of render.
+
+C:\Users\Sameer Thakur\OneDrive\WabMeta\src\components\templates\MediaUploader.tsx:186:14
+  184 |           <div className={`w-12 h-12 mx-auto rounded-full flex items-center justify-center ${dragActive ? 'bg-primary-100' : 'bg-gray-200'
+  185 |             }`}>
+> 186 |             <Icon className={`w-6 h-6 ${dragActive ? 'text-primary-600' : 'text-gray-500'}`} />
+      |              ^^^^ This component is created during render
+  187 |           </div>
+  188 |           <div>
+  189 |             <p className="text-sm font-medium text-gray-900">
+
+C:\Users\Sameer Thakur\OneDrive\WabMeta\src\components\templates\MediaUploader.tsx:52:16
+  50 |   };
+  51 |
+> 52 |   const Icon = getIcon(headerType);
+     |                ^^^^^^^^^^^^^^^^^^^ The component is created during render here
+  53 |
+  54 |   const handleDrag = (e: React.DragEvent) => {
+  55 |     e.preventDefault();                                     react-hooks/static-components
+
+C:\Users\Sameer Thakur\OneDrive\WabMeta\src\components\templates\TemplateCard.tsx
+  178:14  error  Error: Cannot create components during render
+
+Components created during render will reset their state each time they are created. Declare components outside of render.
+
+C:\Users\Sameer Thakur\OneDrive\WabMeta\src\components\templates\TemplateCard.tsx:178:14
+  176 |         {template.header.type !== 'none' && (
+  177 |           <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600 flex items-center space-x-1">
+> 178 |             <HeaderIcon className="w-3 h-3" />
+      |              ^^^^^^^^^^ This component is created during render
+  179 |             <span className="capitalize">{template.header.type}</span>
+  180 |           </span>
+  181 |         )}
+
+C:\Users\Sameer Thakur\OneDrive\WabMeta\src\components\templates\TemplateCard.tsx:75:22
+  73 |   const statusConfig = getStatusConfig(template.status);
+  74 |   const categoryConfig = getCategoryConfig(template.category);
+> 75 |   const HeaderIcon = getHeaderIcon(template.header.type);
+     |                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ The component is created during render here
+  76 |
+  77 |   const truncateBody = (text: string, maxLength: number = 100) => {
+  78 |     if (text.length <= maxLength) return text;  react-hooks/static-components
+
+C:\Users\Sameer Thakur\OneDrive\WabMeta\src\components\templates\TemplatePreview.tsx
+  21:3  error  'template' is defined but never used                  @typescript-eslint/no-unused-vars
+  22:3  error  'sampleVariables' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+C:\Users\Sameer Thakur\OneDrive\WabMeta\src\context\AppContext.tsx
+  126:5   error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+C:\Users\Sameer Thakur\OneDrive\WabMeta\src\context\AppContext.tsx:126:5
+  124 |   // Initial load once
+  125 |   useEffect(() => {
+> 126 |     refreshStats(true); // force first time
+      |     ^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  127 |   }, [refreshStats]);
+  128 |
+  129 |   const value = useMemo(  react-hooks/set-state-in-effect
+  144:14  error  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 react-refresh/only-export-components
+
+C:\Users\Sameer Thakur\OneDrive\WabMeta\src\context\AuthContext.tsx
+  142:14  error  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+C:\Users\Sameer Thakur\OneDrive\WabMeta\src\context\SocketContext.tsx
+   6:32  error  Unexpected any. Specify a different type                                                                                        @typescript-eslint/no-explicit-any
+   7:43  error  Unexpected any. Specify a different type                                                                                        @typescript-eslint/no-explicit-any
+   8:45  error  Unexpected any. Specify a different type                                                                                        @typescript-eslint/no-explicit-any
+  30:17  error  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+  62:25  error  Unexpected any. Specify a different type                                                                                        @typescript-eslint/no-explicit-any
+  95:50  error  Unexpected any. Specify a different type                                                                                        @typescript-eslint/no-explicit-any
+
+C:\Users\Sameer Thakur\OneDrive\WabMeta\src\context\ThemeContext.tsx
+  65:44  error    Compilation Skipped: Existing memoization could not be preserved
+
+React Compiler has skipped optimizing this component because the existing manual memoization could not be preserved. The inferred dependencies did not match the manually specified dependencies, which could cause the value to change more or less frequently than expected. The inferred dependency was `toggle`, but the source dependencies were [mode, resolved]. Inferred different dependency than source.
+
+C:\Users\Sameer Thakur\OneDrive\WabMeta\src\context\ThemeContext.tsx:65:44
+  63 |   };
+  64 |
+> 65 |   const value = useMemo<ThemeContextValue>(() => ({ mode, resolved, setMode, toggle }), [mode, resolved]);
+     |                                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ Could not preserve existing manual memoization
+  66 |
+  67 |   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
+  68 | };  react-hooks/preserve-manual-memoization
+  65:89  warning  React Hook useMemo has a missing dependency: 'toggle'. Either include it or remove the dependency array                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       react-hooks/exhaustive-deps
+  70:14  error    Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                react-refresh/only-export-components
+
+C:\Users\Sameer Thakur\OneDrive\WabMeta\src\hooks\useChatbot.ts
+   30:19  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  111:21  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  149:19  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+C:\Users\Sameer Thakur\OneDrive\WabMeta\src\hooks\useDelayedFlag.ts
+  8:7  error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+C:\Users\Sameer Thakur\OneDrive\WabMeta\src\hooks\useDelayedFlag.ts:8:7
+   6 |   useEffect(() => {
+   7 |     if (!flag) {
+>  8 |       setShow(false);
+     |       ^^^^^^^ Avoid calling setState() directly within an effect
+   9 |       return;
+  10 |     }
+  11 |     const t = setTimeout(() => setShow(true), delay);  react-hooks/set-state-in-effect
+
+C:\Users\Sameer Thakur\OneDrive\WabMeta\src\hooks\useFacebookSDK.ts
+  7:9  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+C:\Users\Sameer Thakur\OneDrive\WabMeta\src\hooks\useInbox.ts
+   12:12  error    Unexpected any. Specify a different type                                                                         @typescript-eslint/no-explicit-any
+   47:70  error    Unexpected any. Specify a different type                                                                         @typescript-eslint/no-explicit-any
+   75:19  error    Unexpected any. Specify a different type                                                                         @typescript-eslint/no-explicit-any
+   87:19  error    Unexpected any. Specify a different type                                                                         @typescript-eslint/no-explicit-any
+  118:5   warning  React Hook useCallback has a missing dependency: 'markAsRead'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  152:21  error    Unexpected any. Specify a different type                                                                         @typescript-eslint/no-explicit-any
+  163:64  error    Unexpected any. Specify a different type                                                                         @typescript-eslint/no-explicit-any
+  180:21  error    Unexpected any. Specify a different type                                                                         @typescript-eslint/no-explicit-any
+
+C:\Users\Sameer Thakur\OneDrive\WabMeta\src\hooks\useMetaConnection.ts
+   35:9   error    'navigate' is assigned a value but never used                                                                            @typescript-eslint/no-unused-vars
+   50:6   warning  React Hook useEffect has a missing dependency: 'loadFacebookSDK'. Either include it or remove the dependency array       react-hooks/exhaustive-deps
+  106:19  error    Unexpected any. Specify a different type                                                                                 @typescript-eslint/no-explicit-any
+  120:19  error    Unexpected any. Specify a different type                                                                                 @typescript-eslint/no-explicit-any
+  182:5   warning  React Hook useCallback has a missing dependency: 'completeConnection'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  216:19  error    Unexpected any. Specify a different type                                                                                 @typescript-eslint/no-explicit-any
+  234:19  error    Unexpected any. Specify a different type                                                                                 @typescript-eslint/no-explicit-any
+  248:19  error    Unexpected any. Specify a different type                                                                                 @typescript-eslint/no-explicit-any
+  265:19  error    Unexpected any. Specify a different type                                                                                 @typescript-eslint/no-explicit-any
+  276:19  error    Unexpected any. Specify a different type                                                                                 @typescript-eslint/no-explicit-any
+
+C:\Users\Sameer Thakur\OneDrive\WabMeta\src\hooks\useWhatsAppConnection.ts
+  52:58  error  Unexpected any. Specify a different type                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              @typescript-eslint/no-explicit-any
+  55:17  error  Unexpected any. Specify a different type                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              @typescript-eslint/no-explicit-any
+  64:5   error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+C:\Users\Sameer Thakur\OneDrive\WabMeta\src\hooks\useWhatsAppConnection.ts:64:5
+  62 |   useEffect(() => {
+  63 |     // Silent load (does not block UI)
+> 64 |     fetchAccounts();
+     |     ^^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  65 |   }, [fetchAccounts]);
+  66 |
+  67 |   const connectedAccounts = useMemo(  react-hooks/set-state-in-effect
+
+C:\Users\Sameer Thakur\OneDrive\WabMeta\src\pages\Billing.tsx
+   82:56  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  112:19  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  130:19  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  143:19  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  149:47  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  150:5   error  Unnecessary try/catch wrapper             no-useless-catch
+  153:19  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  162:19  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  174:19  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+C:\Users\Sameer Thakur\OneDrive\WabMeta\src\pages\CampaignDetails.tsx
+  154:55  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+C:\Users\Sameer Thakur\OneDrive\WabMeta\src\pages\Campaigns.tsx
+   13:3   error    'MoreVertical' is defined but never used                                                                           @typescript-eslint/no-unused-vars
+  102:19  error    Unexpected any. Specify a different type                                                                           @typescript-eslint/no-explicit-any
+  114:6   warning  React Hook useEffect has a missing dependency: 'fetchCampaigns'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  219:19  error    Unexpected any. Specify a different type                                                                           @typescript-eslint/no-explicit-any
+  239:19  error    Unexpected any. Specify a different type                                                                           @typescript-eslint/no-explicit-any
+  259:19  error    Unexpected any. Specify a different type                                                                           @typescript-eslint/no-explicit-any
+  276:19  error    Unexpected any. Specify a different type                                                                           @typescript-eslint/no-explicit-any
+  284:42  error    Unexpected any. Specify a different type                                                                           @typescript-eslint/no-explicit-any
+
+C:\Users\Sameer Thakur\OneDrive\WabMeta\src\pages\ChatbotBuilder.tsx
+   11:3   error    'Eye' is defined but never used                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             @typescript-eslint/no-unused-vars
+   27:3   error    'Edge' is defined but never used                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            @typescript-eslint/no-unused-vars
+   30:3   error    'Panel' is defined but never used                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           @typescript-eslint/no-unused-vars
+   53:9   error    'navigate' is assigned a value but never used                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               @typescript-eslint/no-unused-vars
+   81:7   error    Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+C:\Users\Sameer Thakur\OneDrive\WabMeta\src\pages\ChatbotBuilder.tsx:81:7
+  79 |       setNodes(chatbot.flowData?.nodes || []);
+  80 |       setEdges(chatbot.flowData?.edges || []);
+> 81 |       setName(chatbot.name);
+     |       ^^^^^^^ Avoid calling setState() directly within an effect
+  82 |       setDescription(chatbot.description || '');
+  83 |       setWelcomeMessage(chatbot.welcomeMessage || '');
+  84 |       setFallbackMessage(chatbot.fallbackMessage || '');  react-hooks/set-state-in-effect
+   88:6   warning  React Hook useEffect has missing dependencies: 'setEdges' and 'setNodes'. Either include them or remove the dependency array                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                react-hooks/exhaustive-deps
+  123:49  error    Unexpected any. Specify a different type                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    @typescript-eslint/no-explicit-any
+  188:19  error    Unexpected any. Specify a different type                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    @typescript-eslint/no-explicit-any
+
+C:\Users\Sameer Thakur\OneDrive\WabMeta\src\pages\ChatbotList.tsx
+    4:10  error  'Link' is defined but never used              @typescript-eslint/no-unused-vars
+   14:3   error  'MoreVertical' is defined but never used      @typescript-eslint/no-unused-vars
+   20:3   error  'Settings' is defined but never used          @typescript-eslint/no-unused-vars
+   31:5   error  'refresh' is assigned a value but never used  @typescript-eslint/no-unused-vars
+   83:19  error  Unexpected any. Specify a different type      @typescript-eslint/no-explicit-any
+   98:19  error  Unexpected any. Specify a different type      @typescript-eslint/no-explicit-any
+  112:19  error  Unexpected any. Specify a different type      @typescript-eslint/no-explicit-any
+  125:19  error  Unexpected any. Specify a different type      @typescript-eslint/no-explicit-any
+
+C:\Users\Sameer Thakur\OneDrive\WabMeta\src\pages\ContactDetails.tsx
+   25:42  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   43:18  error  'e' is defined but never used             @typescript-eslint/no-unused-vars
+   48:47  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   78:21  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   95:14  error  'err' is defined but never used           @typescript-eslint/no-unused-vars
+  211:54  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+C:\Users\Sameer Thakur\OneDrive\WabMeta\src\pages\Contacts.tsx
+  113:14  error  'err' is defined but never used           @typescript-eslint/no-unused-vars
+  147:68  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  177:19  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  212:22  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  237:19  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  251:19  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  270:19  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  288:14  error  'err' is defined but never used           @typescript-eslint/no-unused-vars
+  288:19  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  373:85  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+C:\Users\Sameer Thakur\OneDrive\WabMeta\src\pages\CreateCampaign.tsx
+   67:41  error  Unexpected any. Specify a different type                            @typescript-eslint/no-explicit-any
+   95:7   error  'getConnectedWhatsAppAccountId' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  114:41  error  Unexpected any. Specify a different type                            @typescript-eslint/no-explicit-any
+  132:19  error  Unexpected any. Specify a different type                            @typescript-eslint/no-explicit-any
+  189:49  error  Unexpected any. Specify a different type                            @typescript-eslint/no-explicit-any
+  190:74  error  Unexpected any. Specify a different type                            @typescript-eslint/no-explicit-any
+  197:65  error  Unexpected any. Specify a different type                            @typescript-eslint/no-explicit-any
+  203:48  error  Unexpected any. Specify a different type                            @typescript-eslint/no-explicit-any
+  204:71  error  Unexpected any. Specify a different type                            @typescript-eslint/no-explicit-any
+  217:21  error  Unexpected any. Specify a different type                            @typescript-eslint/no-explicit-any
+  236:46  error  Unexpected any. Specify a different type                            @typescript-eslint/no-explicit-any
+  238:71  error  Unexpected any. Specify a different type                            @typescript-eslint/no-explicit-any
+  260:17  error  Unexpected any. Specify a different type                            @typescript-eslint/no-explicit-any
+  353:47  error  Unexpected any. Specify a different type                            @typescript-eslint/no-explicit-any
+  423:19  error  Unexpected any. Specify a different type                            @typescript-eslint/no-explicit-any
+  756:52  error  Unexpected any. Specify a different type                            @typescript-eslint/no-explicit-any
+  758:73  error  Unexpected any. Specify a different type                            @typescript-eslint/no-explicit-any
+  761:55  error  Unexpected any. Specify a different type                            @typescript-eslint/no-explicit-any
+
+C:\Users\Sameer Thakur\OneDrive\WabMeta\src\pages\CreateTemplate.tsx
+   28:11  error  'TemplateButton' is defined but never used  @typescript-eslint/no-unused-vars
+  251:37  error  Unexpected any. Specify a different type    @typescript-eslint/no-explicit-any
+  292:21  error  Unexpected any. Specify a different type    @typescript-eslint/no-explicit-any
+  301:24  error  Unexpected any. Specify a different type    @typescript-eslint/no-explicit-any
+  447:59  error  Unexpected any. Specify a different type    @typescript-eslint/no-explicit-any
+  695:95  error  Unexpected any. Specify a different type    @typescript-eslint/no-explicit-any
+
+C:\Users\Sameer Thakur\OneDrive\WabMeta\src\pages\Dashboard.tsx
+   22:8   error  'useMetaConnection' is defined but never used  @typescript-eslint/no-unused-vars
+   54:19  error  Unexpected any. Specify a different type       @typescript-eslint/no-explicit-any
+   92:52  error  Unexpected any. Specify a different type       @typescript-eslint/no-explicit-any
+  161:21  error  Unexpected any. Specify a different type       @typescript-eslint/no-explicit-any
+  204:21  error  Unexpected any. Specify a different type       @typescript-eslint/no-explicit-any
+
+C:\Users\Sameer Thakur\OneDrive\WabMeta\src\pages\ImportContacts.tsx
+    9:3   error  'ArrowRight' is defined but never used    @typescript-eslint/no-unused-vars
+   27:34  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   28:26  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   47:48  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   75:56  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  112:33  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  227:17  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+C:\Users\Sameer Thakur\OneDrive\WabMeta\src\pages\Inbox.tsx
+  122:53  error  Unexpected any. Specify a different type              @typescript-eslint/no-explicit-any
+  153:10  error  'hasMoreMessages' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  162:21  error  Unexpected any. Specify a different type              @typescript-eslint/no-explicit-any
+  198:19  error  Unexpected any. Specify a different type              @typescript-eslint/no-explicit-any
+  236:19  error  Unexpected any. Specify a different type              @typescript-eslint/no-explicit-any
+  299:19  error  Unexpected any. Specify a different type              @typescript-eslint/no-explicit-any
+  316:19  error  Unexpected any. Specify a different type              @typescript-eslint/no-explicit-any
+
+C:\Users\Sameer Thakur\OneDrive\WabMeta\src\pages\Login.tsx
+  71:13  error  'refreshToken' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  96:21  error  Unexpected any. Specify a different type           @typescript-eslint/no-explicit-any
+
+C:\Users\Sameer Thakur\OneDrive\WabMeta\src\pages\MetaCallback.tsx
+    5:41  error    'AlertTriangle' is defined but never used                                                                          @typescript-eslint/no-unused-vars
+   32:6   warning  React Hook useEffect has a missing dependency: 'handleCallback'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  119:19  error    Unexpected any. Specify a different type                                                                           @typescript-eslint/no-explicit-any
+
+C:\Users\Sameer Thakur\OneDrive\WabMeta\src\pages\Notifications.tsx
+  19:3   error  'MoreHorizontal' is defined but never used  @typescript-eslint/no-unused-vars
+  34:29  error  Unexpected any. Specify a different type    @typescript-eslint/no-explicit-any
+
+C:\Users\Sameer Thakur\OneDrive\WabMeta\src\pages\Profile.tsx
+   19:3   error  'Trash2' is defined but never used        @typescript-eslint/no-unused-vars
+   89:19  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  140:14  error  'err' is defined but never used           @typescript-eslint/no-unused-vars
+  178:19  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  220:14  error  'err' is defined but never used           @typescript-eslint/no-unused-vars
+
+C:\Users\Sameer Thakur\OneDrive\WabMeta\src\pages\Reports.tsx
+  12:46  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  13:56  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  14:54  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+C:\Users\Sameer Thakur\OneDrive\WabMeta\src\pages\Settings.tsx
+   35:44  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   65:39  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  150:38  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  150:46  error  Unexpected empty object pattern           no-empty-pattern
+  173:38  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  173:46  error  Unexpected empty object pattern           no-empty-pattern
+  197:39  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  197:47  error  Unexpected empty object pattern           no-empty-pattern
+  204:43  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  204:51  error  Unexpected empty object pattern           no-empty-pattern
+  220:39  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  220:47  error  Unexpected empty object pattern           no-empty-pattern
+  234:34  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  234:42  error  Unexpected empty object pattern           no-empty-pattern
+
+C:\Users\Sameer Thakur\OneDrive\WabMeta\src\pages\Signup.tsx
+  169:21  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+C:\Users\Sameer Thakur\OneDrive\WabMeta\src\pages\Templates.tsx
+   52:36  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   65:33  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   71:37  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   73:25  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   83:27  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   95:31  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  118:19  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  138:30  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  139:30  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  149:19  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  167:19  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  239:42  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+C:\Users\Sameer Thakur\OneDrive\WabMeta\src\pages\VerifyEmail.tsx
+  26:16  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  69:19  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  89:19  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+C:\Users\Sameer Thakur\OneDrive\WabMeta\src\pages\VerifyOTP.tsx
+  48:19  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+C:\Users\Sameer Thakur\OneDrive\WabMeta\src\pages\admin\AdminDashboard.tsx
+    9:3   error  'TrendingUp' is defined but never used    @typescript-eslint/no-unused-vars
+   10:3   error  'TrendingDown' is defined but never used  @typescript-eslint/no-unused-vars
+   80:27  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  250:46  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  270:19  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+C:\Users\Sameer Thakur\OneDrive\WabMeta\src\pages\admin\AdminLogin.tsx
+  40:19  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+C:\Users\Sameer Thakur\OneDrive\WabMeta\src\pages\admin\UserManagement.tsx
+    6:12  error    'Monitor' is defined but never used                                                                            @typescript-eslint/no-unused-vars
+    6:21  error    'Smartphone' is defined but never used                                                                         @typescript-eslint/no-unused-vars
+    6:33  error    'Globe' is defined but never used                                                                              @typescript-eslint/no-unused-vars
+   50:19  error    Unexpected any. Specify a different type                                                                       @typescript-eslint/no-explicit-any
+   64:6   warning  React Hook useEffect has a missing dependency: 'fetchUsers'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+   74:19  error    Unexpected any. Specify a different type                                                                       @typescript-eslint/no-explicit-any
+   89:19  error    Unexpected any. Specify a different type                                                                       @typescript-eslint/no-explicit-any
+  104:19  error    Unexpected any. Specify a different type                                                                       @typescript-eslint/no-explicit-any
+
+C:\Users\Sameer Thakur\OneDrive\WabMeta\src\services\api.ts
+   13:27  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   29:13  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  230:21  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  231:21  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  433:55  error  '_p0' is defined but never used           @typescript-eslint/no-unused-vars
+  435:21  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  436:15  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  436:69  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  440:77  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  498:30  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  517:21  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  519:18  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  523:30  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  527:18  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  539:21  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  541:18  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  545:30  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  559:21  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  561:18  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  565:30  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  599:24  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  624:31  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  628:50  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  642:21  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  644:18  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  648:30  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  670:26  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  685:18  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  689:26  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  741:23  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  743:31  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  747:22  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  749:34  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  790:39  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+C:\Users\Sameer Thakur\OneDrive\WabMeta\src\types\meta.ts
+  41:9  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+C:\Users\Sameer Thakur\OneDrive\WabMeta\src\utils\csvContacts.ts
+  90:26  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  90:47  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  91:30  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  91:52  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  92:27  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  92:49  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  93:25  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  93:45  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  93:65  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+✖ 299 problems (288 errors, 11 warnings)
+  1 error and 0 warnings potentially fixable with the `--fix` option.
+
