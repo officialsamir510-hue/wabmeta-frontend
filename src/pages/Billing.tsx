@@ -1,246 +1,652 @@
 // src/pages/Billing.tsx
 
 import React, { useState, useEffect } from 'react';
-import { Loader2, AlertCircle, RefreshCw } from 'lucide-react';
-import CurrentPlan from '../components/billing/CurrentPlan';
-import UsageStats from '../components/billing/UsageStats';
-import PaymentMethods from '../components/billing/PaymentMethods';
-import InvoiceHistory from '../components/billing/InvoiceHistory';
-import { billing as billingApi } from '../services/api';
+import {
+  CreditCard,
+  Check,
+  ChevronRight,
+  Loader2,
+  AlertCircle,
+  Calendar,
+  Users,
+  MessageSquare,
+  Zap,
+  Star,
+  TrendingUp
+} from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
+import { billing } from '../services/api';
+import toast from 'react-hot-toast';
+import type { User } from '../types/auth';
 
-interface PlanData {
-  plan: {
-    id: string;
-    name: string;
-    type: string;
-    description: string | null;
-    monthlyPrice: number;
-    yearlyPrice: number;
-    features: string[];
-  };
-  subscription: {
-    id: string;
-    status: string;
-    billingCycle: string;
-    currentPeriodStart: string;
-    currentPeriodEnd: string;
-    cancelledAt: string | null;
-  } | null;
-  limits: {
-    maxContacts: number;
-    maxMessages: number;
-    maxTeamMembers: number;
-    maxCampaigns: number;
-    maxChatbots: number;
-    maxTemplates: number;
-  };
+interface Plan {
+  id: string;
+  name: string;
+  type: string;
+  slug: string;
+  monthlyPrice: number;
+  yearlyPrice: number;
+  maxContacts: number;
+  maxMessagesPerMonth: number;
+  maxCampaignsPerMonth: number;
+  maxTeamMembers: number;
+  maxWhatsAppAccounts: number;
+  maxTemplates: number;
+  maxChatbots: number;
+  maxAutomations: number;
+  features: string[];
+  isActive: boolean;
+  popular?: boolean;
 }
 
-interface UsageData {
-  contacts: { used: number; limit: number; percentage: number };
-  messages: { used: number; limit: number; percentage: number };
-  teamMembers: { used: number; limit: number; percentage: number };
-  campaigns: { used: number; limit: number; percentage: number };
-  templates: { used: number; limit: number; percentage: number };
-  chatbots: { used: number; limit: number; percentage: number };
+interface Subscription {
+  id: string;
+  planId: string;
+  plan?: Plan;
+  status: string;
+  billingCycle: 'monthly' | 'yearly';
+  currentPeriodStart: string;
+  currentPeriodEnd: string;
+  messagesUsed: number;
+  contactsUsed: number;
+  cancelledAt?: string;
+}
+
+interface UsageItem {
+  used: number;
+  limit: number;
+  percentage: number;
+}
+
+interface Usage {
+  messages?: UsageItem;
+  contacts?: UsageItem;
+  campaigns?: UsageItem;
+  storage?: UsageItem;
 }
 
 interface Invoice {
   id: string;
-  invoiceNumber: string;
   amount: number;
   currency: string;
   status: 'paid' | 'pending' | 'failed';
-  planName: string;
-  billingCycle: string;
-  createdAt: string;
-  paidAt: string | null;
-  downloadUrl: string | null;
-}
-
-interface PaymentMethod {
-  id: string;
-  type: 'card' | 'upi' | 'bank';
-  last4?: string;
-  brand?: string;
-  expiryMonth?: string;
-  expiryYear?: string;
-  upiId?: string;
-  bankName?: string;
-  isDefault: boolean;
-  createdAt: string;
+  date: string;
+  downloadUrl?: string;
 }
 
 const Billing: React.FC = () => {
+  const { user } = useAuth();
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  
-  const [planData, setPlanData] = useState<PlanData | null>(null);
-  const [usageData, setUsageData] = useState<UsageData | null>(null);
+  const [plans, setPlans] = useState<Plan[]>([]);
+  const [subscription, setSubscription] = useState<Subscription | null>(null);
+  const [usage, setUsage] = useState<Usage | null>(null);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
-  const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
-  const [availablePlans, setAvailablePlans] = useState<any[]>([]);
-
-  // Fetch all billing data
-  const fetchBillingData = async () => {
-    setLoading(true);
-    setError(null);
-    
-    try {
-      const [planRes, usageRes, invoicesRes, methodsRes, plansRes] = await Promise.all([
-        billingApi.getCurrentPlan(),
-        billingApi.getUsage(),
-        billingApi.getInvoices({ limit: 10 }),
-        billingApi.getPaymentMethods(),
-        billingApi.getPlans(),
-      ]);
-
-      console.log('📥 Billing Data:', {
-        plan: planRes.data,
-        usage: usageRes.data,
-        invoices: invoicesRes.data,
-        methods: methodsRes.data,
-        plans: plansRes.data,
-      });
-
-      setPlanData(planRes.data?.data || planRes.data);
-      setUsageData(usageRes.data?.data || usageRes.data);
-      setInvoices(invoicesRes.data?.data || invoicesRes.data?.invoices || []);
-      setPaymentMethods(methodsRes.data?.data || methodsRes.data || []);
-      setAvailablePlans(plansRes.data?.data || plansRes.data || []);
-
-    } catch (err: any) {
-      console.error('❌ Failed to fetch billing data:', err);
-      setError(err.response?.data?.message || 'Failed to load billing information');
-    } finally {
-      setLoading(false);
-    }
-  };
+  const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
+  const [isChangingPlan, setIsChangingPlan] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     fetchBillingData();
   }, []);
 
-  // Handle plan upgrade
-  const handleUpgrade = async (planType: string, billingCycle: 'monthly' | 'yearly') => {
+  const fetchBillingData = async () => {
     try {
-      await billingApi.upgrade({ planType, billingCycle });
-      await fetchBillingData(); // Refresh data
-      alert('Plan upgraded successfully!');
+      setLoading(true);
+      setError(null);
+
+      // Fetch all billing data in parallel with error handling
+      const [plansRes, subscriptionRes, usageRes, invoicesRes] = await Promise.allSettled([
+        billing.getPlans(),
+        billing.getCurrentPlan(),
+        billing.getUsage(),
+        billing.getInvoices({ limit: 10 })
+      ]);
+
+      // Handle plans
+      if (plansRes.status === 'fulfilled' && plansRes.value.data.success) {
+        const plansData = Array.isArray(plansRes.value.data.data)
+          ? plansRes.value.data.data
+          : [];
+        setPlans(plansData);
+      }
+
+      // Handle subscription
+      if (subscriptionRes.status === 'fulfilled' && subscriptionRes.value.data.success) {
+        setSubscription(subscriptionRes.value.data.data);
+      }
+
+      // ✅ FIX: Handle usage with proper default values
+      if (usageRes.status === 'fulfilled' && usageRes.value.data.success) {
+        const usageData = usageRes.value.data.data;
+
+        // Ensure each usage category has proper structure
+        const formattedUsage: Usage = {
+          messages: usageData?.messages || { used: 0, limit: 1000, percentage: 0 },
+          contacts: usageData?.contacts || { used: 0, limit: 100, percentage: 0 },
+          campaigns: usageData?.campaigns || { used: 0, limit: 10, percentage: 0 },
+          storage: usageData?.storage || { used: 0, limit: 100, percentage: 0 }
+        };
+
+        setUsage(formattedUsage);
+      } else {
+        // Set default usage if API fails
+        setUsage({
+          messages: { used: 0, limit: 1000, percentage: 0 },
+          contacts: { used: 0, limit: 100, percentage: 0 },
+          campaigns: { used: 0, limit: 10, percentage: 0 },
+          storage: { used: 0, limit: 100, percentage: 0 }
+        });
+      }
+
+      // Handle invoices
+      if (invoicesRes.status === 'fulfilled' && invoicesRes.value.data.success) {
+        const invoicesData = Array.isArray(invoicesRes.value.data.data)
+          ? invoicesRes.value.data.data
+          : [];
+        setInvoices(invoicesData);
+      }
+
     } catch (err: any) {
-      alert(err.response?.data?.message || 'Failed to upgrade plan');
+      console.error('Failed to fetch billing data:', err);
+      setError('Unable to load billing information. Please try again later.');
+
+      // Set default values on error
+      setUsage({
+        messages: { used: 0, limit: 1000, percentage: 0 },
+        contacts: { used: 0, limit: 100, percentage: 0 },
+        campaigns: { used: 0, limit: 10, percentage: 0 },
+        storage: { used: 0, limit: 100, percentage: 0 }
+      });
+    } finally {
+      setLoading(false);
     }
   };
 
-  // Handle subscription cancellation
-  const handleCancel = async () => {
-    if (!window.confirm('Are you sure you want to cancel your subscription?')) return;
-    
+  const getUserFullName = (user: User | null): string => {
+    if (!user) return '';
+
+    if ('firstName' in user && 'lastName' in user) {
+      // @ts-ignore
+      return `${user.firstName || ''} ${user.lastName || ''}`.trim();
+    }
+    if ('name' in user && user.name) {
+      return user.name;
+    }
+    return user.email || '';
+  };
+
+  const getUserPhone = (user: User | null): string => {
+    if (!user) return '';
+
+    if ('phone' in user && user.phone) {
+      // @ts-ignore
+      return user.phone;
+    }
+    return '';
+  };
+
+  const handleSubscribe = async (planId: string) => {
     try {
-      await billingApi.cancel();
-      await fetchBillingData();
-      alert('Subscription cancelled');
-    } catch (err: any) {
-      alert(err.response?.data?.message || 'Failed to cancel subscription');
+      setIsChangingPlan(true);
+
+      const orderResponse = await billing.createRazorpayOrder({
+        planKey: planId,
+        billingCycle
+      });
+
+      if (!orderResponse.data.success) {
+        throw new Error(orderResponse.data.message || 'Failed to create order');
+      }
+
+      const order = orderResponse.data.data;
+
+      const options = {
+        key: import.meta.env.VITE_RAZORPAY_KEY || 'rzp_test_key',
+        amount: order.amount,
+        currency: order.currency || 'INR',
+        name: 'WabMeta',
+        description: `${planId} Plan - ${billingCycle}`,
+        order_id: order.id,
+        handler: async (response: any) => {
+          try {
+            const verifyResponse = await billing.verifyRazorpayPayment({
+              razorpay_order_id: response.razorpay_order_id,
+              razorpay_payment_id: response.razorpay_payment_id,
+              razorpay_signature: response.razorpay_signature,
+            });
+
+            if (verifyResponse.data.success) {
+              toast.success('Subscription activated successfully!');
+              await fetchBillingData();
+            } else {
+              throw new Error('Payment verification failed');
+            }
+          } catch (error) {
+            toast.error('Payment verification failed. Please contact support.');
+          }
+        },
+        prefill: {
+          name: getUserFullName(user),
+          email: user?.email || '',
+          contact: getUserPhone(user),
+        },
+        theme: {
+          color: '#22c55e'
+        },
+        modal: {
+          ondismiss: () => {
+            setIsChangingPlan(false);
+          }
+        }
+      };
+
+      // @ts-ignore - Razorpay is loaded from script tag
+      const razorpay = new window.Razorpay(options);
+      razorpay.open();
+
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to process payment');
+      setIsChangingPlan(false);
     }
   };
 
-  // Handle payment method actions
-  const handleAddPaymentMethod = async (data: any) => {
+
+
+  const handleCancelSubscription = async () => {
+    if (!confirm('Are you sure you want to cancel your subscription?')) {
+      return;
+    }
+
     try {
-      await billingApi.addPaymentMethod(data);
-      await fetchBillingData();
-    } catch (err: any) {
-      throw err;
+      const response = await billing.cancel();
+      if (response.data.success) {
+        toast.success('Subscription cancelled successfully');
+        await fetchBillingData();
+      }
+    } catch (error) {
+      toast.error('Failed to cancel subscription');
     }
   };
 
-  const handleDeletePaymentMethod = async (id: string) => {
-    try {
-      await billingApi.deletePaymentMethod(id);
-      setPaymentMethods(paymentMethods.filter(m => m.id !== id));
-    } catch (err: any) {
-      alert(err.response?.data?.message || 'Failed to delete payment method');
-    }
-  };
-
-  const handleSetDefaultPaymentMethod = async (id: string) => {
-    try {
-      await billingApi.setDefaultPaymentMethod(id);
-      setPaymentMethods(paymentMethods.map(m => ({
-        ...m,
-        isDefault: m.id === id
-      })));
-    } catch (err: any) {
-      alert(err.response?.data?.message || 'Failed to set default');
-    }
-  };
-
-  // Loading state
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-96">
-        <div className="text-center">
-          <Loader2 className="w-10 h-10 text-primary-500 animate-spin mx-auto mb-4" />
-          <p className="text-gray-500">Loading billing information...</p>
+      <div className="flex items-center justify-center min-h-screen">
+        <Loader2 className="w-8 h-8 animate-spin text-green-600" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="max-w-2xl mx-auto mt-12 p-6">
+        <div className="bg-red-50 border border-red-200 rounded-xl p-4">
+          <div className="flex items-start">
+            <AlertCircle className="w-5 h-5 text-red-600 mt-0.5 mr-3 flex-shrink-0" />
+            <div>
+              <h3 className="font-medium text-red-900">Error Loading Billing</h3>
+              <p className="text-red-700 text-sm mt-1">{error}</p>
+              <button
+                onClick={fetchBillingData}
+                className="mt-3 px-4 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 text-sm font-medium"
+              >
+                Retry
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6">
+    <div className="max-w-7xl mx-auto">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Billing & Subscription</h1>
-          <p className="text-gray-500 mt-1">Manage your plan, payments and invoices</p>
-        </div>
-        <button
-          onClick={fetchBillingData}
-          disabled={loading}
-          className="flex items-center space-x-2 px-4 py-2 bg-white border border-gray-200 rounded-xl hover:bg-gray-50"
-        >
-          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-          <span>Refresh</span>
-        </button>
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
+          Billing & Plans
+        </h1>
+        <p className="mt-2 text-gray-600 dark:text-gray-400">
+          Manage your subscription and billing information
+        </p>
       </div>
 
-      {/* Error Banner */}
-      {error && (
-        <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex items-start space-x-3">
-          <AlertCircle className="w-5 h-5 text-red-600 shrink-0" />
-          <div className="flex-1">
-            <p className="text-red-700 font-medium">Error</p>
-            <p className="text-red-600 text-sm">{error}</p>
+      {/* Current Plan */}
+      {subscription && (
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6 mb-8">
+          <div className="flex items-start justify-between">
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">
+                Current Plan
+              </h2>
+              <div className="flex items-center gap-3 mt-2">
+                <span className="text-2xl font-bold text-gray-900 dark:text-white">
+                  {subscription.plan?.name || 'Free'}
+                </span>
+                <span className="px-2 py-1 bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 rounded-full text-xs font-medium">
+                  {subscription.status}
+                </span>
+                <span className="text-gray-500 dark:text-gray-400">
+                  {subscription.billingCycle}
+                </span>
+              </div>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
+                <Calendar className="w-4 h-4 inline mr-1" />
+                Next billing date: {new Date(subscription.currentPeriodEnd).toLocaleDateString()}
+              </p>
+            </div>
+
+            {subscription.status === 'active' && (
+              <button
+                onClick={handleCancelSubscription}
+                className="px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+              >
+                Cancel Subscription
+              </button>
+            )}
           </div>
-          <button onClick={() => setError(null)} className="text-red-400 hover:text-red-600">×</button>
         </div>
       )}
 
-      {/* Plan & Usage */}
-      <div className="grid lg:grid-cols-2 gap-6">
-        <CurrentPlan 
-          planData={planData}
-          availablePlans={availablePlans}
-          onUpgrade={handleUpgrade}
-          onCancel={handleCancel}
-        />
-        <UsageStats usageData={usageData} />
+      {/* ✅ Usage Stats - With null checks */}
+      {usage && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+          {usage.messages && (
+            <UsageCard
+              title="Messages"
+              used={usage.messages.used}
+              limit={usage.messages.limit}
+              percentage={usage.messages.percentage}
+              icon={MessageSquare}
+              color="blue"
+            />
+          )}
+          {usage.contacts && (
+            <UsageCard
+              title="Contacts"
+              used={usage.contacts.used}
+              limit={usage.contacts.limit}
+              percentage={usage.contacts.percentage}
+              icon={Users}
+              color="green"
+            />
+          )}
+          {usage.campaigns && (
+            <UsageCard
+              title="Campaigns"
+              used={usage.campaigns.used}
+              limit={usage.campaigns.limit}
+              percentage={usage.campaigns.percentage}
+              icon={Zap}
+              color="purple"
+            />
+          )}
+          {usage.storage && (
+            <UsageCard
+              title="Storage"
+              used={usage.storage.used}
+              limit={usage.storage.limit}
+              percentage={usage.storage.percentage}
+              icon={TrendingUp}
+              color="orange"
+            />
+          )}
+        </div>
+      )}
+
+      {/* Billing Cycle Toggle */}
+      <div className="flex justify-center mb-8">
+        <div className="bg-gray-100 dark:bg-gray-800 rounded-lg p-1 inline-flex">
+          <button
+            onClick={() => setBillingCycle('monthly')}
+            className={`px-6 py-2 rounded-lg font-medium transition-colors ${billingCycle === 'monthly'
+              ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
+              : 'text-gray-600 dark:text-gray-400'
+              }`}
+          >
+            Monthly
+          </button>
+          <button
+            onClick={() => setBillingCycle('yearly')}
+            className={`px-6 py-2 rounded-lg font-medium transition-colors ${billingCycle === 'yearly'
+              ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
+              : 'text-gray-600 dark:text-gray-400'
+              }`}
+          >
+            Yearly
+            <span className="ml-2 text-xs bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 px-2 py-0.5 rounded-full">
+              Save 20%
+            </span>
+          </button>
+        </div>
       </div>
 
-      {/* Payment & Invoices */}
-      <div className="grid lg:grid-cols-2 gap-6">
-        <PaymentMethods 
-          methods={paymentMethods}
-          onAdd={handleAddPaymentMethod}
-          onDelete={handleDeletePaymentMethod}
-          onSetDefault={handleSetDefaultPaymentMethod}
-        />
-        <InvoiceHistory invoices={invoices} />
+      {/* Pricing Plans */}
+      {plans.length > 0 ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+          {plans.map((plan) => (
+            <PricingCard
+              key={plan.id}
+              plan={plan}
+              billingCycle={billingCycle}
+              isCurrentPlan={subscription?.planId === plan.id}
+              onSelect={() => handleSubscribe(plan.slug)}
+              disabled={isChangingPlan || subscription?.planId === plan.id}
+            />
+          ))}
+        </div>
+      ) : (
+        <div className="text-center py-12 mb-8">
+          <p className="text-gray-500 dark:text-gray-400">
+            No pricing plans available. Please check back later.
+          </p>
+        </div>
+      )}
+
+      {/* Invoices */}
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6">
+        <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+          Billing History
+        </h2>
+        {invoices.length > 0 ? (
+          <div className="space-y-2">
+            {invoices.map((invoice) => (
+              <div
+                key={invoice.id}
+                className="flex items-center justify-between p-4 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg transition-colors"
+              >
+                <div className="flex items-center gap-4">
+                  <CreditCard className="w-5 h-5 text-gray-400" />
+                  <div>
+                    <p className="font-medium text-gray-900 dark:text-white">
+                      ₹{(invoice.amount / 100).toFixed(2)}
+                    </p>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                      {new Date(invoice.date).toLocaleDateString()}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${invoice.status === 'paid'
+                    ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                    : invoice.status === 'pending'
+                      ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
+                      : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                    }`}>
+                    {invoice.status}
+                  </span>
+                  {invoice.downloadUrl && (
+                    <button className="text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white">
+                      <ChevronRight className="w-5 h-5" />
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-gray-500 dark:text-gray-400 text-center py-8">
+            No billing history available
+          </p>
+        )}
       </div>
     </div>
   );
 };
+
+// Usage Card Component with defaults
+interface UsageCardProps {
+  title: string;
+  used: number;
+  limit: number;
+  percentage: number;
+  icon: React.ElementType;
+  color: 'blue' | 'green' | 'purple' | 'orange';
+}
+
+const UsageCard: React.FC<UsageCardProps> = ({
+  title,
+  used = 0,
+  limit = 100,
+  percentage = 0,
+  icon: Icon,
+  color
+}) => {
+  const colorClasses = {
+    blue: 'text-blue-600 bg-blue-100 dark:bg-blue-900/30',
+    green: 'text-green-600 bg-green-100 dark:bg-green-900/30',
+    purple: 'text-purple-600 bg-purple-100 dark:bg-purple-900/30',
+    orange: 'text-orange-600 bg-orange-100 dark:bg-orange-900/30',
+  };
+
+  const progressColor = {
+    blue: 'bg-blue-600',
+    green: 'bg-green-600',
+    purple: 'bg-purple-600',
+    orange: 'bg-orange-600',
+  };
+
+  // Calculate safe percentage
+  const safePercentage = Math.min(Math.max(percentage, 0), 100);
+
+  return (
+    <div className="bg-white dark:bg-gray-800 rounded-xl p-6 border border-gray-200 dark:border-gray-700">
+      <div className="flex items-center justify-between mb-4">
+        <div className={`p-2 rounded-lg ${colorClasses[color]}`}>
+          <Icon className="w-5 h-5" />
+        </div>
+        <span className="text-sm text-gray-500 dark:text-gray-400">
+          {safePercentage.toFixed(0)}%
+        </span>
+      </div>
+      <h3 className="font-medium text-gray-900 dark:text-white mb-1">
+        {title}
+      </h3>
+      <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">
+        {used.toLocaleString()} / {limit === -1 ? 'Unlimited' : limit.toLocaleString()}
+      </p>
+      <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+        <div
+          className={`h-2 rounded-full transition-all duration-300 ${progressColor[color]}`}
+          style={{ width: `${safePercentage}%` }}
+        />
+      </div>
+    </div>
+  );
+};
+
+// Pricing Card Component
+interface PricingCardProps {
+  plan: Plan;
+  billingCycle: 'monthly' | 'yearly';
+  isCurrentPlan: boolean;
+  onSelect: () => void;
+  disabled: boolean;
+}
+
+const PricingCard: React.FC<PricingCardProps> = ({
+  plan,
+  billingCycle,
+  isCurrentPlan,
+  onSelect,
+  disabled
+}) => {
+  const price = billingCycle === 'monthly' ? plan.monthlyPrice : plan.yearlyPrice;
+
+  return (
+    <div className={`bg-white dark:bg-gray-800 rounded-xl p-6 border ${plan.popular
+      ? 'border-green-500 ring-2 ring-green-500 ring-opacity-50'
+      : 'border-gray-200 dark:border-gray-700'
+      } relative`}>
+      {plan.popular && (
+        <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+          <span className="bg-green-500 text-white text-xs font-bold px-3 py-1 rounded-full flex items-center">
+            <Star className="w-3 h-3 mr-1" />
+            POPULAR
+          </span>
+        </div>
+      )}
+
+      <div className="text-center mb-6">
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+          {plan.name}
+        </h3>
+        <div className="flex items-baseline justify-center">
+          <span className="text-3xl font-bold text-gray-900 dark:text-white">
+            ₹{price}
+          </span>
+          <span className="text-gray-500 dark:text-gray-400 ml-2">
+            /{billingCycle === 'monthly' ? 'mo' : 'yr'}
+          </span>
+        </div>
+      </div>
+
+      <ul className="space-y-3 mb-6">
+        <li className="flex items-start">
+          <Check className="w-5 h-5 text-green-500 mr-2 flex-shrink-0" />
+          <span className="text-sm text-gray-700 dark:text-gray-300">
+            {plan.maxContacts === -1 ? 'Unlimited' : plan.maxContacts.toLocaleString()} contacts
+          </span>
+        </li>
+        <li className="flex items-start">
+          <Check className="w-5 h-5 text-green-500 mr-2 flex-shrink-0" />
+          <span className="text-sm text-gray-700 dark:text-gray-300">
+            {plan.maxMessagesPerMonth === -1 ? 'Unlimited' : plan.maxMessagesPerMonth.toLocaleString()} messages/mo
+          </span>
+        </li>
+        <li className="flex items-start">
+          <Check className="w-5 h-5 text-green-500 mr-2 flex-shrink-0" />
+          <span className="text-sm text-gray-700 dark:text-gray-300">
+            {plan.maxCampaignsPerMonth} campaigns/mo
+          </span>
+        </li>
+        <li className="flex items-start">
+          <Check className="w-5 h-5 text-green-500 mr-2 flex-shrink-0" />
+          <span className="text-sm text-gray-700 dark:text-gray-300">
+            {plan.maxTeamMembers} team members
+          </span>
+        </li>
+      </ul>
+
+      <button
+        onClick={onSelect}
+        disabled={disabled || isCurrentPlan}
+        className={`w-full py-2 px-4 rounded-lg font-medium transition-colors ${isCurrentPlan
+          ? 'bg-gray-100 text-gray-500 cursor-not-allowed dark:bg-gray-700 dark:text-gray-400'
+          : plan.popular
+            ? 'bg-green-600 text-white hover:bg-green-700'
+            : 'bg-gray-900 text-white hover:bg-gray-800 dark:bg-gray-700 dark:hover:bg-gray-600'
+          }`}
+      >
+        {isCurrentPlan ? 'Current Plan' : 'Select Plan'}
+      </button>
+    </div>
+  );
+};
+
+declare global {
+  interface Window {
+    Razorpay: any;
+  }
+}
 
 export default Billing;

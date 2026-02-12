@@ -11,11 +11,6 @@ import {
   Users,
   MessageSquare,
   Zap,
-  FileText,
-  Bot,
-  BarChart3,
-  Phone,
-  Shield,
   Star,
   TrendingUp
 } from 'lucide-react';
@@ -235,22 +230,7 @@ const Billing: React.FC = () => {
     }
   };
 
-  const getPlanFeatureIcon = (feature: string) => {
-    const iconMap: Record<string, any> = {
-      contacts: Users,
-      messages: MessageSquare,
-      campaigns: Zap,
-      templates: FileText,
-      chatbot: Bot,
-      analytics: BarChart3,
-      support: Phone,
-      api: Shield,
-    };
 
-    const key = feature.toLowerCase().split(' ')[0];
-    const Icon = iconMap[key] || Check;
-    return <Icon className="w-4 h-4" />;
-  };
 
   if (loading) {
     return (
