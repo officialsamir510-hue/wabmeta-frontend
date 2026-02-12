@@ -1,15 +1,81 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <!-- ✅ Helps mobile browser top bar color -->
-    <meta name="theme-color" content="#ffffff" />
-    <title>wabmeta</title>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
-  </body>
+
+<head>
+  <meta charset="UTF-8" />
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+
+  <!-- Viewport -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <!-- Theme Color (Mobile Browser Top Bar) -->
+  <meta name="theme-color" content="#3b82f6" />
+
+  <!-- SEO Meta Tags -->
+  <meta name="description"
+    content="WabMeta - Professional WhatsApp Business Platform for marketing, automation, and customer engagement." />
+  <meta name="keywords" content="WhatsApp Business, Marketing, Automation, Customer Engagement, Chatbot" />
+  <meta name="author" content="WabMeta" />
+
+  <!-- Open Graph / Facebook -->
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://wabmeta.com/" />
+  <meta property="og:title" content="WabMeta - WhatsApp Business Platform" />
+  <meta property="og:description"
+    content="Professional WhatsApp Business Platform for marketing, automation, and customer engagement." />
+  <meta property="og:image" content="https://wabmeta.com/og-image.png" />
+
+  <!-- Twitter -->
+  <meta property="twitter:card" content="summary_large_image" />
+  <meta property="twitter:url" content="https://wabmeta.com/" />
+  <meta property="twitter:title" content="WabMeta - WhatsApp Business Platform" />
+  <meta property="twitter:description"
+    content="Professional WhatsApp Business Platform for marketing, automation, and customer engagement." />
+  <meta property="twitter:image" content="https://wabmeta.com/og-image.png" />
+
+  <!-- Apple Touch Icon -->
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+
+  <!-- Manifest -->
+  <link rel="manifest" href="/manifest.json" />
+
+  <!-- Preconnect to external services -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="preconnect" href="https://checkout.razorpay.com" />
+
+  <!-- Title (will be updated by React Router) -->
+  <title>WabMeta - WhatsApp Business Platform</title>
+</head>
+
+<body>
+  <!-- Root div for React app -->
+  <div id="root"></div>
+
+  <!-- Razorpay Checkout Script -->
+  <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+
+  <!-- Main App Entry Point -->
+  <script type="module" src="/src/main.tsx"></script>
+
+  <!-- Noscript Fallback -->
+  <noscript>
+    <div style="
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        height: 100vh;
+        font-family: system-ui, -apple-system, sans-serif;
+        text-align: center;
+        padding: 20px;
+      ">
+      <h1>JavaScript Required</h1>
+      <p>Please enable JavaScript in your browser to use WabMeta.</p>
+    </div>
+  </noscript>
+</body>
+
 </html>
