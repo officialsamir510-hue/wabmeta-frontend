@@ -1,285 +1,118 @@
-// src/components/dashboard/MetaConnectModal.tsx
-
-import React, { useState, useEffect } from 'react';
-import { X, MessageCircle, CheckCircle, Loader2, AlertCircle, RefreshCw } from 'lucide-react';
-import { useMetaConnection } from '../../hooks/useMetaConnection';
-import { ConnectionProgress, WhatsAppAccount } from '../../types/meta';
+import React, { useMemo, useState } from "react";
+import { X, Loader2, ExternalLink, AlertTriangle } from "lucide-react";
+import { meta } from "../../services/api";
 
 interface MetaConnectModalProps {
   isOpen: boolean;
   onClose: () => void;
   organizationId: string;
-  onConnected?: (account: WhatsAppAccount) => void;
+  onConnected?: () => void; // optional
 }
 
-const progressSteps = [
-  { key: 'INIT', label: 'Initializing...' },
-  { key: 'TOKEN_EXCHANGE', label: 'Authenticating...' },
-  { key: 'FETCHING_WABA', label: 'Fetching Business Account...' },
-  { key: 'FETCHING_PHONE', label: 'Getting Phone Number...' },
-  { key: 'SUBSCRIBE_WEBHOOK', label: 'Setting up Webhooks...' },
-  { key: 'SAVING', label: 'Saving Account...' },
-  { key: 'COMPLETED', label: 'Connected!' },
-];
-
-export const MetaConnectModal: React.FC<MetaConnectModalProps> = ({
+const MetaConnectModal: React.FC<MetaConnectModalProps> = ({
   isOpen,
   onClose,
   organizationId,
-  onConnected,
 }) => {
-  const {
-    accounts,
-    isConnecting,
-    error,
-    progress,
-    sdkLoaded,
-    startConnection,
-    clearError,
-    loadAccounts,
-  } = useMetaConnection(organizationId);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const [showAccounts, setShowAccounts] = useState(false);
+  const popupFeatures = useMemo(
+    () => "width=540,height=720,noopener,noreferrer",
+    []
+  );
 
-  useEffect(() => {
-    if (isOpen) {
-      loadAccounts();
+  const openPopupOrRedirect = async () => {
+    setError(null);
+
+    if (!organizationId) {
+      setError("Organization ID missing. Please refresh and try again.");
+      return;
     }
-  }, [isOpen]);
 
-  useEffect(() => {
-    if (progress?.step === 'COMPLETED' && progress?.status === 'completed') {
-      // Delay to show success message
-      const timer = setTimeout(() => {
-        onConnected?.(accounts[0]);
-        onClose();
-      }, 2000);
-      return () => clearTimeout(timer);
-    }
-  }, [progress, accounts, onConnected, onClose]);
+    try {
+      setLoading(true);
 
-  const handleConnect = () => {
-    clearError();
-    startConnection(organizationId);
-  };
+      // store org for callback fallback
+      localStorage.setItem("currentOrganizationId", organizationId);
 
-  const handleClose = () => {
-    if (!isConnecting) {
-      clearError();
-      onClose();
+      const resp = await meta.getOAuthUrl(organizationId);
+      const url = resp.data?.data?.url;
+
+      if (!url) throw new Error("Failed to generate Meta OAuth URL");
+
+      // Try popup
+      const popup = window.open(url, "wabmeta_meta_connect", popupFeatures);
+
+      // Popup blocked => redirect
+      if (!popup) {
+        window.location.href = url;
+        return;
+      }
+
+      // Optional: focus popup
+      popup.focus();
+    } catch (e: any) {
+      setError(e?.response?.data?.message || e?.message || "Failed to start connection");
+    } finally {
+      setLoading(false);
     }
   };
 
   if (!isOpen) return null;
 
-  const getCurrentStepIndex = () => {
-    if (!progress) return -1;
-    return progressSteps.findIndex((s) => s.key === progress.step);
-  };
-
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto">
-      {/* Backdrop */}
-      <div
-        className="fixed inset-0 bg-black/60 backdrop-blur-sm transition-opacity"
-        onClick={handleClose}
-      />
+    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+      <div className="w-full max-w-lg bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-gray-200 dark:border-slate-800">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-slate-800">
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+            Connect WhatsApp Business
+          </h3>
+          <button
+            onClick={onClose}
+            className="p-2 rounded-xl hover:bg-gray-100 dark:hover:bg-slate-800"
+          >
+            <X className="w-5 h-5 text-gray-600 dark:text-gray-300" />
+          </button>
+        </div>
 
-      {/* Modal */}
-      <div className="flex min-h-full items-center justify-center p-4">
-        <div className="relative w-full max-w-lg transform rounded-2xl bg-white shadow-2xl transition-all">
-          {/* Close button */}
-          {!isConnecting && (
-            <button
-              onClick={handleClose}
-              className="absolute right-4 top-4 text-gray-400 hover:text-gray-600 transition-colors"
-            >
-              <X className="h-6 w-6" />
-            </button>
+        <div className="px-6 py-5 space-y-4">
+          <p className="text-sm text-gray-600 dark:text-gray-300">
+            We’ll redirect you to Meta to connect your WhatsApp Business Account.
+            After completing signup, this window will update automatically.
+          </p>
+
+          {error && (
+            <div className="flex items-start gap-3 p-4 rounded-xl bg-amber-50 border border-amber-200">
+              <AlertTriangle className="w-5 h-5 text-amber-700 mt-0.5" />
+              <div>
+                <p className="text-sm font-medium text-amber-900">Connection error</p>
+                <p className="text-sm text-amber-800 mt-1">{error}</p>
+              </div>
+            </div>
           )}
 
-          {/* Content */}
-          <div className="p-8">
-            {/* Header */}
-            <div className="text-center mb-8">
-              <div className="mx-auto w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mb-4">
-                <MessageCircle className="h-8 w-8 text-green-600" />
-              </div>
-              <h2 className="text-2xl font-bold text-gray-900">
-                Connect WhatsApp Business
-              </h2>
-              <p className="mt-2 text-gray-600">
-                Connect your WhatsApp Business account to start sending messages
-              </p>
-            </div>
-
-            {/* Error State */}
-            {error && (
-              <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl">
-                <div className="flex items-start gap-3">
-                  <AlertCircle className="h-5 w-5 text-red-500 mt-0.5" />
-                  <div className="flex-1">
-                    <p className="text-sm font-medium text-red-800">
-                      Connection Failed
-                    </p>
-                    <p className="text-sm text-red-600 mt-1">{error}</p>
-                  </div>
-                  <button
-                    onClick={clearError}
-                    className="text-red-400 hover:text-red-600"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                </div>
-              </div>
+          <button
+            onClick={openPopupOrRedirect}
+            disabled={loading}
+            className="w-full px-5 py-3 rounded-xl bg-[#1877F2] hover:bg-[#1565D8] text-white font-semibold flex items-center justify-center gap-2 disabled:opacity-60"
+          >
+            {loading ? (
+              <>
+                <Loader2 className="w-5 h-5 animate-spin" />
+                Opening Meta…
+              </>
+            ) : (
+              <>
+                <ExternalLink className="w-5 h-5" />
+                Continue with Meta
+              </>
             )}
+          </button>
 
-            {/* Connection Progress */}
-            {isConnecting && progress && (
-              <div className="mb-6">
-                <div className="space-y-3">
-                  {progressSteps.map((step, index) => {
-                    const currentIndex = getCurrentStepIndex();
-                    const isComplete = index < currentIndex;
-                    const isCurrent = index === currentIndex;
-                    const isError =
-                      isCurrent && progress.status === 'error';
-
-                    return (
-                      <div
-                        key={step.key}
-                        className={`flex items-center gap-3 p-3 rounded-lg transition-colors ${
-                          isCurrent
-                            ? isError
-                              ? 'bg-red-50'
-                              : 'bg-green-50'
-                            : isComplete
-                            ? 'bg-gray-50'
-                            : ''
-                        }`}
-                      >
-                        <div className="flex-shrink-0">
-                          {isComplete ? (
-                            <CheckCircle className="h-5 w-5 text-green-500" />
-                          ) : isCurrent ? (
-                            isError ? (
-                              <AlertCircle className="h-5 w-5 text-red-500" />
-                            ) : (
-                              <Loader2 className="h-5 w-5 text-green-500 animate-spin" />
-                            )
-                          ) : (
-                            <div className="h-5 w-5 rounded-full border-2 border-gray-300" />
-                          )}
-                        </div>
-                        <span
-                          className={`text-sm ${
-                            isCurrent
-                              ? isError
-                                ? 'text-red-700 font-medium'
-                                : 'text-green-700 font-medium'
-                              : isComplete
-                              ? 'text-gray-600'
-                              : 'text-gray-400'
-                          }`}
-                        >
-                          {isCurrent && progress.message
-                            ? progress.message
-                            : step.label}
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            {/* Existing Accounts */}
-            {!isConnecting && accounts.length > 0 && (
-              <div className="mb-6">
-                <button
-                  onClick={() => setShowAccounts(!showAccounts)}
-                  className="w-full flex items-center justify-between p-3 bg-gray-50 rounded-lg text-sm text-gray-600 hover:bg-gray-100 transition-colors"
-                >
-                  <span>
-                    {accounts.length} account{accounts.length > 1 ? 's' : ''} connected
-                  </span>
-                  <span className="text-green-600">{showAccounts ? 'Hide' : 'Show'}</span>
-                </button>
-
-                {showAccounts && (
-                  <div className="mt-3 space-y-2">
-                    {accounts.map((account) => (
-                      <div
-                        key={account.id}
-                        className="flex items-center justify-between p-3 border rounded-lg"
-                      >
-                        <div>
-                          <p className="font-medium text-gray-900">
-                            {account.displayPhoneNumber || account.phoneNumber}
-                          </p>
-                          <p className="text-sm text-gray-500">
-                            {account.verifiedName}
-                          </p>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          {account.isDefault && (
-                            <span className="px-2 py-1 bg-green-100 text-green-700 text-xs rounded-full">
-                              Default
-                            </span>
-                          )}
-                          <span
-                            className={`w-2 h-2 rounded-full ${
-                              account.connectionStatus === 'CONNECTED'
-                                ? 'bg-green-500'
-                                : 'bg-red-500'
-                            }`}
-                          />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Connect Button */}
-            {!isConnecting && (
-              <button
-                onClick={handleConnect}
-                disabled={!sdkLoaded}
-                className="w-full py-4 px-6 bg-green-600 hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-semibold rounded-xl transition-colors flex items-center justify-center gap-2"
-              >
-                {!sdkLoaded ? (
-                  <>
-                    <Loader2 className="h-5 w-5 animate-spin" />
-                    Loading...
-                  </>
-                ) : (
-                  <>
-                    <MessageCircle className="h-5 w-5" />
-                    {accounts.length > 0
-                      ? 'Connect Another Account'
-                      : 'Connect WhatsApp Business'}
-                  </>
-                )}
-              </button>
-            )}
-
-            {/* Footer */}
-            <div className="mt-6 text-center">
-              <p className="text-xs text-gray-500">
-                By connecting, you agree to Meta's{' '}
-                <a
-                  href="https://www.whatsapp.com/legal/business-terms"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-green-600 hover:underline"
-                >
-                  WhatsApp Business Terms
-                </a>
-              </p>
-            </div>
-          </div>
+          <p className="text-xs text-gray-500 dark:text-gray-400">
+            If popup is blocked, we’ll open Meta in the same tab.
+          </p>
         </div>
       </div>
     </div>
