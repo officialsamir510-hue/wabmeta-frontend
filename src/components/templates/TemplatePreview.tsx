@@ -39,13 +39,13 @@ const TemplatePreview: React.FC<TemplatePreviewProps> = ({
           >
             <X className="w-5 h-5" />
           </button>
-          <PreviewContent />
+          <PreviewContent template={template} sampleVariables={sampleVariables} />
         </div>
       </div>
     );
   }
 
-  return <PreviewContent />;
+  return <PreviewContent template={template} sampleVariables={sampleVariables} />;
 };
 
 interface PreviewContentProps {
