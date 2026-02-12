@@ -308,11 +308,7 @@ const Dashboard: React.FC = () => {
   const refreshConnection = useCallback(async () => {
     await checkMetaConnection();
     await fetchWhatsAppAccounts(true);
-    try {
-      await meta.refresh();
-    } catch (e) {
-      console.error('Failed to refresh Meta status:', e);
-    }
+    // meta.refresh() removed
   }, [checkMetaConnection, fetchWhatsAppAccounts]);
 
   const disconnect = useCallback(async () => {

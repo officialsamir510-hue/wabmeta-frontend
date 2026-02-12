@@ -601,22 +601,28 @@ export const whatsapp = {
 
 // ---------- META ----------
 export const meta = {
-  getAuthUrl: (mode: 'new' | 'existing' | 'both' = 'both') =>
-    api.get<ApiResponse<{ url: string }>>('/meta/auth/url', { params: { mode } }),
+  // ✅ generates the facebook dialog/oauth URL from backend (protected)
+  getOAuthUrl: (organizationId: string) =>
+    api.get<ApiResponse<{ url: string; state: string }>>('/meta/oauth-url', {
+      params: { organizationId },
+    }),
 
-  connect: (data: { code: string; state?: string }) =>
-    api.post<ApiResponse>('/meta/connect', data),
+  // ✅ backward-compatible
+  getAuthUrl: (organizationId: string) =>
+    api.get<ApiResponse<{ url: string; state: string }>>('/meta/auth/url', {
+      params: { organizationId },
+    }),
+
+  // ✅ complete connection (code or accessToken)
+  callback: (data: { code: string; organizationId: string }) =>
+    api.post<ApiResponse<{ account: any }>>('/meta/callback', data),
+
+  // ✅ backward-compatible
+  connect: (data: { code: string; organizationId: string }) =>
+    api.post<ApiResponse<{ account: any }>>('/meta/connect', data),
 
   getStatus: () => api.get<ApiResponse>('/meta/status'),
-
-  refresh: () => api.post<ApiResponse>('/meta/refresh'),
-
   disconnect: () => api.post<ApiResponse>('/meta/disconnect'),
-
-  getPhoneNumbers: () => api.get<ApiResponse>('/meta/phone-numbers'),
-
-  sendTestMessage: (data: { phoneNumberId: string; to: string; message: string }) =>
-    api.post<ApiResponse>('/meta/test-message', data),
 };
 
 // ---------- INBOX ----------
