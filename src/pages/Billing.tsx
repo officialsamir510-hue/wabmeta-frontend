@@ -13,7 +13,8 @@ import {
   Star,
   TrendingUp,
   Download,
-  RefreshCw
+  RefreshCw,
+  Shield
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { billing } from '../services/api';
@@ -85,7 +86,6 @@ interface Invoice {
 
 /**
  * Safely format a number with locale string
- * Handles undefined, null, and -1 (unlimited) cases
  */
 const safeFormatNumber = (
   value: number | undefined | null,
@@ -94,7 +94,7 @@ const safeFormatNumber = (
   if (value === undefined || value === null) return fallback;
   if (value === -1) return 'Unlimited';
   try {
-    return value.toLocaleString();
+    return value.toLocaleString('en-IN');
   } catch {
     return String(value);
   }
@@ -119,6 +119,15 @@ const getDefaultUsage = (): Usage => ({
   storage: getDefaultUsageItem(100),
 });
 
+/**
+ * Validate Razorpay Key
+ */
+const validateRazorpayKey = (key: string | undefined): boolean => {
+  if (!key) return false;
+  // Razorpay keys start with rzp_test_ or rzp_live_
+  return key.startsWith('rzp_test_') || key.startsWith('rzp_live_');
+};
+
 // ============================================
 // MAIN COMPONENT
 // ============================================
@@ -134,6 +143,21 @@ const Billing: React.FC = () => {
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
   const [isChangingPlan, setIsChangingPlan] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [razorpayReady, setRazorpayReady] = useState(false);
+
+  // Check if Razorpay is loaded
+  useEffect(() => {
+    const checkRazorpay = () => {
+      if (typeof window !== 'undefined' && window.Razorpay) {
+        setRazorpayReady(true);
+        console.log('✅ Razorpay SDK loaded');
+      } else {
+        console.log('⏳ Waiting for Razorpay SDK...');
+        setTimeout(checkRazorpay, 500);
+      }
+    };
+    checkRazorpay();
+  }, []);
 
   useEffect(() => {
     fetchBillingData();
@@ -148,7 +172,7 @@ const Billing: React.FC = () => {
       }
       setError(null);
 
-      // Fetch all billing data in parallel with error handling
+      // Fetch all billing data in parallel
       const [plansRes, subscriptionRes, usageRes, invoicesRes] = await Promise.allSettled([
         billing.getPlans(),
         billing.getCurrentPlan(),
@@ -169,21 +193,17 @@ const Billing: React.FC = () => {
         setSubscription(subscriptionRes.value.data.data);
       }
 
-      // Handle usage with proper default values
+      // Handle usage
       if (usageRes.status === 'fulfilled' && usageRes.value.data.success) {
         const usageData = usageRes.value.data.data;
-
-        // Ensure each usage category has proper structure
         const formattedUsage: Usage = {
           messages: usageData?.messages || getDefaultUsageItem(1000),
           contacts: usageData?.contacts || getDefaultUsageItem(100),
           campaigns: usageData?.campaigns || getDefaultUsageItem(10),
           storage: usageData?.storage || getDefaultUsageItem(100),
         };
-
         setUsage(formattedUsage);
       } else {
-        // Set default usage if API fails
         setUsage(getDefaultUsage());
       }
 
@@ -231,12 +251,20 @@ const Billing: React.FC = () => {
     return '';
   };
 
-  const handleSubscribe = async (planId: string) => {
+  const handleSubscribe = async (planSlug: string) => {
     try {
+      // Check if Razorpay is loaded
+      if (!razorpayReady) {
+        toast.error('Payment gateway is loading. Please try again in a moment.');
+        return;
+      }
+
       setIsChangingPlan(true);
 
+      // Create order on backend
+      console.log('Creating order for plan:', planSlug);
       const orderResponse = await billing.createRazorpayOrder({
-        planKey: planId,
+        planKey: planSlug,
         billingCycle,
       });
 
@@ -245,15 +273,45 @@ const Billing: React.FC = () => {
       }
 
       const order = orderResponse.data.data;
+      console.log('Order created:', {
+        id: order.id,
+        amount: order.amount,
+        currency: order.currency
+      });
 
-      const options = {
-        key: import.meta.env.VITE_RAZORPAY_KEY || 'rzp_test_key',
+      // Get Razorpay key from environment
+      const razorpayKey = import.meta.env.VITE_RAZORPAY_KEY_ID ||
+        import.meta.env.VITE_RAZORPAY_KEY ||
+        '';
+
+      // Debug logging
+      console.log('=== RAZORPAY CONFIGURATION ===');
+      console.log('Environment Keys Available:', Object.keys(import.meta.env).filter(k => k.includes('RAZORPAY')));
+      console.log('Key Found:', razorpayKey ? `${razorpayKey.substring(0, 15)}...` : 'NO KEY');
+      console.log('Key Valid:', validateRazorpayKey(razorpayKey) ? '✅' : '❌');
+
+      if (!validateRazorpayKey(razorpayKey)) {
+        console.error('Invalid Razorpay key configuration');
+        toast.error('Payment gateway not configured. Please contact support.');
+        setIsChangingPlan(false);
+        return;
+      }
+
+      // Prepare Razorpay options
+      const options: any = {
+        key: razorpayKey,
         amount: order.amount,
         currency: order.currency || 'INR',
         name: 'WabMeta',
-        description: `${planId} Plan - ${billingCycle}`,
+        description: `${planSlug.toUpperCase()} Plan - ${billingCycle === 'yearly' ? 'Annual' : 'Monthly'} Billing`,
+        image: '/logo.png', // Add your logo
         order_id: order.id,
         handler: async (response: any) => {
+          console.log('✅ Payment successful:', response);
+
+          // Show loading toast
+          const loadingToast = toast.loading('Verifying payment...');
+
           try {
             const verifyResponse = await billing.verifyRazorpayPayment({
               razorpay_order_id: response.razorpay_order_id,
@@ -261,14 +319,18 @@ const Billing: React.FC = () => {
               razorpay_signature: response.razorpay_signature,
             });
 
+            toast.dismiss(loadingToast);
+
             if (verifyResponse.data.success) {
-              toast.success('Subscription activated successfully!');
+              toast.success('🎉 Subscription activated successfully!');
               await fetchBillingData();
             } else {
-              throw new Error('Payment verification failed');
+              throw new Error(verifyResponse.data.message || 'Payment verification failed');
             }
-          } catch (error) {
-            toast.error('Payment verification failed. Please contact support.');
+          } catch (error: any) {
+            toast.dismiss(loadingToast);
+            console.error('Verification error:', error);
+            toast.error(error.message || 'Payment verification failed. Please contact support.');
           } finally {
             setIsChangingPlan(false);
           }
@@ -278,38 +340,90 @@ const Billing: React.FC = () => {
           email: user?.email || '',
           contact: getUserPhone(user),
         },
+        notes: {
+          userId: user?.id,
+          planSlug: planSlug,
+          billingCycle: billingCycle
+        },
         theme: {
           color: '#22c55e',
+          backdrop_color: 'rgba(0, 0, 0, 0.8)'
         },
         modal: {
           ondismiss: () => {
+            console.log('Payment modal closed by user');
             setIsChangingPlan(false);
+            toast('Payment cancelled', { icon: '❌' });
           },
+          escape: true,
+          animation: true,
+          confirm_close: true
         },
+        retry: {
+          enabled: true,
+          max_count: 3
+        },
+        remember_customer: true,
+        send_sms_hash: true
       };
 
-      // Razorpay is loaded from script tag in index.html
-      const razorpay = new window.Razorpay(options);
-      razorpay.open();
+      console.log('Opening Razorpay with options:', {
+        ...options,
+        key: options.key.substring(0, 15) + '...'
+      });
+
+      // Create Razorpay instance
+      const rzp = new window.Razorpay(options);
+
+      // Handle payment failure
+      rzp.on('payment.failed', function (response: any) {
+        console.error('❌ Payment Failed:', response.error);
+
+        let errorMessage = 'Payment failed';
+        if (response.error?.description) {
+          errorMessage = response.error.description;
+        } else if (response.error?.reason) {
+          errorMessage = response.error.reason;
+        }
+
+        toast.error(errorMessage);
+        setIsChangingPlan(false);
+      });
+
+      // Open payment modal
+      rzp.open();
+
     } catch (error: any) {
-      toast.error(error.message || 'Failed to process payment');
+      console.error('Subscribe error:', error);
+      toast.error(error.message || 'Failed to initialize payment. Please try again.');
       setIsChangingPlan(false);
     }
   };
 
   const handleCancelSubscription = async () => {
-    if (!confirm('Are you sure you want to cancel your subscription? You will lose access to premium features at the end of your billing period.')) {
-      return;
-    }
+    const confirmed = confirm(
+      'Are you sure you want to cancel your subscription?\n\n' +
+      '• You will retain access until the end of your billing period\n' +
+      '• You can reactivate anytime before expiration\n' +
+      '• Your data will be preserved'
+    );
+
+    if (!confirmed) return;
 
     try {
+      const loadingToast = toast.loading('Cancelling subscription...');
       const response = await billing.cancel();
+      toast.dismiss(loadingToast);
+
       if (response.data.success) {
-        toast.success('Subscription cancelled successfully');
+        toast.success('Subscription cancelled. You have access until the end of your billing period.');
         await fetchBillingData();
+      } else {
+        throw new Error(response.data.message || 'Failed to cancel');
       }
-    } catch (error) {
-      toast.error('Failed to cancel subscription');
+    } catch (error: any) {
+      console.error('Cancel error:', error);
+      toast.error(error.message || 'Failed to cancel subscription');
     }
   };
 
@@ -373,14 +487,22 @@ const Billing: React.FC = () => {
             Manage your subscription and billing information
           </p>
         </div>
-        <button
-          onClick={() => fetchBillingData(true)}
-          disabled={refreshing}
-          className="p-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
-          title="Refresh"
-        >
-          <RefreshCw className={`w-5 h-5 ${refreshing ? 'animate-spin' : ''}`} />
-        </button>
+        <div className="flex items-center gap-2">
+          {!razorpayReady && (
+            <div className="px-3 py-1.5 bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 rounded-lg text-xs font-medium flex items-center">
+              <Loader2 className="w-3 h-3 mr-1.5 animate-spin" />
+              Loading Payment Gateway...
+            </div>
+          )}
+          <button
+            onClick={() => fetchBillingData(true)}
+            disabled={refreshing}
+            className="p-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
+            title="Refresh"
+          >
+            <RefreshCw className={`w-5 h-5 ${refreshing ? 'animate-spin' : ''}`} />
+          </button>
+        </div>
       </div>
 
       {/* Current Plan */}
@@ -396,14 +518,14 @@ const Billing: React.FC = () => {
                   {subscription.plan?.name || 'Free'}
                 </span>
                 <span
-                  className={`px-2.5 py-1 rounded-full text-xs font-medium ${subscription.status === 'active'
+                  className={`px-2.5 py-1 rounded-full text-xs font-medium ${subscription.status === 'active' || subscription.status === 'ACTIVE'
                       ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-                      : subscription.status === 'cancelled'
+                      : subscription.status === 'cancelled' || subscription.status === 'CANCELLED'
                         ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
                         : 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
                     }`}
                 >
-                  {subscription.status}
+                  {subscription.status.toLowerCase()}
                 </span>
                 <span className="text-gray-500 dark:text-gray-400 capitalize">
                   {subscription.billingCycle}
@@ -411,8 +533,10 @@ const Billing: React.FC = () => {
               </div>
               <p className="text-sm text-gray-500 dark:text-gray-400 mt-3 flex items-center">
                 <Calendar className="w-4 h-4 mr-2" />
-                {subscription.status === 'active' ? 'Next billing date: ' : 'Expires: '}
-                {new Date(subscription.currentPeriodEnd).toLocaleDateString('en-US', {
+                {subscription.status === 'active' || subscription.status === 'ACTIVE'
+                  ? 'Next billing date: '
+                  : 'Expires: '}
+                {new Date(subscription.currentPeriodEnd).toLocaleDateString('en-IN', {
                   year: 'numeric',
                   month: 'long',
                   day: 'numeric',
@@ -420,7 +544,7 @@ const Billing: React.FC = () => {
               </p>
             </div>
 
-            {subscription.status === 'active' && (
+            {(subscription.status === 'active' || subscription.status === 'ACTIVE') && (
               <button
                 onClick={handleCancelSubscription}
                 className="px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20 rounded-lg transition-colors border border-red-200 dark:border-red-800"
@@ -503,6 +627,14 @@ const Billing: React.FC = () => {
         </div>
       </div>
 
+      {/* Security Badge */}
+      <div className="flex justify-center mb-6">
+        <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+          <Shield className="w-4 h-4" />
+          <span>Secure payment powered by Razorpay</span>
+        </div>
+      </div>
+
       {/* Pricing Plans */}
       {plans.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
@@ -513,7 +645,7 @@ const Billing: React.FC = () => {
               billingCycle={billingCycle}
               isCurrentPlan={subscription?.planId === plan.id}
               onSelect={() => handleSubscribe(plan.slug)}
-              disabled={isChangingPlan}
+              disabled={isChangingPlan || !razorpayReady}
             />
           ))}
         </div>
@@ -546,7 +678,7 @@ const Billing: React.FC = () => {
                       ₹{((invoice.amount ?? 0) / 100).toFixed(2)}
                     </p>
                     <p className="text-sm text-gray-500 dark:text-gray-400">
-                      {new Date(invoice.date).toLocaleDateString('en-US', {
+                      {new Date(invoice.date).toLocaleDateString('en-IN', {
                         year: 'numeric',
                         month: 'short',
                         day: 'numeric',
@@ -626,7 +758,6 @@ const UsageCard: React.FC<UsageCardProps> = ({
     orange: 'bg-orange-600',
   };
 
-  // Calculate safe percentage
   const safePercentage = Math.min(Math.max(percentage || 0, 0), 100);
   const isWarning = safePercentage >= 80;
   const isCritical = safePercentage >= 95;
@@ -686,11 +817,7 @@ const PricingCard: React.FC<PricingCardProps> = ({
   onSelect,
   disabled,
 }) => {
-  // Safe price calculation with default values
-  const price =
-    billingCycle === 'monthly'
-      ? (plan.monthlyPrice ?? 0)
-      : (plan.yearlyPrice ?? 0);
+  const price = billingCycle === 'monthly' ? (plan.monthlyPrice ?? 0) : (plan.yearlyPrice ?? 0);
 
   return (
     <div
@@ -701,22 +828,21 @@ const PricingCard: React.FC<PricingCardProps> = ({
             : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
         } relative`}
     >
-      {/* Popular Badge */}
+      {/* Badges */}
       {plan.popular && (
         <div className="absolute -top-3 left-1/2 -translate-x-1/2">
           <span className="bg-green-500 text-white text-xs font-bold px-3 py-1 rounded-full flex items-center shadow-lg">
             <Star className="w-3 h-3 mr-1 fill-current" />
-            POPULAR
+            MOST POPULAR
           </span>
         </div>
       )}
 
-      {/* Current Plan Badge */}
       {isCurrentPlan && !plan.popular && (
         <div className="absolute -top-3 left-1/2 -translate-x-1/2">
           <span className="bg-blue-500 text-white text-xs font-bold px-3 py-1 rounded-full flex items-center shadow-lg">
             <Check className="w-3 h-3 mr-1" />
-            CURRENT
+            CURRENT PLAN
           </span>
         </div>
       )}
@@ -728,7 +854,7 @@ const PricingCard: React.FC<PricingCardProps> = ({
         </h3>
         <div className="flex items-baseline justify-center">
           <span className="text-4xl font-bold text-gray-900 dark:text-white">
-            ₹{price}
+            ₹{price.toLocaleString('en-IN')}
           </span>
           <span className="text-gray-500 dark:text-gray-400 ml-2">
             /{billingCycle === 'monthly' ? 'mo' : 'yr'}
@@ -736,7 +862,7 @@ const PricingCard: React.FC<PricingCardProps> = ({
         </div>
         {billingCycle === 'yearly' && plan.monthlyPrice > 0 && (
           <p className="text-xs text-green-600 dark:text-green-400 mt-1">
-            Save ₹{(plan.monthlyPrice * 12 - plan.yearlyPrice).toLocaleString()}/year
+            Save ₹{(plan.monthlyPrice * 12 - plan.yearlyPrice).toLocaleString('en-IN')}/year
           </p>
         )}
       </div>
