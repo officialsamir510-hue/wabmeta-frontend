@@ -52,6 +52,7 @@ const ChatbotList = lazy(() => import('./pages/ChatbotList'));
 const ChatbotBuilder = lazy(() => import('./pages/ChatbotBuilder'));
 const Automation = lazy(() => import('./pages/Automation'));
 const Reports = lazy(() => import('./pages/Reports'));
+const Help = lazy(() => import('./pages/Help'));
 
 // Settings & misc
 const Settings = lazy(() => import('./pages/Settings'));
@@ -378,6 +379,7 @@ const AppRoutes: React.FC = () => {
 
           {/* Notifications */}
           <Route path="/dashboard/notifications" element={<Notifications />} />
+          <Route path="/dashboard/help" element={<Help />} />
 
           {/* Convenience Redirects within Dashboard */}
           <Route path="/dashboard/profile" element={<Navigate to="/dashboard/settings/profile" replace />} />
@@ -412,6 +414,7 @@ const AppRoutes: React.FC = () => {
         <Route path="/team" element={<Navigate to="/dashboard/settings/team" replace />} />
         <Route path="/billing" element={<Navigate to="/dashboard/settings/billing" replace />} />
         <Route path="/notifications" element={<Navigate to="/dashboard/notifications" replace />} />
+
 
         {/* ============================== */}
         {/* ADMIN ROUTES */}
