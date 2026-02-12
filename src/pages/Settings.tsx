@@ -1,577 +1,748 @@
-// src/pages/Billing.tsx
+// src/pages/Settings.tsx
 
 import React, { useState, useEffect } from 'react';
 import {
-  CreditCard,
-  Check,
-  ChevronRight,
+  Settings as SettingsIcon,
+  User,
+  Bell,
+  Shield,
+  Key,
+  Building2,
   Loader2,
-  AlertCircle,
-  Calendar,
-  Users,
-  MessageSquare,
-  Zap,
-  Star,
-  TrendingUp
+  Save,
+  Eye,
+  EyeOff,
+  Globe,
+  Moon,
+  Sun
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { billing } from '../services/api'; // ✅ Correct import
+import api, { settings as settingsApi, users as usersApi } from '../services/api';
 import toast from 'react-hot-toast';
 
-interface Plan {
+interface Tab {
   id: string;
   name: string;
-  type: string;
-  slug: string;
-  monthlyPrice: number;
-  yearlyPrice: number;
-  maxContacts: number;
-  maxMessagesPerMonth: number;
-  maxCampaignsPerMonth: number;
-  maxTeamMembers: number;
-  maxWhatsAppAccounts: number;
-  maxTemplates: number;
-  maxChatbots: number;
-  maxAutomations: number;
-  features: string[];
-  isActive: boolean;
-  popular?: boolean;
+  icon: React.ReactNode;
 }
 
-interface Subscription {
-  id: string;
-  planId: string;
-  plan?: Plan;
-  status: string;
-  billingCycle: 'monthly' | 'yearly';
-  currentPeriodStart: string;
-  currentPeriodEnd: string;
-  messagesUsed: number;
-  contactsUsed: number;
-  cancelledAt?: string;
-}
-
-interface Usage {
-  messages: {
-    used: number;
-    limit: number;
-    percentage: number;
-  };
-  contacts: {
-    used: number;
-    limit: number;
-    percentage: number;
-  };
-  campaigns: {
-    used: number;
-    limit: number;
-    percentage: number;
-  };
-  storage: {
-    used: number;
-    limit: number;
-    percentage: number;
+interface UserSettings {
+  timezone?: string;
+  language?: string;
+  theme?: string;
+  notifications?: {
+    email?: boolean;
+    push?: boolean;
+    sms?: boolean;
+    marketing?: boolean;
   };
 }
 
-interface Invoice {
-  id: string;
-  amount: number;
-  currency: string;
-  status: 'paid' | 'pending' | 'failed';
-  date: string;
-  downloadUrl?: string;
+interface UserProfile {
+  firstName?: string;
+  lastName?: string;
+  email?: string;
+  phone?: string;
+  avatar?: string;
 }
 
-const Billing: React.FC = () => {
+const Settings: React.FC = () => {
   const { user } = useAuth();
+  const [activeTab, setActiveTab] = useState('general');
   const [loading, setLoading] = useState(true);
-  const [plans, setPlans] = useState<Plan[]>([]);
-  const [subscription, setSubscription] = useState<Subscription | null>(null);
-  const [usage, setUsage] = useState<Usage | null>(null);
-  const [invoices, setInvoices] = useState<Invoice[]>([]);
-  const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
+  const [saving, setSaving] = useState(false);
+  const [settings, setSettings] = useState<UserSettings>({
+    timezone: 'UTC',
+    language: 'en',
+    theme: 'light',
+    notifications: {
+      email: true,
+      push: false,
+      sms: false,
+      marketing: false
+    }
+  });
+  const [profile, setProfile] = useState<UserProfile>({
+    firstName: '',
+    lastName: '',
+    email: '',
+    phone: ''
+  });
 
-  const [isChangingPlan, setIsChangingPlan] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const tabs: Tab[] = [
+    { id: 'general', name: 'General', icon: <SettingsIcon className="w-5 h-5" /> },
+    { id: 'profile', name: 'Profile', icon: <User className="w-5 h-5" /> },
+    { id: 'business', name: 'Business Profile', icon: <Building2 className="w-5 h-5" /> },
+    { id: 'notifications', name: 'Notifications', icon: <Bell className="w-5 h-5" /> },
+    { id: 'security', name: 'Security', icon: <Shield className="w-5 h-5" /> },
+    { id: 'api', name: 'API & Webhooks', icon: <Key className="w-5 h-5" /> },
+  ];
 
   useEffect(() => {
-    fetchBillingData();
+    fetchSettings();
   }, []);
 
-  const fetchBillingData = async () => {
+  const fetchSettings = async () => {
     try {
       setLoading(true);
-      setError(null);
 
-      // Fetch all billing data in parallel with error handling
-      const [plansRes, subscriptionRes, usageRes, invoicesRes] = await Promise.allSettled([
-        billing.getPlans(),
-        billing.getCurrentPlan(),
-        billing.getUsage(),
-        billing.getInvoices({ limit: 10 })
+      // Fetch settings and profile in parallel
+      const [settingsRes, profileRes] = await Promise.allSettled([
+        settingsApi.getAll(),
+        usersApi.getProfile()
       ]);
 
-      // Handle plans
-      if (plansRes.status === 'fulfilled' && plansRes.value.data.success) {
-        const plansData = Array.isArray(plansRes.value.data.data)
-          ? plansRes.value.data.data
-          : [];
-        setPlans(plansData);
+      // Handle settings
+      if (settingsRes.status === 'fulfilled' && settingsRes.value.data.success) {
+        const data = settingsRes.value.data.data;
+        setSettings({
+          timezone: data?.timezone || 'UTC',
+          language: data?.language || 'en',
+          theme: data?.theme || 'light',
+          notifications: {
+            email: data?.notifications?.email ?? true,
+            push: data?.notifications?.push ?? false,
+            sms: data?.notifications?.sms ?? false,
+            marketing: data?.notifications?.marketing ?? false
+          }
+        });
       }
 
-      // Handle subscription
-      if (subscriptionRes.status === 'fulfilled' && subscriptionRes.value.data.success) {
-        setSubscription(subscriptionRes.value.data.data);
+      // Handle profile
+      if (profileRes.status === 'fulfilled' && profileRes.value.data.success) {
+        const data = profileRes.value.data.data;
+        setProfile({
+          firstName: data?.firstName || '',
+          lastName: data?.lastName || '',
+          email: data?.email || user?.email || '',
+          phone: data?.phone || ''
+        });
+      } else if (user) {
+        // Fallback to auth user data
+        setProfile({
+          firstName: (user as any).firstName || '',
+          lastName: (user as any).lastName || '',
+          email: user.email || '',
+          phone: (user as any).phone || ''
+        });
       }
 
-      // Handle usage
-      if (usageRes.status === 'fulfilled' && usageRes.value.data.success) {
-        setUsage(usageRes.value.data.data);
-      }
-
-      // Handle invoices
-      if (invoicesRes.status === 'fulfilled' && invoicesRes.value.data.success) {
-        const invoicesData = Array.isArray(invoicesRes.value.data.data)
-          ? invoicesRes.value.data.data
-          : [];
-        setInvoices(invoicesData);
-      }
-
-    } catch (err: any) {
-      console.error('Failed to fetch billing data:', err);
-      setError('Unable to load billing information. Please try again later.');
+    } catch (error) {
+      console.error('Failed to fetch settings:', error);
+      toast.error('Failed to load settings');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleSubscribe = async (planId: string) => {
+  const updateSettings = async (data: Partial<UserSettings>) => {
     try {
-      setIsChangingPlan(true);
-
-      // Create Razorpay order
-      const orderResponse = await billing.createRazorpayOrder({
-        planKey: planId,
-        billingCycle
-      });
-
-      if (!orderResponse.data.success) {
-        throw new Error(orderResponse.data.message || 'Failed to create order');
+      setSaving(true);
+      const response = await settingsApi.update(data);
+      if (response.data.success) {
+        setSettings(prev => ({ ...prev, ...data }));
+        toast.success('Settings saved successfully');
       }
-
-      const order = orderResponse.data.data;
-
-      // Initialize Razorpay
-      const options = {
-        key: import.meta.env.VITE_RAZORPAY_KEY || 'rzp_test_key',
-        amount: order.amount,
-        currency: order.currency || 'INR',
-        name: 'WabMeta',
-        description: `${planId} Plan - ${billingCycle}`,
-        order_id: order.id,
-        handler: async (response: any) => {
-          try {
-            // Verify payment
-            const verifyResponse = await billing.verifyRazorpayPayment({
-              razorpay_order_id: response.razorpay_order_id,
-              razorpay_payment_id: response.razorpay_payment_id,
-              razorpay_signature: response.razorpay_signature,
-            });
-
-            if (verifyResponse.data.success) {
-              toast.success('Subscription activated successfully!');
-              await fetchBillingData();
-            } else {
-              throw new Error('Payment verification failed');
-            }
-          } catch (error) {
-            toast.error('Payment verification failed. Please contact support.');
-          }
-        },
-        prefill: {
-          name: user?.name,
-          email: user?.email,
-          contact: (user as any)?.phone || '',
-        },
-        theme: {
-          color: '#22c55e'
-        },
-        modal: {
-          ondismiss: () => {
-            setIsChangingPlan(false);
-          }
-        }
-      };
-
-      // @ts-ignore
-      const razorpay = new window.Razorpay(options);
-      razorpay.open();
-
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to process payment');
-      setIsChangingPlan(false);
+    } catch (error) {
+      console.error('Failed to update settings:', error);
+      toast.error('Failed to save settings');
+    } finally {
+      setSaving(false);
     }
   };
 
-  const handleCancelSubscription = async () => {
-    if (!confirm('Are you sure you want to cancel your subscription? Your plan will remain active until the end of the current billing period.')) {
+  const updateProfile = async (data: Partial<UserProfile>) => {
+    try {
+      setSaving(true);
+      const response = await usersApi.updateProfile(data);
+      if (response.data.success) {
+        setProfile(prev => ({ ...prev, ...data }));
+        toast.success('Profile updated successfully');
+      }
+    } catch (error) {
+      console.error('Failed to update profile:', error);
+      toast.error('Failed to update profile');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const renderContent = () => {
+    if (loading) {
+      return (
+        <div className="flex items-center justify-center h-64">
+          <Loader2 className="w-8 h-8 animate-spin text-green-600" />
+        </div>
+      );
+    }
+
+    switch (activeTab) {
+      case 'general':
+        return (
+          <GeneralSettingsPanel
+            settings={settings}
+            onUpdate={updateSettings}
+            saving={saving}
+          />
+        );
+      case 'profile':
+        return (
+          <ProfileSettingsPanel
+            profile={profile}
+            onUpdate={updateProfile}
+            saving={saving}
+          />
+        );
+      case 'business':
+        return <BusinessSettingsPanel />;
+      case 'notifications':
+        return (
+          <NotificationSettingsPanel
+            settings={settings}
+            onUpdate={updateSettings}
+            saving={saving}
+          />
+        );
+      case 'security':
+        return <SecuritySettingsPanel />;
+      case 'api':
+        return <ApiSettingsPanel />;
+      default:
+        return <div>Select a tab</div>;
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Settings</h1>
+          <p className="mt-2 text-gray-600 dark:text-gray-400">
+            Manage your account and application settings
+          </p>
+        </div>
+
+        <div className="flex flex-col lg:flex-row gap-8">
+          {/* Sidebar */}
+          <div className="lg:w-64 shrink-0">
+            <nav className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-4">
+              <ul className="space-y-1">
+                {tabs.map((tab) => (
+                  <li key={tab.id}>
+                    <button
+                      onClick={() => setActiveTab(tab.id)}
+                      className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-colors ${activeTab === tab.id
+                          ? 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 font-medium'
+                          : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'
+                        }`}
+                    >
+                      {tab.icon}
+                      <span>{tab.name}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </nav>
+          </div>
+
+          {/* Content */}
+          <div className="flex-1">
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6">
+              {renderContent()}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// =============================================
+// General Settings Panel
+// =============================================
+interface GeneralSettingsPanelProps {
+  settings: UserSettings;
+  onUpdate: (data: Partial<UserSettings>) => Promise<void>;
+  saving: boolean;
+}
+
+const GeneralSettingsPanel: React.FC<GeneralSettingsPanelProps> = ({
+  settings,
+  onUpdate,
+  saving
+}) => {
+  const [timezone, setTimezone] = useState(settings.timezone || 'UTC');
+  const [language, setLanguage] = useState(settings.language || 'en');
+  const [theme, setTheme] = useState(settings.theme || 'light');
+
+  const handleSave = () => {
+    onUpdate({ timezone, language, theme });
+  };
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-xl font-semibold text-gray-900 dark:text-white">General Settings</h2>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+          Configure your general application preferences
+        </p>
+      </div>
+
+      <div className="space-y-4">
+        {/* Timezone */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            <Globe className="w-4 h-4 inline mr-2" />
+            Timezone
+          </label>
+          <select
+            value={timezone}
+            onChange={(e) => setTimezone(e.target.value)}
+            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-green-500"
+          >
+            <option value="UTC">UTC</option>
+            <option value="Asia/Kolkata">Asia/Kolkata (IST)</option>
+            <option value="America/New_York">America/New_York (EST)</option>
+            <option value="America/Los_Angeles">America/Los_Angeles (PST)</option>
+            <option value="Europe/London">Europe/London (GMT)</option>
+            <option value="Asia/Dubai">Asia/Dubai (GST)</option>
+            <option value="Asia/Singapore">Asia/Singapore (SGT)</option>
+          </select>
+        </div>
+
+        {/* Language */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            Language
+          </label>
+          <select
+            value={language}
+            onChange={(e) => setLanguage(e.target.value)}
+            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-green-500"
+          >
+            <option value="en">English</option>
+            <option value="hi">Hindi</option>
+            <option value="es">Spanish</option>
+            <option value="fr">French</option>
+            <option value="de">German</option>
+          </select>
+        </div>
+
+        {/* Theme */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            Theme
+          </label>
+          <div className="flex gap-3">
+            {[
+              { id: 'light', name: 'Light', icon: Sun },
+              { id: 'dark', name: 'Dark', icon: Moon },
+              { id: 'system', name: 'System', icon: SettingsIcon }
+            ].map(({ id, name, icon: Icon }) => (
+              <button
+                key={id}
+                onClick={() => setTheme(id)}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg border transition-colors ${theme === id
+                    ? 'border-green-500 bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400'
+                    : 'border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
+                  }`}
+              >
+                <Icon className="w-4 h-4" />
+                {name}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
+        >
+          {saving ? (
+            <Loader2 className="w-4 h-4 animate-spin" />
+          ) : (
+            <Save className="w-4 h-4" />
+          )}
+          Save Changes
+        </button>
+      </div>
+    </div>
+  );
+};
+
+// =============================================
+// Profile Settings Panel
+// =============================================
+interface ProfileSettingsPanelProps {
+  profile: UserProfile;
+  onUpdate: (data: Partial<UserProfile>) => Promise<void>;
+  saving: boolean;
+}
+
+const ProfileSettingsPanel: React.FC<ProfileSettingsPanelProps> = ({
+  profile,
+  onUpdate,
+  saving
+}) => {
+  const [firstName, setFirstName] = useState(profile.firstName || '');
+  const [lastName, setLastName] = useState(profile.lastName || '');
+  const [phone, setPhone] = useState(profile.phone || '');
+
+  const handleSave = () => {
+    onUpdate({ firstName, lastName, phone });
+  };
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Profile Settings</h2>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+          Update your personal information
+        </p>
+      </div>
+
+      <div className="space-y-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              First Name
+            </label>
+            <input
+              type="text"
+              value={firstName}
+              onChange={(e) => setFirstName(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-green-500"
+              placeholder="Your first name"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Last Name
+            </label>
+            <input
+              type="text"
+              value={lastName}
+              onChange={(e) => setLastName(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-green-500"
+              placeholder="Your last name"
+            />
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            Email
+          </label>
+          <input
+            type="email"
+            value={profile.email || ''}
+            disabled
+            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-100 dark:bg-gray-600 text-gray-500 dark:text-gray-400 cursor-not-allowed"
+          />
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+            Email cannot be changed
+          </p>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            Phone Number
+          </label>
+          <input
+            type="tel"
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-green-500"
+            placeholder="+91 98765 43210"
+          />
+        </div>
+      </div>
+
+      <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
+        >
+          {saving ? (
+            <Loader2 className="w-4 h-4 animate-spin" />
+          ) : (
+            <Save className="w-4 h-4" />
+          )}
+          Save Profile
+        </button>
+      </div>
+    </div>
+  );
+};
+
+// =============================================
+// Notification Settings Panel
+// =============================================
+interface NotificationSettingsPanelProps {
+  settings: UserSettings;
+  onUpdate: (data: Partial<UserSettings>) => Promise<void>;
+  saving: boolean;
+}
+
+const NotificationSettingsPanel: React.FC<NotificationSettingsPanelProps> = ({
+  settings,
+  onUpdate,
+  saving
+}) => {
+  const [notifications, setNotifications] = useState(settings.notifications || {
+    email: true,
+    push: false,
+    sms: false,
+    marketing: false
+  });
+
+  const handleToggle = (key: keyof typeof notifications) => {
+    const updated = { ...notifications, [key]: !notifications[key] };
+    setNotifications(updated);
+    onUpdate({ notifications: updated });
+  };
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Notification Settings</h2>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+          Choose how you want to receive notifications
+        </p>
+      </div>
+
+      <div className="space-y-4">
+        {[
+          { key: 'email', title: 'Email Notifications', desc: 'Receive notifications via email' },
+          { key: 'push', title: 'Push Notifications', desc: 'Receive browser push notifications' },
+          { key: 'sms', title: 'SMS Notifications', desc: 'Receive notifications via SMS' },
+          { key: 'marketing', title: 'Marketing Emails', desc: 'Receive product updates and offers' }
+        ].map(({ key, title, desc }) => (
+          <div key={key} className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
+            <div>
+              <h3 className="font-medium text-gray-900 dark:text-white">{title}</h3>
+              <p className="text-sm text-gray-500 dark:text-gray-400">{desc}</p>
+            </div>
+            <button
+              onClick={() => handleToggle(key as keyof typeof notifications)}
+              disabled={saving}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${notifications[key as keyof typeof notifications]
+                  ? 'bg-green-600'
+                  : 'bg-gray-300 dark:bg-gray-600'
+                }`}
+            >
+              <span
+                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${notifications[key as keyof typeof notifications] ? 'translate-x-6' : 'translate-x-1'
+                  }`}
+              />
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+// =============================================
+// Business Settings Panel (Placeholder)
+// =============================================
+const BusinessSettingsPanel: React.FC = () => (
+  <div className="space-y-6">
+    <div>
+      <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Business Profile</h2>
+      <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+        Configure your business information for WhatsApp
+      </p>
+    </div>
+
+    <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4">
+      <p className="text-yellow-700 dark:text-yellow-400">
+        Business profile settings are synced with your WhatsApp Business Account.
+        Connect your WhatsApp account to manage these settings.
+      </p>
+    </div>
+  </div>
+);
+
+// =============================================
+// Security Settings Panel
+// =============================================
+const SecuritySettingsPanel: React.FC = () => {
+  const [showPassword, setShowPassword] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const handleChangePassword = async () => {
+    if (newPassword !== confirmPassword) {
+      toast.error('Passwords do not match');
+      return;
+    }
+
+    if (newPassword.length < 8) {
+      toast.error('Password must be at least 8 characters');
       return;
     }
 
     try {
-      const response = await billing.cancel();
-      if (response.data.success) {
-        toast.success('Subscription cancelled successfully');
-        await fetchBillingData();
-      }
-    } catch (error) {
-      toast.error('Failed to cancel subscription');
+      setSaving(true);
+      await api.post('/auth/change-password', {
+        currentPassword,
+        newPassword
+      });
+      toast.success('Password changed successfully');
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || 'Failed to change password');
+    } finally {
+      setSaving(false);
     }
   };
 
-
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <Loader2 className="w-8 h-8 animate-spin text-green-600" />
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="max-w-2xl mx-auto mt-12 p-6">
-        <div className="bg-red-50 border border-red-200 rounded-xl p-4">
-          <div className="flex items-start">
-            <AlertCircle className="w-5 h-5 text-red-600 mt-0.5 mr-3 flex-shrink-0" />
-            <div>
-              <h3 className="font-medium text-red-900">Error Loading Billing</h3>
-              <p className="text-red-700 text-sm mt-1">{error}</p>
-              <button
-                onClick={fetchBillingData}
-                className="mt-3 px-4 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 text-sm font-medium"
-              >
-                Retry
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className="max-w-7xl mx-auto">
-      {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-          Billing & Plans
-        </h1>
-        <p className="mt-2 text-gray-600 dark:text-gray-400">
-          Manage your subscription and billing information
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Security Settings</h2>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+          Manage your account security
         </p>
       </div>
 
-      {/* Current Plan */}
-      {subscription && (
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6 mb-8">
-          <div className="flex items-start justify-between">
-            <div>
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">
-                Current Plan
-              </h2>
-              <div className="flex items-center gap-3 mt-2">
-                <span className="text-2xl font-bold text-gray-900 dark:text-white">
-                  {subscription.plan?.name || 'Free'}
-                </span>
-                <span className="px-2 py-1 bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 rounded-full text-xs font-medium">
-                  {subscription.status}
-                </span>
-                <span className="text-gray-500 dark:text-gray-400">
-                  {subscription.billingCycle}
-                </span>
-              </div>
-              <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
-                <Calendar className="w-4 h-4 inline mr-1" />
-                Next billing date: {new Date(subscription.currentPeriodEnd).toLocaleDateString()}
-              </p>
-            </div>
+      {/* Change Password */}
+      <div className="space-y-4">
+        <h3 className="font-medium text-gray-900 dark:text-white">Change Password</h3>
 
-            {subscription.status === 'active' && (
-              <button
-                onClick={handleCancelSubscription}
-                className="px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
-              >
-                Cancel Subscription
-              </button>
-            )}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            Current Password
+          </label>
+          <div className="relative">
+            <input
+              type={showPassword ? 'text' : 'password'}
+              value={currentPassword}
+              onChange={(e) => setCurrentPassword(e.target.value)}
+              className="w-full px-3 py-2 pr-10 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword(!showPassword)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500"
+            >
+              {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+            </button>
           </div>
         </div>
-      )}
 
-      {/* Usage Stats */}
-      {usage && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-          <UsageCard
-            title="Messages"
-            used={usage.messages.used}
-            limit={usage.messages.limit}
-            percentage={usage.messages.percentage}
-            icon={MessageSquare}
-            color="blue"
-          />
-          <UsageCard
-            title="Contacts"
-            used={usage.contacts.used}
-            limit={usage.contacts.limit}
-            percentage={usage.contacts.percentage}
-            icon={Users}
-            color="green"
-          />
-          <UsageCard
-            title="Campaigns"
-            used={usage.campaigns.used}
-            limit={usage.campaigns.limit}
-            percentage={usage.campaigns.percentage}
-            icon={Zap}
-            color="purple"
-          />
-          <UsageCard
-            title="Storage"
-            used={usage.storage.used}
-            limit={usage.storage.limit}
-            percentage={usage.storage.percentage}
-            icon={TrendingUp}
-            color="orange"
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            New Password
+          </label>
+          <input
+            type="password"
+            value={newPassword}
+            onChange={(e) => setNewPassword(e.target.value)}
+            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
           />
         </div>
-      )}
 
-      {/* Billing Cycle Toggle */}
-      <div className="flex justify-center mb-8">
-        <div className="bg-gray-100 dark:bg-gray-800 rounded-lg p-1 inline-flex">
-          <button
-            onClick={() => setBillingCycle('monthly')}
-            className={`px-6 py-2 rounded-lg font-medium transition-colors ${billingCycle === 'monthly'
-              ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
-              : 'text-gray-600 dark:text-gray-400'
-              }`}
-          >
-            Monthly
-          </button>
-          <button
-            onClick={() => setBillingCycle('yearly')}
-            className={`px-6 py-2 rounded-lg font-medium transition-colors ${billingCycle === 'yearly'
-              ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
-              : 'text-gray-600 dark:text-gray-400'
-              }`}
-          >
-            Yearly
-            <span className="ml-2 text-xs bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 px-2 py-0.5 rounded-full">
-              Save 20%
-            </span>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            Confirm New Password
+          </label>
+          <input
+            type="password"
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+          />
+        </div>
+
+        <button
+          onClick={handleChangePassword}
+          disabled={saving || !currentPassword || !newPassword}
+          className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
+        >
+          {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Shield className="w-4 h-4" />}
+          Change Password
+        </button>
+      </div>
+
+      {/* Two-Factor Authentication */}
+      <div className="pt-6 border-t border-gray-200 dark:border-gray-700">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="font-medium text-gray-900 dark:text-white">Two-Factor Authentication</h3>
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              Add an extra layer of security to your account
+            </p>
+          </div>
+          <button className="px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600">
+            Enable 2FA
           </button>
         </div>
       </div>
-
-      {/* Pricing Plans */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-        {plans.map((plan) => (
-          <PricingCard
-            key={plan.id}
-            plan={plan}
-            billingCycle={billingCycle}
-            isCurrentPlan={subscription?.planId === plan.id}
-            onSelect={() => handleSubscribe(plan.slug)}
-            disabled={isChangingPlan || subscription?.planId === plan.id}
-          />
-        ))}
-      </div>
-
-      {/* Invoices */}
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6">
-        <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-          Billing History
-        </h2>
-        {invoices.length > 0 ? (
-          <div className="space-y-2">
-            {invoices.map((invoice) => (
-              <div
-                key={invoice.id}
-                className="flex items-center justify-between p-4 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg transition-colors"
-              >
-                <div className="flex items-center gap-4">
-                  <CreditCard className="w-5 h-5 text-gray-400" />
-                  <div>
-                    <p className="font-medium text-gray-900 dark:text-white">
-                      ₹{invoice.amount / 100}
-                    </p>
-                    <p className="text-sm text-gray-500 dark:text-gray-400">
-                      {new Date(invoice.date).toLocaleDateString()}
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-3">
-                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${invoice.status === 'paid'
-                    ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-                    : invoice.status === 'pending'
-                      ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
-                      : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
-                    }`}>
-                    {invoice.status}
-                  </span>
-                  {invoice.downloadUrl && (
-                    <button className="text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white">
-                      <ChevronRight className="w-5 h-5" />
-                    </button>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <p className="text-gray-500 dark:text-gray-400 text-center py-8">
-            No billing history available
-          </p>
-        )}
-      </div>
-
-      {/* Add Razorpay Script */}
-      <script src="https://checkout.razorpay.com/v1/checkout.js" async></script>
     </div>
   );
 };
 
-// Usage Card Component
-const UsageCard: React.FC<{
-  title: string;
-  used: number;
-  limit: number;
-  percentage: number;
-  icon: React.ElementType;
-  color: string;
-}> = ({ title, used, limit, percentage, icon: Icon, color }) => {
-  const colorClasses = {
-    blue: 'text-blue-600 bg-blue-100 dark:bg-blue-900/30',
-    green: 'text-green-600 bg-green-100 dark:bg-green-900/30',
-    purple: 'text-purple-600 bg-purple-100 dark:bg-purple-900/30',
-    orange: 'text-orange-600 bg-orange-100 dark:bg-orange-900/30',
-  }[color];
-
-  const progressColor = {
-    blue: 'bg-blue-600',
-    green: 'bg-green-600',
-    purple: 'bg-purple-600',
-    orange: 'bg-orange-600',
-  }[color];
-
-  return (
-    <div className="bg-white dark:bg-gray-800 rounded-xl p-6 border border-gray-200 dark:border-gray-700">
-      <div className="flex items-center justify-between mb-4">
-        <div className={`p-2 rounded-lg ${colorClasses}`}>
-          <Icon className="w-5 h-5" />
-        </div>
-        <span className="text-sm text-gray-500 dark:text-gray-400">
-          {percentage}%
-        </span>
-      </div>
-      <h3 className="font-medium text-gray-900 dark:text-white mb-1">
-        {title}
-      </h3>
-      <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">
-        {used.toLocaleString()} / {limit === -1 ? 'Unlimited' : limit.toLocaleString()}
+// =============================================
+// API Settings Panel
+// =============================================
+const ApiSettingsPanel: React.FC = () => (
+  <div className="space-y-6">
+    <div>
+      <h2 className="text-xl font-semibold text-gray-900 dark:text-white">API & Webhooks</h2>
+      <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+        Manage API keys and webhook configurations
       </p>
-      <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-        <div
-          className={`h-2 rounded-full ${progressColor}`}
-          style={{ width: `${Math.min(percentage, 100)}%` }}
-        />
-      </div>
     </div>
-  );
-};
 
-// Pricing Card Component
-const PricingCard: React.FC<{
-  plan: Plan;
-  billingCycle: 'monthly' | 'yearly';
-  isCurrentPlan: boolean;
-  onSelect: () => void;
-  disabled: boolean;
-}> = ({ plan, billingCycle, isCurrentPlan, onSelect, disabled }) => {
-  const price = billingCycle === 'monthly' ? plan.monthlyPrice : plan.yearlyPrice;
+    <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+      <p className="text-blue-700 dark:text-blue-400">
+        API documentation is available at{' '}
+        <a href="https://docs.wabmeta.com" target="_blank" rel="noopener noreferrer" className="underline">
+          docs.wabmeta.com
+        </a>
+      </p>
+    </div>
 
-  return (
-    <div className={`bg-white dark:bg-gray-800 rounded-xl p-6 border ${plan.popular
-      ? 'border-green-500 ring-2 ring-green-500 ring-opacity-50'
-      : 'border-gray-200 dark:border-gray-700'
-      } relative`}>
-      {plan.popular && (
-        <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-          <span className="bg-green-500 text-white text-xs font-bold px-3 py-1 rounded-full flex items-center">
-            <Star className="w-3 h-3 mr-1" />
-            POPULAR
-          </span>
-        </div>
-      )}
-
-      <div className="text-center mb-6">
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-          {plan.name}
-        </h3>
-        <div className="flex items-baseline justify-center">
-          <span className="text-3xl font-bold text-gray-900 dark:text-white">
-            ₹{price}
-          </span>
-          <span className="text-gray-500 dark:text-gray-400 ml-2">
-            /{billingCycle === 'monthly' ? 'mo' : 'yr'}
-          </span>
+    <div className="space-y-4">
+      <div className="p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="font-medium text-gray-900 dark:text-white">API Keys</h3>
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              Generate API keys to access WabMeta API
+            </p>
+          </div>
+          <button className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">
+            Generate Key
+          </button>
         </div>
       </div>
 
-      <ul className="space-y-3 mb-6">
-        <li className="flex items-start">
-          <Check className="w-5 h-5 text-green-500 mr-2 flex-shrink-0" />
-          <span className="text-sm text-gray-700 dark:text-gray-300">
-            {plan.maxContacts === -1 ? 'Unlimited' : plan.maxContacts.toLocaleString()} contacts
-          </span>
-        </li>
-        <li className="flex items-start">
-          <Check className="w-5 h-5 text-green-500 mr-2 flex-shrink-0" />
-          <span className="text-sm text-gray-700 dark:text-gray-300">
-            {plan.maxMessagesPerMonth === -1 ? 'Unlimited' : plan.maxMessagesPerMonth.toLocaleString()} messages/mo
-          </span>
-        </li>
-        <li className="flex items-start">
-          <Check className="w-5 h-5 text-green-500 mr-2 flex-shrink-0" />
-          <span className="text-sm text-gray-700 dark:text-gray-300">
-            {plan.maxCampaignsPerMonth} campaigns/mo
-          </span>
-        </li>
-        <li className="flex items-start">
-          <Check className="w-5 h-5 text-green-500 mr-2 flex-shrink-0" />
-          <span className="text-sm text-gray-700 dark:text-gray-300">
-            {plan.maxTeamMembers} team members
-          </span>
-        </li>
-      </ul>
-
-      <button
-        onClick={onSelect}
-        disabled={disabled || isCurrentPlan}
-        className={`w-full py-2 px-4 rounded-lg font-medium transition-colors ${isCurrentPlan
-          ? 'bg-gray-100 text-gray-500 cursor-not-allowed dark:bg-gray-700 dark:text-gray-400'
-          : plan.popular
-            ? 'bg-green-600 text-white hover:bg-green-700'
-            : 'bg-gray-900 text-white hover:bg-gray-800 dark:bg-gray-700 dark:hover:bg-gray-600'
-          }`}
-      >
-        {isCurrentPlan ? 'Current Plan' : 'Select Plan'}
-      </button>
+      <div className="p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="font-medium text-gray-900 dark:text-white">Webhooks</h3>
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              Configure webhooks for real-time events
+            </p>
+          </div>
+          <button className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">
+            Add Webhook
+          </button>
+        </div>
+      </div>
     </div>
-  );
-};
+  </div>
+);
 
-export default Billing;
+export default Settings;
