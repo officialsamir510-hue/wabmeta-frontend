@@ -181,8 +181,8 @@ const Signup: React.FC = () => {
         step === 1
           ? "Start your free trial. No credit card required."
           : step === 2
-          ? "Tell us about your business"
-          : "Choose a secure password for your account"
+            ? "Tell us about your business"
+            : "Choose a secure password for your account"
       }
     >
       {/* Progress Bar */}
@@ -191,13 +191,12 @@ const Signup: React.FC = () => {
           {[1, 2, 3].map((s) => (
             <div key={s} className="flex items-center">
               <div
-                className={`w-10 h-10 rounded-full flex items-center justify-center font-semibold transition-all duration-300 ${
-                  s < step
+                className={`w-10 h-10 rounded-full flex items-center justify-center font-semibold transition-all duration-300 ${s < step
                     ? "bg-primary-500 text-white"
                     : s === step
-                    ? "bg-primary-500 text-white ring-4 ring-primary-100"
-                    : "bg-gray-200 text-gray-500"
-                }`}
+                      ? "bg-primary-500 text-white ring-4 ring-primary-100"
+                      : "bg-gray-200 text-gray-500"
+                  }`}
               >
                 {s < step ? <Check className="w-5 h-5" /> : s}
               </div>
@@ -261,7 +260,7 @@ const Signup: React.FC = () => {
               </div>
             </div>
 
-            <SocialLoginButtons onGoogleLogin={() => {}} onFacebookLogin={() => {}} />
+            <SocialLoginButtons />
           </div>
         )}
 
@@ -279,9 +278,8 @@ const Signup: React.FC = () => {
                   placeholder="9876543210"
                   value={formData.phone}
                   onChange={(e) => updateFormData("phone", e.target.value)}
-                  className={`flex-1 px-4 py-3.5 border rounded-r-xl transition-all focus:outline-none focus:ring-2 ${
-                    errors.phone ? "border-red-300 focus:ring-red-500/20" : "border-gray-200 focus:ring-primary-500/20"
-                  }`}
+                  className={`flex-1 px-4 py-3.5 border rounded-r-xl transition-all focus:outline-none focus:ring-2 ${errors.phone ? "border-red-300 focus:ring-red-500/20" : "border-gray-200 focus:ring-primary-500/20"
+                    }`}
                 />
               </div>
               {errors.phone && <p className="mt-2 text-sm text-red-600">{errors.phone}</p>}

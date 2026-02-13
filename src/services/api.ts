@@ -119,10 +119,11 @@ const getAccessToken = (): string | null => {
 
 /**
  * Get refresh token from storage
+ * ✅ UPDATED: Allows opaque tokens (not just JWTs)
  */
 const getRefreshToken = (): string | null => {
   const token = localStorage.getItem(TOKEN_KEYS.REFRESH);
-  return token && isValidJWT(token) ? token : null;
+  return token && typeof token === 'string' && token.length > 0 ? token : null;
 };
 
 /**
@@ -135,6 +136,7 @@ const getAdminToken = (): string | null => {
 
 /**
  * Set authentication tokens
+ * ✅ UPDATED: Allows opaque refresh tokens
  */
 const setAuthTokens = (accessToken: string, refreshToken?: string) => {
   if (accessToken && isValidJWT(accessToken)) {
@@ -144,7 +146,7 @@ const setAuthTokens = (accessToken: string, refreshToken?: string) => {
     localStorage.setItem(TOKEN_KEYS.LEGACY_WABMETA, accessToken);
   }
 
-  if (refreshToken && isValidJWT(refreshToken)) {
+  if (refreshToken && typeof refreshToken === 'string') {
     localStorage.setItem(TOKEN_KEYS.REFRESH, refreshToken);
   }
 };
@@ -160,15 +162,25 @@ const clearAuthData = () => {
 
 /**
  * Clean up invalid tokens
+ * ✅ UPDATED: Only validates structure of Access/Admin tokens, ignores Refresh tokens
  */
 const cleanupInvalidTokens = () => {
-  Object.values(TOKEN_KEYS).forEach(key => {
+  const jwtKeys = [
+    TOKEN_KEYS.ACCESS,
+    TOKEN_KEYS.LEGACY_TOKEN,
+    TOKEN_KEYS.LEGACY_WABMETA,
+    TOKEN_KEYS.ADMIN,
+  ];
+
+  jwtKeys.forEach((key) => {
     const value = localStorage.getItem(key);
     if (value && !isValidJWT(value)) {
       localStorage.removeItem(key);
-      console.warn(`⚠️ Removed invalid token: ${key}`);
+      console.warn(`⚠️ Removed invalid JWT token: ${key}`);
     }
   });
+
+  // NOTE: refreshToken may be opaque - do not remove it here
 };
 
 // ============================================
@@ -214,29 +226,17 @@ api.interceptors.request.use(
       config.headers.Authorization = `Bearer ${token}`;
     }
 
-    // ✅ ADDED: Organization ID Header Logic
+    // ✅ Attach organizationId header (for multi-tenant APIs like /whatsapp/accounts)
     try {
-      // Priority 1: Check specialized org storage
       const orgRaw = localStorage.getItem("wabmeta_org");
-      let orgId = null;
+      const org = orgRaw ? JSON.parse(orgRaw) : null;
+      const orgId = org?.id || localStorage.getItem("currentOrganizationId");
 
-      if (orgRaw) {
-        const org = JSON.parse(orgRaw);
-        orgId = org?.id;
-      }
-
-      // Priority 2: Fallback to simple ID storage
-      if (!orgId) {
-        orgId = localStorage.getItem("currentOrganizationId");
-      }
-
-      // If found, attach to headers
       if (orgId) {
-        config.headers["X-Organization-Id"] = orgId;
+        (config.headers as any)["X-Organization-Id"] = orgId;
       }
-    } catch (e) {
-      // Silent fail if JSON parse errors occur
-      console.warn("Failed to parse organization data for header", e);
+    } catch {
+      // ignore
     }
 
     return config;
