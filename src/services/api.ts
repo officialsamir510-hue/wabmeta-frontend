@@ -3,14 +3,15 @@
 import axios, {
   AxiosError,
   type AxiosInstance,
-  type InternalAxiosRequestConfig
+  type InternalAxiosRequestConfig,
+  type AxiosResponse
 } from 'axios';
 
 // ============================================
 // TYPE DEFINITIONS
 // ============================================
 
-interface ApiResponse<T = any> {
+export interface ApiResponse<T = any> {
   success: boolean;
   data: T;
   message?: string;
@@ -22,7 +23,7 @@ interface ApiResponse<T = any> {
   };
 }
 
-interface ApiError {
+export interface ApiError {
   success: false;
   message: string;
   code?: string;
@@ -30,7 +31,7 @@ interface ApiError {
   stack?: string;
 }
 
-interface RefreshTokenResponse {
+export interface RefreshTokenResponse {
   accessToken: string;
   refreshToken: string;
 }
@@ -213,6 +214,31 @@ api.interceptors.request.use(
       config.headers.Authorization = `Bearer ${token}`;
     }
 
+    // ✅ ADDED: Organization ID Header Logic
+    try {
+      // Priority 1: Check specialized org storage
+      const orgRaw = localStorage.getItem("wabmeta_org");
+      let orgId = null;
+
+      if (orgRaw) {
+        const org = JSON.parse(orgRaw);
+        orgId = org?.id;
+      }
+
+      // Priority 2: Fallback to simple ID storage
+      if (!orgId) {
+        orgId = localStorage.getItem("currentOrganizationId");
+      }
+
+      // If found, attach to headers
+      if (orgId) {
+        config.headers["X-Organization-Id"] = orgId;
+      }
+    } catch (e) {
+      // Silent fail if JSON parse errors occur
+      console.warn("Failed to parse organization data for header", e);
+    }
+
     return config;
   },
   (error: AxiosError) => {
@@ -244,7 +270,7 @@ const processQueue = (error: AxiosError | null, token: string | null = null) => 
 };
 
 api.interceptors.response.use(
-  (response) => {
+  (response: AxiosResponse) => {
     const status = response.status;
     const url = response.config.url || '';
 
@@ -577,11 +603,8 @@ export const campaigns = {
   stats: () => api.get<ApiResponse>('/campaigns/stats'),
 };
 
-// Replace this section in api.ts
-
 // ---------- WHATSAPP ----------
 export const whatsapp = {
-  // ✅ FIX: Correct endpoint
   accounts: () => api.get<ApiResponse>('/whatsapp/accounts'),
 
   getAccount: (id: string) => api.get<ApiResponse>(`/whatsapp/accounts/${id}`),
@@ -601,28 +624,26 @@ export const whatsapp = {
 
 // ---------- META ----------
 export const meta = {
-  // ✅ generates the facebook dialog/oauth URL from backend (protected)
   getOAuthUrl: (organizationId: string) =>
     api.get<ApiResponse<{ url: string; state: string }>>('/meta/oauth-url', {
       params: { organizationId },
     }),
 
-  // ✅ backward-compatible
   getAuthUrl: (organizationId: string) =>
     api.get<ApiResponse<{ url: string; state: string }>>('/meta/auth/url', {
       params: { organizationId },
     }),
 
-  // ✅ complete connection (code or accessToken)
   callback: (data: { code: string; organizationId: string }) =>
     api.post<ApiResponse<{ account: any }>>('/meta/callback', data),
 
-  // ✅ backward-compatible
   connect: (data: { code: string; organizationId: string }) =>
     api.post<ApiResponse<{ account: any }>>('/meta/connect', data),
 
-  getStatus: () => api.get<ApiResponse>('/meta/status'),
-  disconnect: () => api.post<ApiResponse>('/meta/disconnect'),
+  getOrgStatus: (organizationId: string) =>
+    api.get<ApiResponse<{ status: 'CONNECTED' | 'DISCONNECTED'; connectedCount: number }>>(
+      `/meta/organizations/${organizationId}/status`
+    ),
 };
 
 // ---------- INBOX ----------
@@ -684,7 +705,8 @@ export const billing = {
     razorpay_signature: string;
   }) => api.post<ApiResponse>('/billing/razorpay/verify', data),
 };
-// ---------- SETTINGS ----------  ⬅️ YE ADD KAREIN
+
+// ---------- SETTINGS ----------
 export const settings = {
   getAll: () => api.get<ApiResponse>('/settings'),
 
@@ -705,7 +727,7 @@ export const settings = {
     api.delete<ApiResponse>(`/settings/api-keys/${id}`),
 };
 
-// ---------- TEAM ----------  ⬅️ YE ADD KAREIN
+// ---------- TEAM ----------
 export const team = {
   getMembers: () => api.get<ApiResponse>('/team/members'),
 
@@ -811,5 +833,3 @@ export const handleApiError = (error: any): string => {
 // ============================================
 
 export default api;
-
-export type { ApiResponse, ApiError, RefreshTokenResponse };
