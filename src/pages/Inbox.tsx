@@ -1,6 +1,4 @@
-// src/pages/Inbox.tsx
-
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Search,
@@ -12,6 +10,7 @@ import {
   Video,
   Info,
   CheckCheck,
+  Check,
   Clock,
   Loader2,
   MessageSquare,
@@ -20,7 +19,7 @@ import {
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { useSocket } from '../context/SocketContext';
-import { inbox as inboxApi } from '../services/api'; // ✅ Correct import
+import { inbox as inboxApi, whatsapp as whatsappApi } from '../services/api';
 import toast from 'react-hot-toast';
 
 interface Contact {
@@ -55,6 +54,7 @@ const Inbox: React.FC = () => {
   const { conversationId } = useParams();
   const navigate = useNavigate();
   const { socket, isConnected } = useSocket();
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -66,7 +66,16 @@ const Inbox: React.FC = () => {
   const [messageText, setMessageText] = useState('');
   const [error, setError] = useState<string | null>(null);
 
-  // ✅ Fetch conversations
+  // Auto-scroll to bottom
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
+
+  // Fetch conversations
   const fetchConversations = useCallback(async () => {
     try {
       setLoading(true);
@@ -94,7 +103,7 @@ const Inbox: React.FC = () => {
     }
   }, [searchQuery]);
 
-  // ✅ Fetch messages for selected conversation
+  // Fetch messages for selected conversation
   const fetchMessages = useCallback(async (convId: string) => {
     try {
       setLoadingMessages(true);
@@ -108,6 +117,7 @@ const Inbox: React.FC = () => {
           ? response.data.data
           : [];
         setMessages(messagesData);
+        scrollToBottom();
 
         // Mark as read
         await inboxApi.markAsRead(convId).catch(console.error);
@@ -121,12 +131,13 @@ const Inbox: React.FC = () => {
     }
   }, []);
 
-  // ✅ Send message
-  const sendMessage = async () => {
+  // ✅ Send Message Implementation
+  const handleSendMessage = async () => {
     if (!messageText.trim() || !selectedConversation) return;
 
+    const tempId = `temp-${Date.now()}`;
     const tempMessage: Message = {
-      id: `temp-${Date.now()}`,
+      id: tempId,
       content: messageText,
       type: 'TEXT',
       direction: 'OUTBOUND',
@@ -134,21 +145,33 @@ const Inbox: React.FC = () => {
       createdAt: new Date().toISOString()
     };
 
+    // Optimistic UI Update
     setMessages(prev => [...prev, tempMessage]);
     setMessageText('');
     setSending(true);
+    scrollToBottom();
 
     try {
-      const response = await inboxApi.sendMessage(selectedConversation.id, {
-        content: messageText,
-        type: 'text'
+      // Get Default WhatsApp Account
+      const accountsRes = await whatsappApi.accounts();
+      const accountId = accountsRes.data?.data?.[0]?.id;
+
+      if (!accountId) {
+        throw new Error('No WhatsApp account connected. Please connect in Settings.');
+      }
+
+      // Send API Call
+      const response = await whatsappApi.sendText({
+        whatsappAccountId: accountId,
+        to: selectedConversation.contact.phone,
+        message: tempMessage.content
       });
 
       if (response.data.success) {
         // Update temp message with real data
         setMessages(prev =>
           prev.map(msg =>
-            msg.id === tempMessage.id
+            msg.id === tempId
               ? { ...response.data.data, status: 'SENT' }
               : msg
           )
@@ -160,7 +183,7 @@ const Inbox: React.FC = () => {
             conv.id === selectedConversation.id
               ? {
                 ...conv,
-                lastMessagePreview: messageText,
+                lastMessagePreview: tempMessage.content,
                 lastMessageAt: new Date().toISOString()
               }
               : conv
@@ -169,12 +192,12 @@ const Inbox: React.FC = () => {
       }
     } catch (error: any) {
       console.error('❌ Send message error:', error);
-      toast.error('Failed to send message');
+      toast.error(error.message || 'Failed to send message');
 
-      // Mark temp message as failed
+      // Mark as failed
       setMessages(prev =>
         prev.map(msg =>
-          msg.id === tempMessage.id
+          msg.id === tempId
             ? { ...msg, status: 'FAILED' }
             : msg
         )
@@ -184,19 +207,18 @@ const Inbox: React.FC = () => {
     }
   };
 
-  // ✅ Socket listeners
+  // Socket listeners
   useEffect(() => {
     if (!socket || !isConnected) return;
 
     const handleNewMessage = (data: any) => {
       console.log('📨 New message:', data);
 
-      // Add to messages if current conversation
       if (selectedConversation?.id === data.conversationId) {
         setMessages(prev => [...prev, data.message]);
+        scrollToBottom();
       }
 
-      // Update conversations list
       fetchConversations();
     };
 
@@ -221,12 +243,12 @@ const Inbox: React.FC = () => {
     };
   }, [socket, isConnected, selectedConversation, fetchConversations]);
 
-  // ✅ Initial load
+  // Initial load
   useEffect(() => {
     fetchConversations();
   }, [fetchConversations]);
 
-  // ✅ Load conversation from URL
+  // Load conversation from URL
   useEffect(() => {
     if (conversationId && conversations.length > 0) {
       const conv = conversations.find(c => c.id === conversationId);
@@ -237,7 +259,6 @@ const Inbox: React.FC = () => {
     }
   }, [conversationId, conversations, fetchMessages]);
 
-  // ✅ Handle conversation selection
   const selectConversation = (conv: Conversation) => {
     setSelectedConversation(conv);
     navigate(`/dashboard/inbox/${conv.id}`);
@@ -274,7 +295,6 @@ const Inbox: React.FC = () => {
     <div className="flex h-[calc(100vh-4rem)] bg-gray-50 dark:bg-gray-900">
       {/* Conversations List */}
       <div className="w-80 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col">
-        {/* Search */}
         <div className="p-4 border-b border-gray-200 dark:border-gray-700">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
@@ -288,7 +308,6 @@ const Inbox: React.FC = () => {
           </div>
         </div>
 
-        {/* Conversations */}
         <div className="flex-1 overflow-y-auto">
           {conversations.length > 0 ? (
             conversations.map((conv) => (
@@ -344,18 +363,18 @@ const Inbox: React.FC = () => {
       </div>
 
       {/* Chat Area */}
-      <div className="flex-1 flex flex-col">
+      <div className="flex-1 flex flex-col h-full overflow-hidden">
         {selectedConversation ? (
           <>
-            {/* Chat Header */}
-            <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-4">
+            {/* Header */}
+            <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-4 flex-shrink-0">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 bg-gray-300 dark:bg-gray-600 rounded-full flex items-center justify-center">
                     {selectedConversation.contact.avatar ? (
                       <img
                         src={selectedConversation.contact.avatar}
-                        alt={selectedConversation.contact.name || selectedConversation.contact.phone}
+                        alt={selectedConversation.contact.name}
                         className="w-full h-full rounded-full"
                       />
                     ) : (
@@ -390,7 +409,7 @@ const Inbox: React.FC = () => {
             </div>
 
             {/* Messages */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50 dark:bg-gray-900">
+            <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-[#efe7dd] dark:bg-gray-900/50">
               {loadingMessages ? (
                 <div className="flex items-center justify-center h-full">
                   <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
@@ -403,25 +422,25 @@ const Inbox: React.FC = () => {
                       }`}
                   >
                     <div
-                      className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${message.direction === 'OUTBOUND'
-                        ? 'bg-green-500 text-white'
+                      className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg shadow-sm ${message.direction === 'OUTBOUND'
+                        ? 'bg-[#d9fdd3] dark:bg-green-700 text-gray-900 dark:text-white'
                         : 'bg-white dark:bg-gray-800 text-gray-900 dark:text-white'
                         }`}
                     >
-                      <p className="break-words">{message.content}</p>
+                      <p className="break-words text-sm">{message.content}</p>
                       <div className="flex items-center justify-end gap-1 mt-1">
-                        <span className="text-xs opacity-70">
-                          {new Date(message.createdAt).toLocaleTimeString('en-US', {
+                        <span className="text-[10px] opacity-70">
+                          {new Date(message.createdAt).toLocaleTimeString([], {
                             hour: '2-digit',
                             minute: '2-digit'
                           })}
                         </span>
                         {message.direction === 'OUTBOUND' && (
                           <span>
-                            {message.status === 'READ' && <CheckCheck className="w-4 h-4" />}
-                            {message.status === 'DELIVERED' && <CheckCheck className="w-4 h-4 opacity-60" />}
-                            {message.status === 'SENT' && <CheckCheck className="w-4 h-4 opacity-40" />}
-                            {message.status === 'PENDING' && <Clock className="w-3 h-3" />}
+                            {message.status === 'READ' && <CheckCheck className="w-3 h-3 text-blue-500" />}
+                            {message.status === 'DELIVERED' && <CheckCheck className="w-3 h-3 text-gray-500" />}
+                            {message.status === 'SENT' && <Check className="w-3 h-3 text-gray-500" />}
+                            {message.status === 'PENDING' && <Clock className="w-3 h-3 text-gray-400" />}
                           </span>
                         )}
                       </div>
@@ -435,32 +454,35 @@ const Inbox: React.FC = () => {
                   <p className="text-sm">Send a message to start conversation</p>
                 </div>
               )}
+              <div ref={messagesEndRef} />
             </div>
 
-            {/* Input */}
-            <div className="bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 px-4 py-3">
-              <div className="flex items-end gap-2">
-                <button className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">
-                  <Paperclip className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+            {/* Input Area */}
+            <div className="bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 px-4 py-3 flex-shrink-0">
+              <div className="flex items-center gap-3">
+                <button className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors">
+                  <Smile className="w-6 h-6 text-gray-500 dark:text-gray-400" />
                 </button>
-                <div className="flex-1">
+                <button className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors">
+                  <Paperclip className="w-6 h-6 text-gray-500 dark:text-gray-400" />
+                </button>
+
+                <div className="flex-1 relative">
                   <input
                     type="text"
                     value={messageText}
                     onChange={(e) => setMessageText(e.target.value)}
-                    onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
+                    onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
                     placeholder="Type a message..."
                     disabled={sending}
-                    className="w-full px-4 py-2 bg-gray-100 dark:bg-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                    className="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 border-none rounded-lg focus:ring-2 focus:ring-green-500 outline-none text-gray-900 dark:text-white placeholder-gray-500"
                   />
                 </div>
-                <button className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">
-                  <Smile className="w-5 h-5 text-gray-600 dark:text-gray-400" />
-                </button>
+
                 <button
-                  onClick={sendMessage}
+                  onClick={handleSendMessage}
                   disabled={!messageText.trim() || sending}
-                  className="p-2 bg-green-500 text-white rounded-lg hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="p-3 bg-green-500 text-white rounded-full hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed transition-transform hover:scale-105"
                 >
                   {sending ? (
                     <Loader2 className="w-5 h-5 animate-spin" />
