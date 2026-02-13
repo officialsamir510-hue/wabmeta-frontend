@@ -12,6 +12,7 @@ import {
   Loader2,
   RefreshCw,
 } from "lucide-react";
+import toast from "react-hot-toast";
 
 import api from "../services/api";
 import StatsCard from "../components/dashboard/StatsCard";
@@ -68,6 +69,8 @@ type WhatsAppAccount = {
 // ============================================
 
 const CACHE_KEY = "wabmeta_dashboard_cache_v3";
+const META_CONNECTION_CACHE_KEY = "wabmeta_meta_connection";
+const WHATSAPP_ACCOUNTS_CACHE_KEY = "wabmeta_whatsapp_accounts";
 
 // ============================================
 // COMPONENT
@@ -107,6 +110,50 @@ const Dashboard: React.FC = () => {
   const initialLoadDone = useRef(false);
 
   // ============================================
+  // CACHE MANAGEMENT HELPERS
+  // ============================================
+
+  /**
+   * Clear all dashboard-related caches
+   */
+  const clearAllCaches = useCallback(() => {
+    console.log("🗑️ Clearing all dashboard caches...");
+
+    // Clear dashboard cache
+    localStorage.removeItem(CACHE_KEY);
+
+    // Clear meta connection cache
+    localStorage.removeItem(META_CONNECTION_CACHE_KEY);
+
+    // Clear WhatsApp accounts cache
+    localStorage.removeItem(WHATSAPP_ACCOUNTS_CACHE_KEY);
+
+    // Clear any other related caches
+    const keysToRemove: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && (
+        key.startsWith('wabmeta_meta_') ||
+        key.startsWith('wabmeta_whatsapp_') ||
+        key.includes('_connection_') ||
+        key.includes('_account_')
+      )) {
+        keysToRemove.push(key);
+      }
+    }
+
+    keysToRemove.forEach(key => {
+      localStorage.removeItem(key);
+      console.log(`  Removed: ${key}`);
+    });
+
+    // Reset cache ref
+    hasCacheRef.current = false;
+
+    console.log("✅ All caches cleared");
+  }, []);
+
+  // ============================================
   // LOAD ORGANIZATION ID ON MOUNT
   // ============================================
 
@@ -140,7 +187,7 @@ const Dashboard: React.FC = () => {
   }, []);
 
   // ============================================
-  // META CONNECTION CHECK - ✅ FIXED
+  // META CONNECTION CHECK
   // ============================================
 
   const checkMetaConnection = useCallback(async (): Promise<boolean> => {
@@ -191,7 +238,7 @@ const Dashboard: React.FC = () => {
   }, [organizationId]);
 
   // ============================================
-  // WHATSAPP ACCOUNTS - ✅ FIXED
+  // WHATSAPP ACCOUNTS
   // ============================================
 
   const fetchWhatsAppAccounts = useCallback(
@@ -225,8 +272,15 @@ const Dashboard: React.FC = () => {
 
         if (response.data?.success) {
           const accounts = response.data.data?.accounts || response.data.data || [];
-          setWhatsappAccounts(Array.isArray(accounts) ? accounts : []);
-          console.log("✅ WhatsApp accounts loaded:", accounts.length);
+          const accountsArray = Array.isArray(accounts) ? accounts : [];
+
+          // Filter only connected accounts
+          const connectedAccounts = accountsArray.filter(
+            (acc: WhatsAppAccount) => acc.status === "CONNECTED"
+          );
+
+          setWhatsappAccounts(connectedAccounts);
+          console.log("✅ WhatsApp accounts loaded:", connectedAccounts.length);
         }
       } catch (error: any) {
         console.error("❌ WhatsApp accounts fetch failed:", error);
@@ -349,27 +403,7 @@ const Dashboard: React.FC = () => {
   // CONNECTION HELPERS
   // ============================================
 
-  const refreshConnection = useCallback(async () => {
-    await checkMetaConnection();
-    await fetchWhatsAppAccounts(true);
-  }, [checkMetaConnection, fetchWhatsAppAccounts]);
 
-  const disconnectAccount = useCallback(async () => {
-    if (!organizationId) return;
-
-    try {
-      // Get default account to disconnect
-      const defaultAccount = whatsappAccounts.find((a) => a.isDefault);
-      if (defaultAccount) {
-        await api.delete(
-          `/meta/organizations/${organizationId}/accounts/${defaultAccount.id}`
-        );
-      }
-    } catch (error) {
-      console.error("Disconnect error:", error);
-      throw error;
-    }
-  }, [organizationId, whatsappAccounts]);
 
   // Connection object for UI components
   const connection = useMemo(
@@ -473,46 +507,113 @@ const Dashboard: React.FC = () => {
       await fetchDashboardData({ showFullLoader: false });
 
       console.log("✅ Refresh complete");
+      toast.success("Dashboard refreshed");
     } catch (error) {
       console.error("❌ Refresh failed:", error);
+      toast.error("Failed to refresh dashboard");
     } finally {
       setRefreshing(false);
     }
   };
 
+  /**
+   * Disconnect WhatsApp account - FIXED VERSION
+   */
   const handleDisconnect = async () => {
-    if (
-      !confirm("Are you sure you want to disconnect your WhatsApp account?")
-    ) {
+    // Confirm before disconnecting
+    if (!window.confirm("Are you sure you want to disconnect your WhatsApp account? This action cannot be undone.")) {
+      return;
+    }
+
+    // Validate prerequisites
+    if (!organizationId) {
+      toast.error("Organization not found");
+      return;
+    }
+
+    if (whatsappAccounts.length === 0) {
+      toast.error("No accounts to disconnect");
       return;
     }
 
     try {
       setDisconnecting(true);
-      console.log("🔌 Disconnecting...");
+      console.log("🔌 Starting disconnect process...");
 
-      // Call disconnect API
-      await disconnectAccount();
+      // Get account to disconnect (default or first available)
+      const accountToDisconnect = whatsappAccounts.find((a) => a.isDefault) || whatsappAccounts[0];
 
-      // Clear state
-      setWhatsappAccounts([]);
+      if (!accountToDisconnect?.id) {
+        throw new Error("No valid account found to disconnect");
+      }
+
+      console.log(`📱 Disconnecting account: ${accountToDisconnect.id} (${accountToDisconnect.phoneNumber})`);
+
+      // 1. Call disconnect API
+      const response = await api.delete(
+        `/meta/organizations/${organizationId}/accounts/${accountToDisconnect.id}`
+      );
+
+      if (!response.data?.success) {
+        throw new Error(response.data?.message || "Disconnect API failed");
+      }
+
+      console.log("✅ API disconnect successful");
+
+      // 2. Clear all local state immediately
       setMetaConnected(false);
+      setWhatsappAccounts([]);
 
-      // Clear cache
-      localStorage.removeItem(CACHE_KEY);
+      // 3. Clear all caches
+      clearAllCaches();
 
-      // Refresh
-      await refreshConnection();
+      // 4. Reset stats to show disconnected state
+      setStatsData({
+        contacts: 0,
+        messagesSent: 0,
+        deliveryRate: 0,
+        responseRate: 0,
+      });
+
+      // 5. Verify disconnect with fresh API check
+      console.log("🔍 Verifying disconnect status...");
+      const isStillConnected = await checkMetaConnection();
+
+      if (isStillConnected) {
+        console.warn("⚠️ Server still shows connected, forcing UI update");
+        setMetaConnected(false);
+        setWhatsappAccounts([]);
+      }
+
+      // 6. Refresh dashboard data
       await fetchDashboardData({ showFullLoader: false });
 
-      console.log("✅ Disconnected successfully");
-    } catch (error) {
+      console.log("✅ Disconnect completed successfully");
+      toast.success("WhatsApp account disconnected successfully");
+
+    } catch (error: any) {
       console.error("❌ Disconnect failed:", error);
-      alert("Failed to disconnect. Please try again.");
+
+      // Extract error message
+      const errorMessage = error.response?.data?.message
+        || error.message
+        || "Failed to disconnect account";
+
+      toast.error(errorMessage);
+
+      // Still try to refresh state even on error
+      try {
+        await checkMetaConnection();
+        await fetchWhatsAppAccounts(true);
+      } catch (refreshError) {
+        console.error("❌ State refresh after error failed:", refreshError);
+      }
     } finally {
       setDisconnecting(false);
     }
   };
+
+
 
   const handleConnectSuccess = async () => {
     console.log("🎉 Connection successful, refreshing...");
@@ -520,12 +621,17 @@ const Dashboard: React.FC = () => {
     setShowConnectModal(false);
     setMetaConnected(true);
 
+    // Clear old cache before fetching new data
+    clearAllCaches();
+
     await Promise.all([
       checkMetaConnection(),
       fetchWhatsAppAccounts(true),
     ]);
 
     await fetchDashboardData({ showFullLoader: false });
+
+    toast.success("WhatsApp account connected successfully!");
   };
 
   // ============================================
