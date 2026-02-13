@@ -286,43 +286,23 @@ const AppRoutes: React.FC = () => {
         />
         <Route
           path="/signup"
-          element={
-            <AuthLayout title="Create your account" subtitle="Start your free trial">
-              <Signup />
-            </AuthLayout>
-          }
+          element={<Signup />}
         />
         <Route
           path="/forgot-password"
-          element={
-            <AuthLayout title="Reset your password" showBackButton>
-              <ForgotPassword />
-            </AuthLayout>
-          }
+          element={<ForgotPassword />}
         />
         <Route
           path="/reset-password"
-          element={
-            <AuthLayout title="Set a new password">
-              <ResetPassword />
-            </AuthLayout>
-          }
+          element={<ResetPassword />}
         />
         <Route
           path="/verify-email"
-          element={
-            <AuthLayout title="Verify your email">
-              <VerifyEmail />
-            </AuthLayout>
-          }
+          element={<VerifyEmail />}
         />
         <Route
           path="/verify-otp"
-          element={
-            <AuthLayout title="Verify OTP">
-              <VerifyOTP />
-            </AuthLayout>
-          }
+          element={<VerifyOTP />}
         />
 
         {/* ============================== */}
@@ -421,11 +401,7 @@ const AppRoutes: React.FC = () => {
         {/* ============================== */}
         <Route
           path="/admin/login"
-          element={
-            <AuthLayout title="Admin Login">
-              <AdminLogin />
-            </AuthLayout>
-          }
+          element={<AdminLogin />}
         />
         <Route
           element={
