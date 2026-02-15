@@ -17,20 +17,22 @@ import {
   CheckCircle,
   Plus,
   Trash2,
+  MessageSquare,
 } from 'lucide-react';
-import { templates as templateApi } from '../services/api';
+import api, { templates as templateApi } from '../services/api';
 import TemplatePreview from '../components/templates/TemplatePreview';
 import type { TemplateFormData, HeaderType, TemplateCategory } from '../types/template';
 
-// ============================================
-// TYPES
-// ============================================
-interface TemplateButton {
+
+
+interface WhatsAppAccount {
   id: string;
-  type: 'quick_reply' | 'url' | 'phone';
-  text: string;
-  url?: string;
-  phoneNumber?: string;
+  businessName: string;
+  phoneNumber: string;
+  phoneNumberId: string;
+  wabaId: string;
+  isDefault: boolean;
+  status: string;
 }
 
 // ============================================
@@ -40,12 +42,18 @@ const CreateTemplate: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const duplicateFrom = location.state?.duplicateFrom;
-  
+
+  // Loading & Status States
   const [saving, setSaving] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const [activeTab, setActiveTab] = useState<'content' | 'buttons' | 'settings'>('content');
   const [apiError, setApiError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
+  // WhatsApp Account States
+  const [whatsappAccounts, setWhatsappAccounts] = useState<WhatsAppAccount[]>([]);
+  const [selectedAccountId, setSelectedAccountId] = useState<string>('');
+  const [loadingAccounts, setLoadingAccounts] = useState(true);
 
   // Form State - Initialize from duplicate if exists
   const [formData, setFormData] = useState<TemplateFormData>({
@@ -60,6 +68,33 @@ const CreateTemplate: React.FC = () => {
 
   const [sampleVariables, setSampleVariables] = useState<Record<string, string>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  // ==========================================
+  // LOAD WHATSAPP ACCOUNTS
+  // ==========================================
+  useEffect(() => {
+    const loadAccounts = async () => {
+      try {
+        setLoadingAccounts(true);
+        const response = await api.get('/meta/accounts');
+        const accounts = response.data.accounts || [];
+        setWhatsappAccounts(accounts);
+
+        // Set default account
+        const defaultAccount = accounts.find((a: WhatsAppAccount) => a.isDefault) || accounts[0];
+        if (defaultAccount) {
+          setSelectedAccountId(defaultAccount.id);
+        }
+      } catch (error) {
+        console.error('Failed to load WhatsApp accounts:', error);
+        setApiError('Failed to load WhatsApp accounts. Please refresh the page.');
+      } finally {
+        setLoadingAccounts(false);
+      }
+    };
+
+    loadAccounts();
+  }, []);
 
   // ==========================================
   // COMPUTED VALUES
@@ -125,6 +160,11 @@ const CreateTemplate: React.FC = () => {
   const validateForm = (): boolean => {
     const newErrors: Record<string, string> = {};
 
+    // WhatsApp Account validation
+    if (!selectedAccountId) {
+      newErrors.account = 'Please select a WhatsApp Business Account';
+    }
+
     // Name validation
     if (!formData.name.trim()) {
       newErrors.name = 'Template name is required';
@@ -162,7 +202,7 @@ const CreateTemplate: React.FC = () => {
       } else if (btn.text.length > 25) {
         newErrors[`button_${index}_text`] = 'Button text max 25 characters';
       }
-      
+
       if (btn.type === 'url') {
         if (!btn.url?.trim()) {
           newErrors[`button_${index}_url`] = 'URL is required';
@@ -174,7 +214,7 @@ const CreateTemplate: React.FC = () => {
           }
         }
       }
-      
+
       if (btn.type === 'phone') {
         if (!btn.phoneNumber?.trim()) {
           newErrors[`button_${index}_phone`] = 'Phone number is required';
@@ -203,9 +243,26 @@ const CreateTemplate: React.FC = () => {
     setApiError(null);
     setSuccessMessage(null);
 
+    // Check if accounts are loaded
+    if (loadingAccounts) {
+      setApiError('Please wait while accounts are loading...');
+      return;
+    }
+
+    // Check if there are any connected accounts
+    if (whatsappAccounts.length === 0) {
+      setApiError('No WhatsApp Business Account connected. Please connect an account in Settings first.');
+      return;
+    }
+
     // Validate form (skip for drafts)
     if (!asDraft && !validateForm()) {
-      setActiveTab('content');
+      // If account error, go to settings tab
+      if (errors.account) {
+        setActiveTab('settings');
+      } else {
+        setActiveTab('content');
+      }
       const firstError = document.querySelector('.text-red-600');
       firstError?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       return;
@@ -247,13 +304,14 @@ const CreateTemplate: React.FC = () => {
         example: sampleVariables[v]?.trim() || 'example'
       }));
 
-      // Build payload
+      // Build payload with whatsappAccountId
       const payload: Record<string, any> = {
         name: formData.name.trim(),
         language: formData.language,
         category: formData.category.toUpperCase(),
         headerType: formData.header.type.toUpperCase(),
         bodyText: formData.body.trim(),
+        whatsappAccountId: selectedAccountId, // ✅ IMPORTANT: Include WhatsApp Account ID
       };
 
       // Optional fields
@@ -279,11 +337,11 @@ const CreateTemplate: React.FC = () => {
 
       // Call API
       const response = await templateApi.create(payload);
-      
+
       console.log("✅ Template created:", response.data);
-      
+
       setSuccessMessage('Template created successfully! It will be reviewed by Meta.');
-      
+
       // Navigate after short delay
       setTimeout(() => {
         navigate('/dashboard/templates');
@@ -291,11 +349,11 @@ const CreateTemplate: React.FC = () => {
 
     } catch (error: any) {
       console.error("❌ Template creation error:", error);
-      
+
       // Extract detailed error message
       let errorMessage = 'Failed to create template. Please try again.';
       const errorData = error.response?.data;
-      
+
       if (errorData?.error?.issues && Array.isArray(errorData.error.issues)) {
         errorMessage = errorData.error.issues
           .map((issue: any) => `${issue.path?.join('.') || 'field'}: ${issue.message}`)
@@ -307,7 +365,7 @@ const CreateTemplate: React.FC = () => {
       } else if (error.message) {
         errorMessage = error.message;
       }
-      
+
       setApiError(errorMessage);
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } finally {
@@ -337,6 +395,9 @@ const CreateTemplate: React.FC = () => {
     setSuccessMessage(null);
   };
 
+  // Get selected account details
+  const selectedAccount = whatsappAccounts.find(a => a.id === selectedAccountId);
+
   // ==========================================
   // RENDER
   // ==========================================
@@ -362,7 +423,7 @@ const CreateTemplate: React.FC = () => {
                 </p>
               </div>
             </div>
-            
+
             <div className="flex items-center space-x-3">
               <button
                 onClick={() => setShowPreview(true)}
@@ -373,8 +434,8 @@ const CreateTemplate: React.FC = () => {
               </button>
               <button
                 onClick={() => handleSubmit(false)}
-                disabled={saving}
-                className="flex items-center space-x-2 px-4 py-2 bg-primary-500 hover:bg-primary-600 text-white font-medium rounded-xl transition-colors disabled:opacity-50"
+                disabled={saving || loadingAccounts || whatsappAccounts.length === 0}
+                className="flex items-center space-x-2 px-4 py-2 bg-primary-500 hover:bg-primary-600 text-white font-medium rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {saving ? (
                   <>
@@ -417,6 +478,25 @@ const CreateTemplate: React.FC = () => {
           </div>
         )}
 
+        {/* No Account Warning */}
+        {!loadingAccounts && whatsappAccounts.length === 0 && (
+          <div className="mb-6 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-xl p-4 flex items-start space-x-3">
+            <AlertCircle className="w-5 h-5 text-yellow-600 dark:text-yellow-400 shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <h3 className="text-sm font-medium text-yellow-800 dark:text-yellow-200">No WhatsApp Account Connected</h3>
+              <p className="text-sm text-yellow-600 dark:text-yellow-400 mt-1">
+                You need to connect a WhatsApp Business Account before creating templates.
+              </p>
+              <Link
+                to="/dashboard/settings"
+                className="inline-flex items-center mt-2 text-sm font-medium text-yellow-700 dark:text-yellow-300 hover:text-yellow-800 dark:hover:text-yellow-200"
+              >
+                Go to Settings →
+              </Link>
+            </div>
+          </div>
+        )}
+
         {/* Info Box */}
         <div className="mb-6 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl p-4 flex items-start">
           <Info className="w-5 h-5 text-blue-600 dark:text-blue-400 mr-3 mt-0.5 shrink-0" />
@@ -445,11 +525,10 @@ const CreateTemplate: React.FC = () => {
                   <button
                     key={tab.id}
                     onClick={() => setActiveTab(tab.id as any)}
-                    className={`flex-1 px-4 py-3 text-sm font-medium transition-colors ${
-                      activeTab === tab.id
-                        ? 'text-primary-600 dark:text-primary-400 bg-primary-50 dark:bg-primary-900/20 border-b-2 border-primary-500'
-                        : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
-                    }`}
+                    className={`flex-1 px-4 py-3 text-sm font-medium transition-colors ${activeTab === tab.id
+                      ? 'text-primary-600 dark:text-primary-400 bg-primary-50 dark:bg-primary-900/20 border-b-2 border-primary-500'
+                      : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+                      }`}
                   >
                     {tab.label}
                   </button>
@@ -471,11 +550,10 @@ const CreateTemplate: React.FC = () => {
                         onChange={(e) => updateFormData('name', e.target.value.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, ''))}
                         placeholder="e.g., order_confirmation"
                         maxLength={512}
-                        className={`w-full px-4 py-2.5 border rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 transition-all ${
-                          errors.name
-                            ? 'border-red-300 dark:border-red-600 focus:ring-red-500/20'
-                            : 'border-gray-200 dark:border-gray-600 focus:ring-primary-500/20 focus:border-primary-500'
-                        }`}
+                        className={`w-full px-4 py-2.5 border rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 transition-all ${errors.name
+                          ? 'border-red-300 dark:border-red-600 focus:ring-red-500/20'
+                          : 'border-gray-200 dark:border-gray-600 focus:ring-primary-500/20 focus:border-primary-500'
+                          }`}
                       />
                       {errors.name && (
                         <p className="text-sm text-red-600 dark:text-red-400 mt-1">{errors.name}</p>
@@ -496,11 +574,10 @@ const CreateTemplate: React.FC = () => {
                             key={type.value}
                             type="button"
                             onClick={() => updateFormData('header', { type: type.value })}
-                            className={`flex flex-col items-center p-3 rounded-xl border-2 transition-all ${
-                              formData.header.type === type.value
-                                ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20 text-primary-600 dark:text-primary-400'
-                                : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500 text-gray-600 dark:text-gray-400'
-                            }`}
+                            className={`flex flex-col items-center p-3 rounded-xl border-2 transition-all ${formData.header.type === type.value
+                              ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20 text-primary-600 dark:text-primary-400'
+                              : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500 text-gray-600 dark:text-gray-400'
+                              }`}
                           >
                             <type.icon className="w-5 h-5 mb-1" />
                             <span className="text-xs font-medium">{type.label}</span>
@@ -518,17 +595,16 @@ const CreateTemplate: React.FC = () => {
                         <input
                           type="text"
                           value={formData.header.text || ''}
-                          onChange={(e) => updateFormData('header', { 
-                            ...formData.header, 
-                            text: e.target.value 
+                          onChange={(e) => updateFormData('header', {
+                            ...formData.header,
+                            text: e.target.value
                           })}
                           placeholder="Enter header text"
                           maxLength={60}
-                          className={`w-full px-4 py-2.5 border rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 transition-all ${
-                            errors.headerText
-                              ? 'border-red-300 dark:border-red-600 focus:ring-red-500/20'
-                              : 'border-gray-200 dark:border-gray-600 focus:ring-primary-500/20 focus:border-primary-500'
-                          }`}
+                          className={`w-full px-4 py-2.5 border rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 transition-all ${errors.headerText
+                            ? 'border-red-300 dark:border-red-600 focus:ring-red-500/20'
+                            : 'border-gray-200 dark:border-gray-600 focus:ring-primary-500/20 focus:border-primary-500'
+                            }`}
                         />
                         {errors.headerText && (
                           <p className="text-sm text-red-600 dark:text-red-400 mt-1">{errors.headerText}</p>
@@ -561,11 +637,10 @@ const CreateTemplate: React.FC = () => {
                         placeholder="Enter your message here. Use {{1}}, {{2}}, etc. for variables."
                         rows={6}
                         maxLength={1024}
-                        className={`w-full px-4 py-3 border rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 transition-all resize-none ${
-                          errors.body
-                            ? 'border-red-300 dark:border-red-600 focus:ring-red-500/20'
-                            : 'border-gray-200 dark:border-gray-600 focus:ring-primary-500/20 focus:border-primary-500'
-                        }`}
+                        className={`w-full px-4 py-3 border rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 transition-all resize-none ${errors.body
+                          ? 'border-red-300 dark:border-red-600 focus:ring-red-500/20'
+                          : 'border-gray-200 dark:border-gray-600 focus:ring-primary-500/20 focus:border-primary-500'
+                          }`}
                       />
                       {errors.body && (
                         <p className="text-sm text-red-600 dark:text-red-400 mt-1">{errors.body}</p>
@@ -591,11 +666,10 @@ const CreateTemplate: React.FC = () => {
                         onChange={(e) => updateFormData('footer', e.target.value)}
                         placeholder="e.g., Reply STOP to unsubscribe"
                         maxLength={60}
-                        className={`w-full px-4 py-2.5 border rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 transition-all ${
-                          errors.footer
-                            ? 'border-red-300 dark:border-red-600 focus:ring-red-500/20'
-                            : 'border-gray-200 dark:border-gray-600 focus:ring-primary-500/20 focus:border-primary-500'
-                        }`}
+                        className={`w-full px-4 py-2.5 border rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 transition-all ${errors.footer
+                          ? 'border-red-300 dark:border-red-600 focus:ring-red-500/20'
+                          : 'border-gray-200 dark:border-gray-600 focus:ring-primary-500/20 focus:border-primary-500'
+                          }`}
                       />
                       {errors.footer && (
                         <p className="text-sm text-red-600 dark:text-red-400 mt-1">{errors.footer}</p>
@@ -618,13 +692,12 @@ const CreateTemplate: React.FC = () => {
                               <input
                                 type="text"
                                 value={sampleVariables[variable] || ''}
-                                onChange={(e) => 
+                                onChange={(e) =>
                                   setSampleVariables(prev => ({ ...prev, [variable]: e.target.value }))
                                 }
                                 placeholder="Example value"
-                                className={`flex-1 px-3 py-1.5 border rounded-lg text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500/20 ${
-                                  errors.variables ? 'border-red-300 dark:border-red-600' : 'border-gray-200 dark:border-gray-600'
-                                }`}
+                                className={`flex-1 px-3 py-1.5 border rounded-lg text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500/20 ${errors.variables ? 'border-red-300 dark:border-red-600' : 'border-gray-200 dark:border-gray-600'
+                                  }`}
                               />
                             </div>
                           ))}
@@ -717,9 +790,8 @@ const CreateTemplate: React.FC = () => {
                               }}
                               placeholder="Button text"
                               maxLength={25}
-                              className={`w-full px-3 py-2 border rounded-lg text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500/20 ${
-                                errors[`button_${index}_text`] ? 'border-red-300 dark:border-red-600' : 'border-gray-200 dark:border-gray-600'
-                              }`}
+                              className={`w-full px-3 py-2 border rounded-lg text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500/20 ${errors[`button_${index}_text`] ? 'border-red-300 dark:border-red-600' : 'border-gray-200 dark:border-gray-600'
+                                }`}
                             />
                           </div>
                         </div>
@@ -738,9 +810,8 @@ const CreateTemplate: React.FC = () => {
                                 updateFormData('buttons', updated);
                               }}
                               placeholder="https://example.com"
-                              className={`w-full px-3 py-2 border rounded-lg text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500/20 ${
-                                errors[`button_${index}_url`] ? 'border-red-300 dark:border-red-600' : 'border-gray-200 dark:border-gray-600'
-                              }`}
+                              className={`w-full px-3 py-2 border rounded-lg text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500/20 ${errors[`button_${index}_url`] ? 'border-red-300 dark:border-red-600' : 'border-gray-200 dark:border-gray-600'
+                                }`}
                             />
                           </div>
                         )}
@@ -759,9 +830,8 @@ const CreateTemplate: React.FC = () => {
                                 updateFormData('buttons', updated);
                               }}
                               placeholder="+1234567890"
-                              className={`w-full px-3 py-2 border rounded-lg text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500/20 ${
-                                errors[`button_${index}_phone`] ? 'border-red-300 dark:border-red-600' : 'border-gray-200 dark:border-gray-600'
-                              }`}
+                              className={`w-full px-3 py-2 border rounded-lg text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500/20 ${errors[`button_${index}_phone`] ? 'border-red-300 dark:border-red-600' : 'border-gray-200 dark:border-gray-600'
+                                }`}
                             />
                           </div>
                         )}
@@ -784,6 +854,78 @@ const CreateTemplate: React.FC = () => {
                 {/* Settings Tab */}
                 {activeTab === 'settings' && (
                   <div className="space-y-6">
+                    {/* WhatsApp Account Selection */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        WhatsApp Business Account *
+                      </label>
+                      {loadingAccounts ? (
+                        <div className="flex items-center space-x-2 text-gray-500 dark:text-gray-400">
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          <span>Loading accounts...</span>
+                        </div>
+                      ) : whatsappAccounts.length === 0 ? (
+                        <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4">
+                          <div className="flex items-center space-x-2">
+                            <AlertCircle className="w-5 h-5 text-yellow-600 dark:text-yellow-400" />
+                            <p className="text-yellow-800 dark:text-yellow-200 font-medium">No accounts connected</p>
+                          </div>
+                          <p className="text-yellow-600 dark:text-yellow-400 text-sm mt-1">
+                            Please connect a WhatsApp Business Account in Settings.
+                          </p>
+                          <Link
+                            to="/dashboard/settings"
+                            className="inline-flex items-center mt-2 text-sm font-medium text-yellow-700 dark:text-yellow-300 hover:text-yellow-800"
+                          >
+                            <MessageSquare className="w-4 h-4 mr-1" />
+                            Go to Settings
+                          </Link>
+                        </div>
+                      ) : (
+                        <>
+                          <select
+                            value={selectedAccountId}
+                            onChange={(e) => {
+                              setSelectedAccountId(e.target.value);
+                              if (errors.account) {
+                                setErrors(prev => {
+                                  const newErrors = { ...prev };
+                                  delete newErrors.account;
+                                  return newErrors;
+                                });
+                              }
+                            }}
+                            className={`w-full px-4 py-2.5 border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white ${errors.account ? 'border-red-300 dark:border-red-600' : 'border-gray-200 dark:border-gray-600'
+                              }`}
+                          >
+                            <option value="">Select an account</option>
+                            {whatsappAccounts.map((account) => (
+                              <option key={account.id} value={account.id}>
+                                {account.businessName || 'WhatsApp Account'} - {account.phoneNumber}
+                                {account.isDefault ? ' (Default)' : ''}
+                              </option>
+                            ))}
+                          </select>
+                          {errors.account && (
+                            <p className="text-sm text-red-600 dark:text-red-400 mt-1">{errors.account}</p>
+                          )}
+                          {selectedAccount && (
+                            <div className="mt-2 bg-gray-50 dark:bg-gray-700 rounded-lg p-3">
+                              <div className="flex items-center space-x-2">
+                                <CheckCircle className="w-4 h-4 text-green-500" />
+                                <span className="text-sm text-gray-700 dark:text-gray-300">
+                                  Selected: {selectedAccount.businessName || 'WhatsApp Business'}
+                                </span>
+                              </div>
+                              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                Phone: {selectedAccount.phoneNumber}
+                              </p>
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </div>
+
                     {/* Category */}
                     <div>
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -793,11 +935,10 @@ const CreateTemplate: React.FC = () => {
                         {categories.map((category) => (
                           <label
                             key={category.value}
-                            className={`flex items-start space-x-3 p-4 rounded-xl border-2 cursor-pointer transition-all ${
-                              formData.category === category.value
-                                ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20'
-                                : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500'
-                            }`}
+                            className={`flex items-start space-x-3 p-4 rounded-xl border-2 cursor-pointer transition-all ${formData.category === category.value
+                              ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20'
+                              : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500'
+                              }`}
                           >
                             <input
                               type="radio"
@@ -841,7 +982,7 @@ const CreateTemplate: React.FC = () => {
                         <div className="text-sm text-blue-800 dark:text-blue-200">
                           <p className="font-medium mb-1">Review Process</p>
                           <p>
-                            After submission, your template will be reviewed by Meta. 
+                            After submission, your template will be reviewed by Meta.
                             This usually takes 24-48 hours. You'll be notified once approved.
                           </p>
                           <ul className="mt-2 space-y-1 text-blue-700 dark:text-blue-300">
@@ -867,7 +1008,7 @@ const CreateTemplate: React.FC = () => {
                 sampleVariables={sampleVariables}
               />
             </div>
-            
+
             {/* Quick Stats */}
             <div className="mt-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4">
               <h4 className="font-medium text-gray-900 dark:text-white mb-3">Template Stats</h4>
@@ -889,6 +1030,19 @@ const CreateTemplate: React.FC = () => {
                   <p className="font-semibold capitalize text-gray-900 dark:text-white">{formData.category}</p>
                 </div>
               </div>
+
+              {/* Selected Account Info */}
+              {selectedAccount && (
+                <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-600">
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Submitting to:</p>
+                  <p className="text-sm font-medium text-gray-900 dark:text-white">
+                    {selectedAccount.businessName || 'WhatsApp Business'}
+                  </p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    {selectedAccount.phoneNumber}
+                  </p>
+                </div>
+              )}
             </div>
           </div>
         </div>
