@@ -69,53 +69,93 @@ const CreateTemplate: React.FC = () => {
   const [sampleVariables, setSampleVariables] = useState<Record<string, string>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
 
+  // Extract variables from body and header
+  const extractedVariables = useMemo(() => {
+    const bodyMatches = formData.body.match(/{{(\d+)}}/g) || [];
+    const headerMatches = (formData.header.type === 'text' ? formData.header.text?.match(/{{(\d+)}}/g) : null) || [];
+
+    // Combine and extract just the numbers, unique values
+    const allMatches = [...bodyMatches, ...headerMatches];
+    const variables = allMatches.map(m => m.replace(/{{|}}/g, ''));
+    return Array.from(new Set(variables)).sort((a, b) => parseInt(a) - parseInt(b));
+  }, [formData.body, formData.header]);
+
   // ==========================================
-  // LOAD WHATSAPP ACCOUNTS
+  // LOAD WHATSAPP ACCOUNTS - COMPLETE FIX
   // ==========================================
   useEffect(() => {
     const loadAccounts = async () => {
       try {
         setLoadingAccounts(true);
-        const response = await api.get('/meta/accounts');
-        const accounts = response.data.accounts || [];
+        setApiError(null);
+
+        // ✅ Get organization ID (try multiple sources)
+        let orgId = localStorage.getItem('currentOrganizationId');
+
+        if (!orgId) {
+          const orgJson = localStorage.getItem('wabmeta_org');
+          if (orgJson) {
+            try {
+              const org = JSON.parse(orgJson);
+              orgId = org.id;
+            } catch (e) {
+              console.error('Failed to parse org:', e);
+            }
+          }
+        }
+
+        if (!orgId) {
+          console.error('❌ No organization ID found');
+          setApiError('Organization not found. Please log in again.');
+          setLoadingAccounts(false);
+          return;
+        }
+
+        console.log('📋 Loading accounts for organization:', orgId);
+
+        // ✅ Call correct endpoint
+        const response = await api.get(`/meta/organizations/${orgId}/accounts`);
+
+        console.log('✅ API Response:', response.data);
+
+        // Handle response (support multiple formats)
+        const accountsData = response.data.data || response.data.accounts || response.data || [];
+        const accounts = Array.isArray(accountsData) ? accountsData : [];
+
+        console.log('✅ Loaded accounts:', accounts);
+
         setWhatsappAccounts(accounts);
 
         // Set default account
-        const defaultAccount = accounts.find((a: WhatsAppAccount) => a.isDefault) || accounts[0];
-        if (defaultAccount) {
+        if (accounts.length > 0) {
+          const defaultAccount = accounts.find((a: WhatsAppAccount) => a.isDefault) || accounts[0];
           setSelectedAccountId(defaultAccount.id);
+          console.log('✅ Selected account:', defaultAccount.phoneNumber);
+        } else {
+          console.warn('⚠️ No WhatsApp accounts found');
         }
-      } catch (error) {
-        console.error('Failed to load WhatsApp accounts:', error);
-        setApiError('Failed to load WhatsApp accounts. Please refresh the page.');
+
+      } catch (error: any) {
+        console.error('❌ Failed to load WhatsApp accounts:', error);
+
+        let errorMessage = 'Failed to load WhatsApp accounts. ';
+
+        if (error.response?.status === 404) {
+          errorMessage += 'No accounts found.';
+        } else if (error.response?.status === 401) {
+          errorMessage += 'Please log in again.';
+        } else {
+          errorMessage += error.response?.data?.message || error.message || 'Please try again.';
+        }
+
+        setApiError(errorMessage);
       } finally {
         setLoadingAccounts(false);
       }
     };
 
     loadAccounts();
-  }, []);
-
-  // ==========================================
-  // COMPUTED VALUES
-  // ==========================================
-  const extractedVariables = useMemo(() => {
-    const text = formData.body + (formData.header.text || '');
-    const matches = text.match(/\{\{(\d+)\}\}/g) || [];
-    const unique = [...new Set(matches.map(m => m.replace(/[{}]/g, '')))];
-    return unique.sort((a, b) => Number(a) - Number(b));
-  }, [formData.body, formData.header.text]);
-
-  // Auto-update sample variables when body text changes
-  useEffect(() => {
-    setSampleVariables(prev => {
-      const newVars: Record<string, string> = {};
-      extractedVariables.forEach(v => {
-        newVars[v] = prev[v] || '';
-      });
-      return newVars;
-    });
-  }, [extractedVariables]);
+  }, []); // Run once on mount
 
   // ==========================================
   // CONSTANTS
@@ -226,7 +266,7 @@ const CreateTemplate: React.FC = () => {
 
     // Variable samples validation
     if (extractedVariables.length > 0) {
-      const missingSamples = extractedVariables.filter(v => !sampleVariables[v]?.trim());
+      const missingSamples = extractedVariables.filter((v: string) => !sampleVariables[v]?.trim());
       if (missingSamples.length > 0) {
         newErrors.variables = `Please provide sample values for variables: {{${missingSamples.join('}}, {{')}}}`;
       }
@@ -298,7 +338,7 @@ const CreateTemplate: React.FC = () => {
         .filter(Boolean);
 
       // Map variables with examples
-      const mappedVariables = extractedVariables.map((v) => ({
+      const mappedVariables = extractedVariables.map((v: string) => ({
         index: parseInt(v),
         type: 'text' as const,
         example: sampleVariables[v]?.trim() || 'example'
@@ -686,7 +726,7 @@ const CreateTemplate: React.FC = () => {
                           Sample Variable Values *
                         </label>
                         <div className="space-y-3">
-                          {extractedVariables.map((variable) => (
+                          {extractedVariables.map((variable: string) => (
                             <div key={variable} className="flex items-center gap-3">
                               <span className="w-16 text-sm text-gray-600 dark:text-gray-400">{`{{${variable}}}`}</span>
                               <input
