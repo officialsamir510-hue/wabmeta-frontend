@@ -1,4 +1,4 @@
-// src/pages/CreateTemplate.tsx
+// 📁 src/pages/CreateTemplate.tsx - FIXED VERSION
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
@@ -23,11 +23,10 @@ import api, { templates as templateApi } from '../services/api';
 import TemplatePreview from '../components/templates/TemplatePreview';
 import type { TemplateFormData, HeaderType, TemplateCategory } from '../types/template';
 
-
-
 interface WhatsAppAccount {
   id: string;
-  businessName: string;
+  businessName?: string;
+  displayName?: string;
   phoneNumber: string;
   phoneNumberId: string;
   wabaId: string;
@@ -63,7 +62,7 @@ const CreateTemplate: React.FC = () => {
     header: duplicateFrom?.header || { type: 'none' },
     body: duplicateFrom?.body || '',
     footer: duplicateFrom?.footer || '',
-    buttons: duplicateFrom?.buttons || []
+    buttons: duplicateFrom?.buttons || [],
   });
 
   const [sampleVariables, setSampleVariables] = useState<Record<string, string>>({});
@@ -72,16 +71,16 @@ const CreateTemplate: React.FC = () => {
   // Extract variables from body and header
   const extractedVariables = useMemo(() => {
     const bodyMatches = formData.body.match(/{{(\d+)}}/g) || [];
-    const headerMatches = (formData.header.type === 'text' ? formData.header.text?.match(/{{(\d+)}}/g) : null) || [];
+    const headerMatches =
+      (formData.header.type === 'text' ? formData.header.text?.match(/{{(\d+)}}/g) : null) || [];
 
-    // Combine and extract just the numbers, unique values
     const allMatches = [...bodyMatches, ...headerMatches];
-    const variables = allMatches.map(m => m.replace(/{{|}}/g, ''));
+    const variables = allMatches.map((m) => m.replace(/{{|}}/g, ''));
     return Array.from(new Set(variables)).sort((a, b) => parseInt(a) - parseInt(b));
   }, [formData.body, formData.header]);
 
   // ==========================================
-  // LOAD WHATSAPP ACCOUNTS - COMPLETE FIX
+  // ✅ FIXED: LOAD WHATSAPP ACCOUNTS
   // ==========================================
   useEffect(() => {
     const loadAccounts = async () => {
@@ -90,51 +89,51 @@ const CreateTemplate: React.FC = () => {
         setApiError(null);
 
         // ✅ Get organization ID (try multiple sources)
-        let orgId = localStorage.getItem('currentOrganizationId');
-
-        if (!orgId) {
-          const orgJson = localStorage.getItem('wabmeta_org');
-          if (orgJson) {
+        const orgId =
+          localStorage.getItem('currentOrganizationId') ||
+          (() => {
             try {
-              const org = JSON.parse(orgJson);
-              orgId = org.id;
-            } catch (e) {
-              console.error('Failed to parse org:', e);
+              const o = JSON.parse(localStorage.getItem('wabmeta_org') || 'null');
+              return o?.id || null;
+            } catch {
+              return null;
             }
-          }
-        }
+          })();
 
         if (!orgId) {
           console.error('❌ No organization ID found');
-          setApiError('Organization not found. Please log in again.');
+          setApiError('Organization not found. Please login again.');
           setLoadingAccounts(false);
           return;
         }
 
         console.log('📋 Loading accounts for organization:', orgId);
 
-        // ✅ Call correct endpoint
+        // ✅ Correct endpoint (org based)
         const response = await api.get(`/meta/organizations/${orgId}/accounts`);
 
         console.log('✅ API Response:', response.data);
 
-        // Handle response (support multiple formats)
-        const accountsData = response.data.data || response.data.accounts || response.data || [];
-        const accounts = Array.isArray(accountsData) ? accountsData : [];
+        // ✅ Correct response parsing (handle multiple formats)
+        const accountsData = response.data?.data || response.data?.accounts || response.data || [];
+        const accounts = (Array.isArray(accountsData) ? accountsData : []) as WhatsAppAccount[];
 
-        console.log('✅ Loaded accounts:', accounts);
+        // ✅ Only show CONNECTED accounts for template creation
+        const connectedAccounts = accounts.filter((a) => a.status === 'CONNECTED');
 
-        setWhatsappAccounts(accounts);
+        console.log('✅ Connected accounts:', connectedAccounts.length);
 
-        // Set default account
-        if (accounts.length > 0) {
-          const defaultAccount = accounts.find((a: WhatsAppAccount) => a.isDefault) || accounts[0];
+        setWhatsappAccounts(connectedAccounts);
+
+        // ✅ Select default among CONNECTED accounts
+        if (connectedAccounts.length > 0) {
+          const defaultAccount =
+            connectedAccounts.find((a) => a.isDefault) || connectedAccounts[0];
           setSelectedAccountId(defaultAccount.id);
           console.log('✅ Selected account:', defaultAccount.phoneNumber);
         } else {
-          console.warn('⚠️ No WhatsApp accounts found');
+          console.warn('⚠️ No connected WhatsApp accounts found');
         }
-
       } catch (error: any) {
         console.error('❌ Failed to load WhatsApp accounts:', error);
 
@@ -143,7 +142,7 @@ const CreateTemplate: React.FC = () => {
         if (error.response?.status === 404) {
           errorMessage += 'No accounts found.';
         } else if (error.response?.status === 401) {
-          errorMessage += 'Please log in again.';
+          errorMessage += 'Please login again.';
         } else {
           errorMessage += error.response?.data?.message || error.message || 'Please try again.';
         }
@@ -155,7 +154,7 @@ const CreateTemplate: React.FC = () => {
     };
 
     loadAccounts();
-  }, []); // Run once on mount
+  }, []);
 
   // ==========================================
   // CONSTANTS
@@ -291,13 +290,14 @@ const CreateTemplate: React.FC = () => {
 
     // Check if there are any connected accounts
     if (whatsappAccounts.length === 0) {
-      setApiError('No WhatsApp Business Account connected. Please connect an account in Settings first.');
+      setApiError(
+        'No WhatsApp Business Account connected. Please connect an account in Settings first.'
+      );
       return;
     }
 
     // Validate form (skip for drafts)
     if (!asDraft && !validateForm()) {
-      // If account error, go to settings tab
       if (errors.account) {
         setActiveTab('settings');
       } else {
@@ -313,24 +313,24 @@ const CreateTemplate: React.FC = () => {
     try {
       // Map buttons to backend format
       const mappedButtons = formData.buttons
-        .filter(btn => btn.text.trim())
-        .map(btn => {
+        .filter((btn) => btn.text.trim())
+        .map((btn) => {
           if (btn.type === 'quick_reply') {
             return {
               type: 'QUICK_REPLY' as const,
-              text: btn.text.trim()
+              text: btn.text.trim(),
             };
           } else if (btn.type === 'url') {
             return {
               type: 'URL' as const,
               text: btn.text.trim(),
-              url: btn.url?.trim() || ''
+              url: btn.url?.trim() || '',
             };
           } else if (btn.type === 'phone') {
             return {
               type: 'PHONE_NUMBER' as const,
               text: btn.text.trim(),
-              phoneNumber: btn.phoneNumber?.trim() || ''
+              phoneNumber: btn.phoneNumber?.trim() || '',
             };
           }
           return null;
@@ -341,7 +341,7 @@ const CreateTemplate: React.FC = () => {
       const mappedVariables = extractedVariables.map((v: string) => ({
         index: parseInt(v),
         type: 'text' as const,
-        example: sampleVariables[v]?.trim() || 'example'
+        example: sampleVariables[v]?.trim() || 'example',
       }));
 
       // Build payload with whatsappAccountId
@@ -351,13 +351,16 @@ const CreateTemplate: React.FC = () => {
         category: formData.category.toUpperCase(),
         headerType: formData.header.type.toUpperCase(),
         bodyText: formData.body.trim(),
-        whatsappAccountId: selectedAccountId, // ✅ IMPORTANT: Include WhatsApp Account ID
+        whatsappAccountId: selectedAccountId, // ✅ Include WhatsApp Account ID
       };
 
       // Optional fields
       if (formData.header.type === 'text' && formData.header.text?.trim()) {
         payload.headerContent = formData.header.text.trim();
-      } else if (['image', 'video', 'document'].includes(formData.header.type) && formData.header.mediaUrl) {
+      } else if (
+        ['image', 'video', 'document'].includes(formData.header.type) &&
+        formData.header.mediaUrl
+      ) {
         payload.headerContent = formData.header.mediaUrl;
       }
 
@@ -373,12 +376,12 @@ const CreateTemplate: React.FC = () => {
         payload.variables = mappedVariables;
       }
 
-      console.log("📤 Sending template payload:", payload);
+      console.log('📤 Sending template payload:', payload);
 
       // Call API
       const response = await templateApi.create(payload);
 
-      console.log("✅ Template created:", response.data);
+      console.log('✅ Template created:', response.data);
 
       setSuccessMessage('Template created successfully! It will be reviewed by Meta.');
 
@@ -386,11 +389,9 @@ const CreateTemplate: React.FC = () => {
       setTimeout(() => {
         navigate('/dashboard/templates');
       }, 1500);
-
     } catch (error: any) {
-      console.error("❌ Template creation error:", error);
+      console.error('❌ Template creation error:', error);
 
-      // Extract detailed error message
       let errorMessage = 'Failed to create template. Please try again.';
       const errorData = error.response?.data;
 
@@ -416,13 +417,10 @@ const CreateTemplate: React.FC = () => {
   // ==========================================
   // FORM HELPERS
   // ==========================================
-  const updateFormData = <K extends keyof TemplateFormData>(
-    key: K,
-    value: TemplateFormData[K]
-  ) => {
-    setFormData(prev => ({ ...prev, [key]: value }));
+  const updateFormData = <K extends keyof TemplateFormData>(key: K, value: TemplateFormData[K]) => {
+    setFormData((prev) => ({ ...prev, [key]: value }));
     if (errors[key]) {
-      setErrors(prev => {
+      setErrors((prev) => {
         const newErrors = { ...prev };
         delete newErrors[key];
         return newErrors;
@@ -436,7 +434,12 @@ const CreateTemplate: React.FC = () => {
   };
 
   // Get selected account details
-  const selectedAccount = whatsappAccounts.find(a => a.id === selectedAccountId);
+  const selectedAccount = whatsappAccounts.find((a) => a.id === selectedAccountId);
+
+  // Get display name for account
+  const getAccountDisplayName = (account: WhatsAppAccount) => {
+    return account.displayName || account.businessName || 'WhatsApp Account';
+  };
 
   // ==========================================
   // RENDER
@@ -502,7 +505,12 @@ const CreateTemplate: React.FC = () => {
             <div className="flex-1">
               <p className="text-green-800 dark:text-green-200 font-medium">{successMessage}</p>
             </div>
-            <button onClick={clearMessages} className="text-green-400 hover:text-green-600 dark:hover:text-green-200">×</button>
+            <button
+              onClick={clearMessages}
+              className="text-green-400 hover:text-green-600 dark:hover:text-green-200"
+            >
+              ×
+            </button>
           </div>
         )}
 
@@ -511,10 +519,19 @@ const CreateTemplate: React.FC = () => {
           <div className="mb-6 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-4 flex items-start space-x-3 animate-fade-in">
             <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
             <div className="flex-1">
-              <h3 className="text-sm font-medium text-red-800 dark:text-red-200">Submission Failed</h3>
-              <pre className="text-sm text-red-600 dark:text-red-400 mt-1 whitespace-pre-wrap font-sans">{apiError}</pre>
+              <h3 className="text-sm font-medium text-red-800 dark:text-red-200">
+                Submission Failed
+              </h3>
+              <pre className="text-sm text-red-600 dark:text-red-400 mt-1 whitespace-pre-wrap font-sans">
+                {apiError}
+              </pre>
             </div>
-            <button onClick={clearMessages} className="text-red-400 hover:text-red-600 dark:hover:text-red-200">×</button>
+            <button
+              onClick={clearMessages}
+              className="text-red-400 hover:text-red-600 dark:hover:text-red-200"
+            >
+              ×
+            </button>
           </div>
         )}
 
@@ -523,7 +540,9 @@ const CreateTemplate: React.FC = () => {
           <div className="mb-6 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-xl p-4 flex items-start space-x-3">
             <AlertCircle className="w-5 h-5 text-yellow-600 dark:text-yellow-400 shrink-0 mt-0.5" />
             <div className="flex-1">
-              <h3 className="text-sm font-medium text-yellow-800 dark:text-yellow-200">No WhatsApp Account Connected</h3>
+              <h3 className="text-sm font-medium text-yellow-800 dark:text-yellow-200">
+                No WhatsApp Account Connected
+              </h3>
               <p className="text-sm text-yellow-600 dark:text-yellow-400 mt-1">
                 You need to connect a WhatsApp Business Account before creating templates.
               </p>
@@ -544,7 +563,7 @@ const CreateTemplate: React.FC = () => {
             <p className="text-blue-800 dark:text-blue-200 font-medium">Template Guidelines</p>
             <ul className="text-blue-700 dark:text-blue-300 text-sm mt-1 space-y-1 list-disc list-inside">
               <li>Templates must be approved by Meta before use (usually 24-48 hours)</li>
-              <li>Use variables like {"{{1}}"}, {"{{2}}"} for dynamic content</li>
+              <li>Use variables like {'{{1}}'}, {'{{2}}'} for dynamic content</li>
               <li>Marketing templates require opt-in from recipients</li>
               <li>Avoid promotional content in Utility templates</li>
             </ul>
@@ -566,8 +585,8 @@ const CreateTemplate: React.FC = () => {
                     key={tab.id}
                     onClick={() => setActiveTab(tab.id as any)}
                     className={`flex-1 px-4 py-3 text-sm font-medium transition-colors ${activeTab === tab.id
-                      ? 'text-primary-600 dark:text-primary-400 bg-primary-50 dark:bg-primary-900/20 border-b-2 border-primary-500'
-                      : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+                        ? 'text-primary-600 dark:text-primary-400 bg-primary-50 dark:bg-primary-900/20 border-b-2 border-primary-500'
+                        : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
                       }`}
                   >
                     {tab.label}
@@ -587,12 +606,20 @@ const CreateTemplate: React.FC = () => {
                       <input
                         type="text"
                         value={formData.name}
-                        onChange={(e) => updateFormData('name', e.target.value.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, ''))}
+                        onChange={(e) =>
+                          updateFormData(
+                            'name',
+                            e.target.value
+                              .toLowerCase()
+                              .replace(/\s+/g, '_')
+                              .replace(/[^a-z0-9_]/g, '')
+                          )
+                        }
                         placeholder="e.g., order_confirmation"
                         maxLength={512}
                         className={`w-full px-4 py-2.5 border rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 transition-all ${errors.name
-                          ? 'border-red-300 dark:border-red-600 focus:ring-red-500/20'
-                          : 'border-gray-200 dark:border-gray-600 focus:ring-primary-500/20 focus:border-primary-500'
+                            ? 'border-red-300 dark:border-red-600 focus:ring-red-500/20'
+                            : 'border-gray-200 dark:border-gray-600 focus:ring-primary-500/20 focus:border-primary-500'
                           }`}
                       />
                       {errors.name && (
@@ -615,8 +642,8 @@ const CreateTemplate: React.FC = () => {
                             type="button"
                             onClick={() => updateFormData('header', { type: type.value })}
                             className={`flex flex-col items-center p-3 rounded-xl border-2 transition-all ${formData.header.type === type.value
-                              ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20 text-primary-600 dark:text-primary-400'
-                              : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500 text-gray-600 dark:text-gray-400'
+                                ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20 text-primary-600 dark:text-primary-400'
+                                : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500 text-gray-600 dark:text-gray-400'
                               }`}
                           >
                             <type.icon className="w-5 h-5 mb-1" />
@@ -635,19 +662,23 @@ const CreateTemplate: React.FC = () => {
                         <input
                           type="text"
                           value={formData.header.text || ''}
-                          onChange={(e) => updateFormData('header', {
-                            ...formData.header,
-                            text: e.target.value
-                          })}
+                          onChange={(e) =>
+                            updateFormData('header', {
+                              ...formData.header,
+                              text: e.target.value,
+                            })
+                          }
                           placeholder="Enter header text"
                           maxLength={60}
                           className={`w-full px-4 py-2.5 border rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 transition-all ${errors.headerText
-                            ? 'border-red-300 dark:border-red-600 focus:ring-red-500/20'
-                            : 'border-gray-200 dark:border-gray-600 focus:ring-primary-500/20 focus:border-primary-500'
+                              ? 'border-red-300 dark:border-red-600 focus:ring-red-500/20'
+                              : 'border-gray-200 dark:border-gray-600 focus:ring-primary-500/20 focus:border-primary-500'
                             }`}
                         />
                         {errors.headerText && (
-                          <p className="text-sm text-red-600 dark:text-red-400 mt-1">{errors.headerText}</p>
+                          <p className="text-sm text-red-600 dark:text-red-400 mt-1">
+                            {errors.headerText}
+                          </p>
                         )}
                         <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                           {(formData.header.text || '').length}/60 characters
@@ -678,8 +709,8 @@ const CreateTemplate: React.FC = () => {
                         rows={6}
                         maxLength={1024}
                         className={`w-full px-4 py-3 border rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 transition-all resize-none ${errors.body
-                          ? 'border-red-300 dark:border-red-600 focus:ring-red-500/20'
-                          : 'border-gray-200 dark:border-gray-600 focus:ring-primary-500/20 focus:border-primary-500'
+                            ? 'border-red-300 dark:border-red-600 focus:ring-red-500/20'
+                            : 'border-gray-200 dark:border-gray-600 focus:ring-primary-500/20 focus:border-primary-500'
                           }`}
                       />
                       {errors.body && (
@@ -707,12 +738,14 @@ const CreateTemplate: React.FC = () => {
                         placeholder="e.g., Reply STOP to unsubscribe"
                         maxLength={60}
                         className={`w-full px-4 py-2.5 border rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 transition-all ${errors.footer
-                          ? 'border-red-300 dark:border-red-600 focus:ring-red-500/20'
-                          : 'border-gray-200 dark:border-gray-600 focus:ring-primary-500/20 focus:border-primary-500'
+                            ? 'border-red-300 dark:border-red-600 focus:ring-red-500/20'
+                            : 'border-gray-200 dark:border-gray-600 focus:ring-primary-500/20 focus:border-primary-500'
                           }`}
                       />
                       {errors.footer && (
-                        <p className="text-sm text-red-600 dark:text-red-400 mt-1">{errors.footer}</p>
+                        <p className="text-sm text-red-600 dark:text-red-400 mt-1">
+                          {errors.footer}
+                        </p>
                       )}
                       <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                         {formData.footer.length}/60 characters
@@ -733,17 +766,24 @@ const CreateTemplate: React.FC = () => {
                                 type="text"
                                 value={sampleVariables[variable] || ''}
                                 onChange={(e) =>
-                                  setSampleVariables(prev => ({ ...prev, [variable]: e.target.value }))
+                                  setSampleVariables((prev) => ({
+                                    ...prev,
+                                    [variable]: e.target.value,
+                                  }))
                                 }
                                 placeholder="Example value"
-                                className={`flex-1 px-3 py-1.5 border rounded-lg text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500/20 ${errors.variables ? 'border-red-300 dark:border-red-600' : 'border-gray-200 dark:border-gray-600'
+                                className={`flex-1 px-3 py-1.5 border rounded-lg text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500/20 ${errors.variables
+                                    ? 'border-red-300 dark:border-red-600'
+                                    : 'border-gray-200 dark:border-gray-600'
                                   }`}
                               />
                             </div>
                           ))}
                         </div>
                         {errors.variables && (
-                          <p className="text-sm text-red-600 dark:text-red-400 mt-2">{errors.variables}</p>
+                          <p className="text-sm text-red-600 dark:text-red-400 mt-2">
+                            {errors.variables}
+                          </p>
                         )}
                         <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
                           Sample values help Meta understand your template during review
@@ -758,17 +798,26 @@ const CreateTemplate: React.FC = () => {
                   <div className="space-y-4">
                     <div className="flex items-center justify-between">
                       <div>
-                        <h3 className="font-medium text-gray-900 dark:text-white">Call-to-Action Buttons</h3>
-                        <p className="text-sm text-gray-500 dark:text-gray-400">Add up to 3 buttons to your template</p>
+                        <h3 className="font-medium text-gray-900 dark:text-white">
+                          Call-to-Action Buttons
+                        </h3>
+                        <p className="text-sm text-gray-500 dark:text-gray-400">
+                          Add up to 3 buttons to your template
+                        </p>
                       </div>
                       {formData.buttons.length < 3 && (
                         <button
                           type="button"
-                          onClick={() => updateFormData('buttons', [...formData.buttons, {
-                            id: Date.now().toString(),
-                            type: 'quick_reply',
-                            text: ''
-                          }])}
+                          onClick={() =>
+                            updateFormData('buttons', [
+                              ...formData.buttons,
+                              {
+                                id: Date.now().toString(),
+                                type: 'quick_reply',
+                                text: '',
+                              },
+                            ])
+                          }
                           className="inline-flex items-center text-sm text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300"
                         >
                           <Plus className="w-4 h-4 mr-1" />
@@ -784,12 +833,22 @@ const CreateTemplate: React.FC = () => {
                     )}
 
                     {formData.buttons.map((button, index) => (
-                      <div key={button.id} className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4 space-y-3">
+                      <div
+                        key={button.id}
+                        className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4 space-y-3"
+                      >
                         <div className="flex items-center justify-between">
-                          <span className="font-medium text-gray-700 dark:text-gray-300">Button {index + 1}</span>
+                          <span className="font-medium text-gray-700 dark:text-gray-300">
+                            Button {index + 1}
+                          </span>
                           <button
                             type="button"
-                            onClick={() => updateFormData('buttons', formData.buttons.filter((_, i) => i !== index))}
+                            onClick={() =>
+                              updateFormData(
+                                'buttons',
+                                formData.buttons.filter((_, i) => i !== index)
+                              )
+                            }
                             className="text-red-500 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300"
                           >
                             <Trash2 className="w-4 h-4" />
@@ -830,7 +889,9 @@ const CreateTemplate: React.FC = () => {
                               }}
                               placeholder="Button text"
                               maxLength={25}
-                              className={`w-full px-3 py-2 border rounded-lg text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500/20 ${errors[`button_${index}_text`] ? 'border-red-300 dark:border-red-600' : 'border-gray-200 dark:border-gray-600'
+                              className={`w-full px-3 py-2 border rounded-lg text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500/20 ${errors[`button_${index}_text`]
+                                  ? 'border-red-300 dark:border-red-600'
+                                  : 'border-gray-200 dark:border-gray-600'
                                 }`}
                             />
                           </div>
@@ -850,7 +911,9 @@ const CreateTemplate: React.FC = () => {
                                 updateFormData('buttons', updated);
                               }}
                               placeholder="https://example.com"
-                              className={`w-full px-3 py-2 border rounded-lg text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500/20 ${errors[`button_${index}_url`] ? 'border-red-300 dark:border-red-600' : 'border-gray-200 dark:border-gray-600'
+                              className={`w-full px-3 py-2 border rounded-lg text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500/20 ${errors[`button_${index}_url`]
+                                  ? 'border-red-300 dark:border-red-600'
+                                  : 'border-gray-200 dark:border-gray-600'
                                 }`}
                             />
                           </div>
@@ -870,7 +933,9 @@ const CreateTemplate: React.FC = () => {
                                 updateFormData('buttons', updated);
                               }}
                               placeholder="+1234567890"
-                              className={`w-full px-3 py-2 border rounded-lg text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500/20 ${errors[`button_${index}_phone`] ? 'border-red-300 dark:border-red-600' : 'border-gray-200 dark:border-gray-600'
+                              className={`w-full px-3 py-2 border rounded-lg text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500/20 ${errors[`button_${index}_phone`]
+                                  ? 'border-red-300 dark:border-red-600'
+                                  : 'border-gray-200 dark:border-gray-600'
                                 }`}
                             />
                           </div>
@@ -878,13 +943,17 @@ const CreateTemplate: React.FC = () => {
                       </div>
                     ))}
 
-                    {Object.keys(errors).filter(k => k.startsWith('button_')).length > 0 && (
+                    {Object.keys(errors).filter((k) => k.startsWith('button_')).length > 0 && (
                       <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3">
-                        <p className="text-sm text-red-600 dark:text-red-400 font-medium">Button Errors:</p>
+                        <p className="text-sm text-red-600 dark:text-red-400 font-medium">
+                          Button Errors:
+                        </p>
                         {Object.entries(errors)
                           .filter(([k]) => k.startsWith('button_'))
                           .map(([key, msg]) => (
-                            <p key={key} className="text-sm text-red-600 dark:text-red-400">• {msg}</p>
+                            <p key={key} className="text-sm text-red-600 dark:text-red-400">
+                              • {msg}
+                            </p>
                           ))}
                       </div>
                     )}
@@ -908,7 +977,9 @@ const CreateTemplate: React.FC = () => {
                         <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4">
                           <div className="flex items-center space-x-2">
                             <AlertCircle className="w-5 h-5 text-yellow-600 dark:text-yellow-400" />
-                            <p className="text-yellow-800 dark:text-yellow-200 font-medium">No accounts connected</p>
+                            <p className="text-yellow-800 dark:text-yellow-200 font-medium">
+                              No accounts connected
+                            </p>
                           </div>
                           <p className="text-yellow-600 dark:text-yellow-400 text-sm mt-1">
                             Please connect a WhatsApp Business Account in Settings.
@@ -928,33 +999,37 @@ const CreateTemplate: React.FC = () => {
                             onChange={(e) => {
                               setSelectedAccountId(e.target.value);
                               if (errors.account) {
-                                setErrors(prev => {
+                                setErrors((prev) => {
                                   const newErrors = { ...prev };
                                   delete newErrors.account;
                                   return newErrors;
                                 });
                               }
                             }}
-                            className={`w-full px-4 py-2.5 border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white ${errors.account ? 'border-red-300 dark:border-red-600' : 'border-gray-200 dark:border-gray-600'
+                            className={`w-full px-4 py-2.5 border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white ${errors.account
+                                ? 'border-red-300 dark:border-red-600'
+                                : 'border-gray-200 dark:border-gray-600'
                               }`}
                           >
                             <option value="">Select an account</option>
                             {whatsappAccounts.map((account) => (
                               <option key={account.id} value={account.id}>
-                                {account.businessName || 'WhatsApp Account'} - {account.phoneNumber}
+                                {getAccountDisplayName(account)} - {account.phoneNumber}
                                 {account.isDefault ? ' (Default)' : ''}
                               </option>
                             ))}
                           </select>
                           {errors.account && (
-                            <p className="text-sm text-red-600 dark:text-red-400 mt-1">{errors.account}</p>
+                            <p className="text-sm text-red-600 dark:text-red-400 mt-1">
+                              {errors.account}
+                            </p>
                           )}
                           {selectedAccount && (
                             <div className="mt-2 bg-gray-50 dark:bg-gray-700 rounded-lg p-3">
                               <div className="flex items-center space-x-2">
                                 <CheckCircle className="w-4 h-4 text-green-500" />
                                 <span className="text-sm text-gray-700 dark:text-gray-300">
-                                  Selected: {selectedAccount.businessName || 'WhatsApp Business'}
+                                  Selected: {getAccountDisplayName(selectedAccount)}
                                 </span>
                               </div>
                               <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
@@ -976,8 +1051,8 @@ const CreateTemplate: React.FC = () => {
                           <label
                             key={category.value}
                             className={`flex items-start space-x-3 p-4 rounded-xl border-2 cursor-pointer transition-all ${formData.category === category.value
-                              ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20'
-                              : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500'
+                                ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20'
+                                : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500'
                               }`}
                           >
                             <input
@@ -985,12 +1060,18 @@ const CreateTemplate: React.FC = () => {
                               name="category"
                               value={category.value}
                               checked={formData.category === category.value}
-                              onChange={(e) => updateFormData('category', e.target.value as TemplateCategory)}
+                              onChange={(e) =>
+                                updateFormData('category', e.target.value as TemplateCategory)
+                              }
                               className="mt-1"
                             />
                             <div>
-                              <p className="font-medium text-gray-900 dark:text-white">{category.label}</p>
-                              <p className="text-sm text-gray-500 dark:text-gray-400">{category.description}</p>
+                              <p className="font-medium text-gray-900 dark:text-white">
+                                {category.label}
+                              </p>
+                              <p className="text-sm text-gray-500 dark:text-gray-400">
+                                {category.description}
+                              </p>
                             </div>
                           </label>
                         ))}
@@ -1022,8 +1103,8 @@ const CreateTemplate: React.FC = () => {
                         <div className="text-sm text-blue-800 dark:text-blue-200">
                           <p className="font-medium mb-1">Review Process</p>
                           <p>
-                            After submission, your template will be reviewed by Meta.
-                            This usually takes 24-48 hours. You'll be notified once approved.
+                            After submission, your template will be reviewed by Meta. This usually
+                            takes 24-48 hours. You'll be notified once approved.
                           </p>
                           <ul className="mt-2 space-y-1 text-blue-700 dark:text-blue-300">
                             <li>• Marketing templates need clear opt-out option</li>
@@ -1043,10 +1124,7 @@ const CreateTemplate: React.FC = () => {
           <div className="lg:sticky lg:top-36 h-fit">
             <div className="bg-gray-900 dark:bg-gray-950 rounded-2xl p-6">
               <h3 className="text-white font-medium mb-4 text-center">📱 Live Preview</h3>
-              <TemplatePreview
-                template={formData}
-                sampleVariables={sampleVariables}
-              />
+              <TemplatePreview template={formData} sampleVariables={sampleVariables} />
             </div>
 
             {/* Quick Stats */}
@@ -1055,19 +1133,27 @@ const CreateTemplate: React.FC = () => {
               <div className="grid grid-cols-2 gap-3 text-sm">
                 <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-2">
                   <p className="text-gray-500 dark:text-gray-400">Body Length</p>
-                  <p className="font-semibold text-gray-900 dark:text-white">{formData.body.length}/1024</p>
+                  <p className="font-semibold text-gray-900 dark:text-white">
+                    {formData.body.length}/1024
+                  </p>
                 </div>
                 <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-2">
                   <p className="text-gray-500 dark:text-gray-400">Variables</p>
-                  <p className="font-semibold text-gray-900 dark:text-white">{extractedVariables.length}</p>
+                  <p className="font-semibold text-gray-900 dark:text-white">
+                    {extractedVariables.length}
+                  </p>
                 </div>
                 <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-2">
                   <p className="text-gray-500 dark:text-gray-400">Buttons</p>
-                  <p className="font-semibold text-gray-900 dark:text-white">{formData.buttons.length}/3</p>
+                  <p className="font-semibold text-gray-900 dark:text-white">
+                    {formData.buttons.length}/3
+                  </p>
                 </div>
                 <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-2">
                   <p className="text-gray-500 dark:text-gray-400">Category</p>
-                  <p className="font-semibold capitalize text-gray-900 dark:text-white">{formData.category}</p>
+                  <p className="font-semibold capitalize text-gray-900 dark:text-white">
+                    {formData.category}
+                  </p>
                 </div>
               </div>
 
@@ -1076,7 +1162,7 @@ const CreateTemplate: React.FC = () => {
                 <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-600">
                   <p className="text-xs text-gray-500 dark:text-gray-400">Submitting to:</p>
                   <p className="text-sm font-medium text-gray-900 dark:text-white">
-                    {selectedAccount.businessName || 'WhatsApp Business'}
+                    {getAccountDisplayName(selectedAccount)}
                   </p>
                   <p className="text-xs text-gray-500 dark:text-gray-400">
                     {selectedAccount.phoneNumber}
