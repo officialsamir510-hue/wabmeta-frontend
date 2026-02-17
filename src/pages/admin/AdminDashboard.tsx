@@ -1,10 +1,10 @@
 // src/pages/admin/AdminDashboard.tsx
 
 import React, { useState, useEffect } from 'react';
-import { 
-  Users, 
-  Building2, 
-  MessageSquare, 
+import {
+  Users,
+  Building2,
+  MessageSquare,
   CreditCard,
   TrendingUp,
   TrendingDown,
@@ -69,14 +69,14 @@ interface StatCardProps {
   link?: string;
 }
 
-const StatCard: React.FC<StatCardProps> = ({ 
-  title, value, change, changeLabel, icon: Icon, iconBg, iconColor, link 
+const StatCard: React.FC<StatCardProps> = ({
+  title, value, change, changeLabel, icon: Icon, iconBg, iconColor, link
 }) => {
   const CardWrapper = link ? Link : 'div';
   const wrapperProps = link ? { to: link } : {};
 
   return (
-    <CardWrapper 
+    <CardWrapper
       {...wrapperProps as any}
       className={`bg-white rounded-2xl border border-gray-200 p-6 ${link ? 'hover:shadow-lg hover:border-gray-300 transition-all cursor-pointer' : ''}`}
     >
@@ -84,6 +84,7 @@ const StatCard: React.FC<StatCardProps> = ({
         <div>
           <p className="text-sm text-gray-500 font-medium">{title}</p>
           <p className="text-3xl font-bold text-gray-900 mt-2">
+            {/* ✅ FIXED: Safe toLocaleString */}
             {typeof value === 'number' ? value.toLocaleString() : value}
           </p>
           {change !== undefined && (
@@ -114,10 +115,12 @@ interface StatusBreakdownProps {
 
 const UserStatusBreakdown: React.FC<StatusBreakdownProps> = ({ stats }) => {
   const statuses = [
-    { label: 'Active', value: stats.active, icon: CheckCircle, color: 'text-green-600', bg: 'bg-green-100' },
-    { label: 'Pending', value: stats.pending, icon: Clock, color: 'text-yellow-600', bg: 'bg-yellow-100' },
-    { label: 'Suspended', value: stats.suspended, icon: Ban, color: 'text-red-600', bg: 'bg-red-100' },
+    { label: 'Active', value: stats.active || 0, icon: CheckCircle, color: 'text-green-600', bg: 'bg-green-100' },
+    { label: 'Pending', value: stats.pending || 0, icon: Clock, color: 'text-yellow-600', bg: 'bg-yellow-100' },
+    { label: 'Suspended', value: stats.suspended || 0, icon: Ban, color: 'text-red-600', bg: 'bg-red-100' },
   ];
+
+  const total = stats.total || 0;
 
   return (
     <div className="bg-white rounded-2xl border border-gray-200 p-6">
@@ -132,28 +135,31 @@ const UserStatusBreakdown: React.FC<StatusBreakdownProps> = ({ stats }) => {
               <span className="text-gray-700 font-medium">{status.label}</span>
             </div>
             <div className="flex items-center space-x-3">
-              <span className="text-2xl font-bold text-gray-900">{status.value.toLocaleString()}</span>
+              {/* ✅ FIXED: Safe toLocaleString */}
+              <span className="text-2xl font-bold text-gray-900">
+                {(status.value || 0).toLocaleString()}
+              </span>
               <span className="text-sm text-gray-400">
-                ({stats.total > 0 ? Math.round((status.value / stats.total) * 100) : 0}%)
+                ({total > 0 ? Math.round((status.value / total) * 100) : 0}%)
               </span>
             </div>
           </div>
         ))}
       </div>
-      
+
       {/* Progress Bar */}
       <div className="mt-6 h-3 bg-gray-100 rounded-full overflow-hidden flex">
-        <div 
-          className="bg-green-500 transition-all" 
-          style={{ width: `${stats.total > 0 ? (stats.active / stats.total) * 100 : 0}%` }}
+        <div
+          className="bg-green-500 transition-all"
+          style={{ width: `${total > 0 ? ((stats.active || 0) / total) * 100 : 0}%` }}
         />
-        <div 
-          className="bg-yellow-500 transition-all" 
-          style={{ width: `${stats.total > 0 ? (stats.pending / stats.total) * 100 : 0}%` }}
+        <div
+          className="bg-yellow-500 transition-all"
+          style={{ width: `${total > 0 ? ((stats.pending || 0) / total) * 100 : 0}%` }}
         />
-        <div 
-          className="bg-red-500 transition-all" 
-          style={{ width: `${stats.total > 0 ? (stats.suspended / stats.total) * 100 : 0}%` }}
+        <div
+          className="bg-red-500 transition-all"
+          style={{ width: `${total > 0 ? ((stats.suspended || 0) / total) * 100 : 0}%` }}
         />
       </div>
     </div>
@@ -176,12 +182,26 @@ const PlanDistribution: React.FC<PlanDistributionProps> = ({ byPlan, total }) =>
     ENTERPRISE: { color: 'text-orange-600', bg: 'bg-orange-500' },
   };
 
-  const plans = Object.entries(byPlan).map(([type, count]) => ({
+  // ✅ FIXED: Handle empty byPlan object
+  const plans = Object.entries(byPlan || {}).map(([type, count]) => ({
     type,
-    count,
-    percentage: total > 0 ? Math.round((count / total) * 100) : 0,
+    count: count || 0,
+    percentage: total > 0 ? Math.round(((count || 0) / total) * 100) : 0,
     ...planConfig[type] || { color: 'text-gray-600', bg: 'bg-gray-500' }
   }));
+
+  // ✅ FIXED: Show message if no data
+  if (plans.length === 0) {
+    return (
+      <div className="bg-white rounded-2xl border border-gray-200 p-6">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Organizations by Plan</h3>
+        <div className="text-center py-8 text-gray-500">
+          <Building2 className="w-12 h-12 mx-auto mb-2 text-gray-300" />
+          <p>No organizations yet</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="bg-white rounded-2xl border border-gray-200 p-6">
@@ -191,10 +211,13 @@ const PlanDistribution: React.FC<PlanDistributionProps> = ({ byPlan, total }) =>
           <div key={plan.type}>
             <div className="flex items-center justify-between mb-2">
               <span className={`font-medium ${plan.color}`}>{plan.type}</span>
-              <span className="text-gray-900 font-bold">{plan.count}</span>
+              {/* ✅ FIXED: Safe toLocaleString */}
+              <span className="text-gray-900 font-bold">
+                {(plan.count || 0).toLocaleString()}
+              </span>
             </div>
             <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-              <div 
+              <div
                 className={`h-full ${plan.bg} transition-all`}
                 style={{ width: `${plan.percentage}%` }}
               />
@@ -216,10 +239,10 @@ interface QuickStatsProps {
 
 const QuickStats: React.FC<QuickStatsProps> = ({ whatsapp, messages }) => {
   const stats = [
-    { label: 'Connected WhatsApp', value: whatsapp.connectedAccounts, icon: Smartphone },
-    { label: 'Total Contacts', value: whatsapp.totalContacts, icon: Users },
-    { label: 'Total Campaigns', value: whatsapp.totalCampaigns, icon: MessageSquare },
-    { label: "Today's Messages", value: messages.todaySent, icon: Activity },
+    { label: 'Connected WhatsApp', value: whatsapp.connectedAccounts || 0, icon: Smartphone },
+    { label: 'Total Contacts', value: whatsapp.totalContacts || 0, icon: Users },
+    { label: 'Total Campaigns', value: whatsapp.totalCampaigns || 0, icon: MessageSquare },
+    { label: "Today's Messages", value: messages.todaySent || 0, icon: Activity },
   ];
 
   return (
@@ -232,7 +255,10 @@ const QuickStats: React.FC<QuickStatsProps> = ({ whatsapp, messages }) => {
               <stat.icon className="w-4 h-4 text-gray-400" />
               <span className="text-xs text-gray-500 font-medium">{stat.label}</span>
             </div>
-            <p className="text-2xl font-bold text-gray-900">{stat.value.toLocaleString()}</p>
+            {/* ✅ FIXED: Safe toLocaleString */}
+            <p className="text-2xl font-bold text-gray-900">
+              {(stat.value || 0).toLocaleString()}
+            </p>
           </div>
         ))}
       </div>
@@ -257,14 +283,18 @@ const AdminDashboard: React.FC = () => {
     try {
       const response = await admin.getDashboard();
       console.log('📊 Dashboard Stats:', response.data);
-      
+
       const data = response.data?.data || response.data;
       setStats(data);
 
       // Get admin user from localStorage
       const storedAdmin = localStorage.getItem('wabmeta_admin_user');
       if (storedAdmin) {
-        setAdminUser(JSON.parse(storedAdmin));
+        try {
+          setAdminUser(JSON.parse(storedAdmin));
+        } catch {
+          console.warn('Failed to parse admin user');
+        }
       }
 
     } catch (err: any) {
@@ -310,13 +340,64 @@ const AdminDashboard: React.FC = () => {
     );
   }
 
-  // Default stats if null
+  // ✅ FIXED: Safe default values with proper fallbacks
   const dashboardStats: DashboardStats = stats || {
-    users: { total: 0, active: 0, pending: 0, suspended: 0, newThisMonth: 0 },
-    organizations: { total: 0, byPlan: {}, newThisMonth: 0 },
-    messages: { totalSent: 0, todaySent: 0, thisMonthSent: 0 },
-    revenue: { mrr: 0, arr: 0 },
-    whatsapp: { connectedAccounts: 0, totalContacts: 0, totalCampaigns: 0 },
+    users: {
+      total: 0,
+      active: 0,
+      pending: 0,
+      suspended: 0,
+      newThisMonth: 0
+    },
+    organizations: {
+      total: 0,
+      byPlan: {},
+      newThisMonth: 0
+    },
+    messages: {
+      totalSent: 0,
+      todaySent: 0,
+      thisMonthSent: 0
+    },
+    revenue: {
+      mrr: 0,
+      arr: 0
+    },
+    whatsapp: {
+      connectedAccounts: 0,
+      totalContacts: 0,
+      totalCampaigns: 0
+    },
+  };
+
+  // ✅ FIXED: Ensure nested values exist
+  const safeStats: DashboardStats = {
+    users: {
+      total: dashboardStats.users?.total ?? 0,
+      active: dashboardStats.users?.active ?? 0,
+      pending: dashboardStats.users?.pending ?? 0,
+      suspended: dashboardStats.users?.suspended ?? 0,
+      newThisMonth: dashboardStats.users?.newThisMonth ?? 0,
+    },
+    organizations: {
+      total: dashboardStats.organizations?.total ?? 0,
+      byPlan: dashboardStats.organizations?.byPlan ?? {},
+      newThisMonth: dashboardStats.organizations?.newThisMonth ?? 0,
+    },
+    messages: {
+      totalSent: dashboardStats.messages?.totalSent ?? 0,
+      todaySent: dashboardStats.messages?.todaySent ?? 0,
+      thisMonthSent: dashboardStats.messages?.thisMonthSent ?? 0,
+    },
+    revenue: {
+      mrr: dashboardStats.revenue?.mrr ?? 0,
+      arr: dashboardStats.revenue?.arr ?? 0,
+    },
+    whatsapp: {
+      connectedAccounts: dashboardStats.whatsapp?.connectedAccounts ?? 0,
+      totalContacts: dashboardStats.whatsapp?.totalContacts ?? 0,
+      totalCampaigns: dashboardStats.whatsapp?.totalCampaigns ?? 0,
+    },
   };
 
   return (
@@ -332,7 +413,7 @@ const AdminDashboard: React.FC = () => {
         <button
           onClick={fetchStats}
           disabled={loading}
-          className="flex items-center space-x-2 px-4 py-2 bg-white border border-gray-200 rounded-xl text-gray-700 hover:bg-gray-50 transition-colors"
+          className="flex items-center space-x-2 px-4 py-2 bg-white border border-gray-200 rounded-xl text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50"
         >
           <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
           <span>Refresh</span>
@@ -343,8 +424,8 @@ const AdminDashboard: React.FC = () => {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <StatCard
           title="Total Users"
-          value={dashboardStats.users.total}
-          change={dashboardStats.users.newThisMonth > 0 ? 12 : 0}
+          value={safeStats.users.total}
+          change={safeStats.users.newThisMonth > 0 ? 12 : undefined}
           changeLabel="new this month"
           icon={Users}
           iconBg="bg-blue-100"
@@ -353,8 +434,8 @@ const AdminDashboard: React.FC = () => {
         />
         <StatCard
           title="Organizations"
-          value={dashboardStats.organizations.total}
-          change={dashboardStats.organizations.newThisMonth > 0 ? 8 : 0}
+          value={safeStats.organizations.total}
+          change={safeStats.organizations.newThisMonth > 0 ? 8 : undefined}
           changeLabel="new this month"
           icon={Building2}
           iconBg="bg-purple-100"
@@ -363,14 +444,14 @@ const AdminDashboard: React.FC = () => {
         />
         <StatCard
           title="Messages Sent"
-          value={dashboardStats.messages.thisMonthSent}
+          value={safeStats.messages.thisMonthSent}
           icon={MessageSquare}
           iconBg="bg-green-100"
           iconColor="text-green-600"
         />
         <StatCard
           title="Monthly Revenue"
-          value={`$${dashboardStats.revenue.mrr.toLocaleString()}`}
+          value={`$${safeStats.revenue.mrr.toLocaleString()}`}
           icon={CreditCard}
           iconBg="bg-orange-100"
           iconColor="text-orange-600"
@@ -380,29 +461,32 @@ const AdminDashboard: React.FC = () => {
       {/* Secondary Stats */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* User Status Breakdown */}
-        <UserStatusBreakdown stats={dashboardStats.users} />
+        <UserStatusBreakdown stats={safeStats.users} />
 
         {/* Plan Distribution */}
-        <PlanDistribution 
-          byPlan={dashboardStats.organizations.byPlan} 
-          total={dashboardStats.organizations.total}
+        <PlanDistribution
+          byPlan={safeStats.organizations.byPlan}
+          total={safeStats.organizations.total}
         />
 
         {/* Quick Stats */}
-        <QuickStats 
-          whatsapp={dashboardStats.whatsapp}
-          messages={dashboardStats.messages}
+        <QuickStats
+          whatsapp={safeStats.whatsapp}
+          messages={safeStats.messages}
         />
       </div>
 
       {/* Revenue Card */}
-      <div className="bg-linear-to-r from-gray-900 to-gray-800 rounded-2xl p-6 text-white">
+      <div className="bg-gradient-to-r from-gray-900 to-gray-800 rounded-2xl p-6 text-white">
         <div className="flex items-center justify-between">
           <div>
             <p className="text-gray-400 text-sm font-medium">Annual Recurring Revenue (ARR)</p>
-            <p className="text-4xl font-bold mt-2">${dashboardStats.revenue.arr.toLocaleString()}</p>
+            {/* ✅ FIXED: Safe toLocaleString */}
+            <p className="text-4xl font-bold mt-2">
+              ${(safeStats.revenue.arr || 0).toLocaleString()}
+            </p>
             <p className="text-gray-400 text-sm mt-2">
-              Based on ${dashboardStats.revenue.mrr.toLocaleString()} MRR
+              Based on ${(safeStats.revenue.mrr || 0).toLocaleString()} MRR
             </p>
           </div>
           <div className="hidden md:block">
