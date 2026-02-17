@@ -69,6 +69,9 @@ const NotFound = lazy(() => import('./pages/NotFound'));
 // Admin
 const AdminLogin = lazy(() => import('./pages/admin/AdminLogin'));
 const AdminDashboard = lazy(() => import('./pages/admin/AdminDashboard'));
+const UserManagement = lazy(() => import('./pages/admin/UserManagement'));
+const Subscriptions = lazy(() => import('./pages/admin/Subscriptions'));
+const SystemSettings = lazy(() => import('./pages/admin/SystemSettings'));
 
 // ============================================
 // ROUTE GUARDS
@@ -404,12 +407,9 @@ const AppRoutes: React.FC = () => {
         >
           <Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />
           <Route path="/admin/dashboard" element={<AdminDashboard />} />
-          {/* Add more admin routes here as needed */}
-          {/* <Route path="/admin/users" element={<AdminUsers />} /> */}
-          {/* <Route path="/admin/users/:id" element={<AdminUserDetails />} /> */}
-          {/* <Route path="/admin/organizations" element={<AdminOrganizations />} /> */}
-          {/* <Route path="/admin/organizations/:id" element={<AdminOrgDetails />} /> */}
-          {/* <Route path="/admin/settings" element={<AdminSettings />} /> */}
+          <Route path="/admin/users" element={<UserManagement />} />
+          <Route path="/admin/subscriptions" element={<Subscriptions />} />
+          <Route path="/admin/settings" element={<SystemSettings />} />
         </Route>
 
         {/* ============================== */}
