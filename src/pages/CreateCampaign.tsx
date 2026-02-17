@@ -44,6 +44,10 @@ interface MappedTemplate {
   body: string;
   buttons: { text: string }[];
   variables: string[];
+
+  // ✅ IMPORTANT: so we can filter by account if needed
+  whatsappAccountId?: string;
+  wabaId?: string;
 }
 
 interface MappedContact {
@@ -52,6 +56,15 @@ interface MappedContact {
   phone: string;
   tags: string[];
 }
+
+type WhatsAppAccountLite = {
+  id: string;
+  phoneNumberId?: string;
+  phoneNumber?: string;
+  displayName?: string;
+  isDefault?: boolean;
+  status?: string;
+};
 
 // ============================================
 // HELPER FUNCTIONS
@@ -64,20 +77,28 @@ const extractVariablesFromBody = (bodyText: string): string[] => {
   );
 };
 
-const parseApiResponse = <T,>(response: any, possibleKeys: string[]): T[] => {
-  if (Array.isArray(response)) return response;
+const parseApiArray = <T,>(resp: any, keys: string[] = []): T[] => {
+  // supports axios response.data and your ApiResponse wrapper shapes
+  const data = resp?.data ?? resp;
 
-  if (response?.data) {
-    if (Array.isArray(response.data)) return response.data;
-    for (const key of possibleKeys) {
-      if (Array.isArray(response.data[key])) return response.data[key];
+  // If direct array
+  if (Array.isArray(data)) return data;
+
+  // If { success, data: [...] }
+  if (Array.isArray(data?.data)) return data.data;
+
+  // If { success, data: { templates: [...] } }
+  if (data?.data && typeof data.data === "object") {
+    for (const k of keys) {
+      if (Array.isArray(data.data[k])) return data.data[k];
     }
   }
 
-  if (Array.isArray(response?.data)) return response.data;
-  if (Array.isArray(response?.data?.data)) return response.data.data;
+  // If { templates: [...] }
+  for (const k of keys) {
+    if (Array.isArray(data?.[k])) return data[k];
+  }
 
-  console.warn("Could not parse API response:", response);
   return [];
 };
 
@@ -91,61 +112,12 @@ const mapHeaderForPreview = (headerType: string) => {
   return { type: "none" as const };
 };
 
-// ✅ FIXED: Only use real API response, no mock IDs
-const getConnectedWhatsAppAccountId = async (): Promise<string> => {
-  try {
-    const res = await whatsappApi.accounts();
-    console.log("🔍 WhatsApp API Response:", res);
-
-    // Handle all possible response structures
-    const accounts = Array.isArray(res.data) 
-      ? res.data 
-      : Array.isArray(res.data?.data) 
-        ? res.data.data 
-        : [];
-
-    console.log("🔍 Parsed Accounts:", accounts);
-
-    if (!accounts || accounts.length === 0) {
-      throw new Error("No WhatsApp accounts found. Please connect one in Settings → WhatsApp.");
-    }
-
-    // Try to find connected/default account first
-    const connected = accounts.find((a: any) => 
-      String(a.status || '').toUpperCase() === 'CONNECTED' || 
-      a.isDefault === true
-    );
-
-    if (connected?.id) {
-      console.log("✅ Found connected account:", connected.id);
-      return connected.id;
-    }
-
-    // Fallback to first available account
-    if (accounts[0]?.id) {
-      console.log("⚠️ Using first available account:", accounts[0].id);
-      return accounts[0].id;
-    }
-
-    throw new Error("No valid WhatsApp account ID found.");
-
-  } catch (error: any) {
-    console.error("❌ Failed to get WhatsApp account:", error);
-    
-    // Re-throw with user-friendly message
-    const message = error.response?.data?.message || 
-                    error.message || 
-                    "Failed to verify WhatsApp connection. Please try again.";
-    throw new Error(message);
-  }
-};
-
 // ============================================
 // COMPONENT
 // ============================================
 const CreateCampaign: React.FC = () => {
   const navigate = useNavigate();
-  
+
   const [currentStep, setCurrentStep] = useState(1);
   const [sending, setSending] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
@@ -156,6 +128,11 @@ const CreateCampaign: React.FC = () => {
   const [availableTags, setAvailableTags] = useState<string[]>([]);
   const [loadingData, setLoadingData] = useState(true);
   const [apiError, setApiError] = useState<string | null>(null);
+
+  // ✅ WhatsApp account state
+  const [whatsappAccounts, setWhatsappAccounts] = useState<WhatsAppAccountLite[]>([]);
+  const [selectedAccountId, setSelectedAccountId] = useState<string>("");
+  const [loadingAccounts, setLoadingAccounts] = useState(true);
 
   // Form State
   const [formData, setFormData] = useState<CampaignFormData>({
@@ -172,36 +149,80 @@ const CreateCampaign: React.FC = () => {
   });
 
   // ==========================================
-  // FETCH DATA ON MOUNT
+  // LOAD WHATSAPP ACCOUNTS (CONNECTED ONLY)
+  // ==========================================
+  useEffect(() => {
+    const loadAccounts = async () => {
+      setApiError(null);
+
+      try {
+        setLoadingAccounts(true);
+        const res = await whatsappApi.accounts();
+
+        const accountsArr = parseApiArray<any>(res, ["accounts", "items", "data"]);
+        const connected = (accountsArr || []).filter(
+          (a: any) => String(a.status || "").toUpperCase() === "CONNECTED"
+        );
+
+        if (!connected.length) {
+          throw new Error("No WhatsApp accounts connected. Please connect one in Settings → WhatsApp.");
+        }
+
+        setWhatsappAccounts(connected);
+
+        const def = connected.find((a: any) => a.isDefault) || connected[0];
+        setSelectedAccountId(def.id);
+      } catch (e: any) {
+        setApiError(e?.response?.data?.message || e?.message || "Failed to load WhatsApp accounts.");
+      } finally {
+        setLoadingAccounts(false);
+      }
+    };
+
+    loadAccounts();
+  }, []);
+
+  // Clear selected template when account changes (prevents mismatch)
+  useEffect(() => {
+    setFormData((p) => ({ ...p, templateId: "" }));
+  }, [selectedAccountId]);
+
+  // ==========================================
+  // FETCH TEMPLATES (ACCOUNT-SPECIFIC) + CONTACTS
   // ==========================================
   useEffect(() => {
     const fetchData = async () => {
+      if (!selectedAccountId) return;
+
       setLoadingData(true);
       setApiError(null);
 
       try {
         const [templatesRes, contactsRes] = await Promise.all([
-          templateApi.getAll(),
+          // ✅ IMPORTANT: filter templates by whatsappAccountId
+          templateApi.getAll({ whatsappAccountId: selectedAccountId }),
           contactApi.getAll(),
         ]);
 
         // Templates
-        const templatesArray = parseApiResponse<any>(templatesRes.data, ["templates", "data", "items"]);
-        const mappedTemplates: MappedTemplate[] = templatesArray.map((t: any) => ({
+        const templatesArray = parseApiArray<any>(templatesRes, ["templates", "items", "data"]);
+        const mappedTemplates: MappedTemplate[] = (templatesArray || []).map((t: any) => ({
           id: t._id || t.id,
           name: t.name || "Untitled",
           category: (t.category || "UTILITY").toLowerCase(),
-          language: t.language || "en",
+          language: t.language || "en_US",
           headerType: (t.headerType || "NONE").toLowerCase(),
           body: t.bodyText || t.body || "",
           buttons: Array.isArray(t.buttons) ? t.buttons.map((b: any) => ({ text: b.text || "" })) : [],
           variables: extractVariablesFromBody(t.bodyText || t.body || ""),
+          whatsappAccountId: t.whatsappAccountId,
+          wabaId: t.wabaId,
         }));
         setTemplates(mappedTemplates);
 
         // Contacts
-        const contactsArray = parseApiResponse<any>(contactsRes.data, ["contacts", "data", "items"]);
-        const mappedContacts: MappedContact[] = contactsArray.map((c: any) => ({
+        const contactsArray = parseApiArray<any>(contactsRes, ["contacts", "items", "data"]);
+        const mappedContacts: MappedContact[] = (contactsArray || []).map((c: any) => ({
           id: c._id || c.id,
           name: `${c.firstName || ""} ${c.lastName || ""}`.trim() || c.phone || "Unknown",
           phone: c.phone || "",
@@ -213,19 +234,22 @@ const CreateCampaign: React.FC = () => {
         const tagsSet = new Set<string>();
         mappedContacts.forEach((c) => c.tags.forEach((tag: string) => tagsSet.add(tag)));
         setAvailableTags(Array.from(tagsSet));
-
       } catch (err: any) {
         console.error("❌ Failed to load data:", err);
-        const errorMessage =
-          err.response?.data?.message || err.message || "Failed to load templates/contacts. Please refresh.";
-        setApiError(errorMessage);
+        setApiError(
+          err?.response?.data?.message ||
+          err?.message ||
+          "Failed to load templates/contacts. Please refresh."
+        );
       } finally {
         setLoadingData(false);
       }
     };
 
-    fetchData();
-  }, []);
+    if (!loadingAccounts && selectedAccountId) {
+      fetchData();
+    }
+  }, [loadingAccounts, selectedAccountId]);
 
   // ==========================================
   // CSV IMPORT HANDLER
@@ -233,9 +257,9 @@ const CreateCampaign: React.FC = () => {
   const handleCsvImported = async (batchTag: string) => {
     try {
       const res = await contactApi.getAll({ tags: batchTag, limit: 10000 });
-      const importedArray = parseApiResponse<any>(res.data, ["contacts", "data", "items"]);
+      const importedArray = parseApiArray<any>(res, ["contacts", "items", "data"]);
 
-      const importedContacts: MappedContact[] = importedArray.map((c: any) => ({
+      const importedContacts: MappedContact[] = (importedArray || []).map((c: any) => ({
         id: c._id || c.id,
         name: `${c.firstName || ""} ${c.lastName || ""}`.trim() || c.phone || "Unknown",
         phone: c.phone || "",
@@ -300,7 +324,7 @@ const CreateCampaign: React.FC = () => {
   const validateStep = (step: number): boolean => {
     switch (step) {
       case 1:
-        return !!formData.name.trim() && !!formData.templateId;
+        return !!formData.name.trim() && !!formData.templateId && !!selectedAccountId;
       case 2:
         return totalRecipients > 0;
       case 3:
@@ -328,122 +352,103 @@ const CreateCampaign: React.FC = () => {
   };
 
   // ==========================================
-// SUBMIT CAMPAIGN - FIXED
-// ==========================================
-const handleSend = async () => {
-  setSending(true);
-  setApiError(null);
+  // SUBMIT CAMPAIGN (USES SELECTED ACCOUNT)
+  // ==========================================
+  const handleSend = async () => {
+    setSending(true);
+    setApiError(null);
 
-  try {
-    // ✅ Get WhatsApp account with full details
-    const accountsRes = await whatsappApi.accounts();
-    const accounts = Array.isArray(accountsRes.data) 
-      ? accountsRes.data 
-      : Array.isArray(accountsRes.data?.data) 
-        ? accountsRes.data.data 
-        : [];
+    try {
+      const whatsappAccount = whatsappAccounts.find((a) => a.id === selectedAccountId);
 
-    console.log("🔍 All WhatsApp Accounts:", accounts);
+      if (!whatsappAccount?.id) {
+        throw new Error("Please select a WhatsApp account.");
+      }
 
-    if (!accounts || accounts.length === 0) {
-      throw new Error("No WhatsApp accounts found. Please connect WhatsApp first.");
+      if (!whatsappAccount.phoneNumberId) {
+        throw new Error("Selected WhatsApp account missing phoneNumberId. Please reconnect WhatsApp.");
+      }
+
+      if (!formData.templateId) {
+        throw new Error("Please select a template.");
+      }
+
+      // Determine contact IDs
+      let audienceContactIds: string[] = [];
+
+      if (formData.audienceType === "all") {
+        audienceContactIds = contacts.map((c) => c.id);
+      } else if (formData.audienceType === "tags") {
+        audienceContactIds = contacts
+          .filter((c) => formData.selectedTags.some((tag) => c.tags.includes(tag)))
+          .map((c) => c.id);
+      } else if (formData.audienceType === "manual") {
+        audienceContactIds = formData.selectedContacts;
+      }
+
+      if (audienceContactIds.length === 0) {
+        throw new Error("No recipients selected. Please check your audience filters.");
+      }
+
+      // scheduledAt
+      const scheduledAt =
+        formData.scheduleType === "later"
+          ? new Date(`${formData.scheduledDate}T${formData.scheduledTime}:00`).toISOString()
+          : undefined;
+
+      const payload = {
+        name: formData.name.trim(),
+        description: formData.description?.trim() || undefined,
+        templateId: formData.templateId,
+        contactIds: audienceContactIds,
+
+        // ✅ CRITICAL: consistent account selection
+        whatsappAccountId: whatsappAccount.id,
+        phoneNumberId: whatsappAccount.phoneNumberId,
+
+        audienceFilter:
+          formData.audienceType === "tags"
+            ? { tags: formData.selectedTags }
+            : formData.audienceType === "all"
+              ? { all: true }
+              : undefined,
+        variableMapping:
+          Object.keys(formData.variableMapping).length > 0
+            ? formData.variableMapping
+            : undefined,
+        scheduledAt,
+      };
+
+      console.log("📤 Campaign Payload:", payload);
+
+      await campaignApi.create(payload);
+      navigate("/dashboard/campaigns");
+    } catch (error: any) {
+      console.error("❌ Campaign creation error:", error);
+
+      const errorMessage =
+        error?.response?.data?.message ||
+        error?.response?.data?.error ||
+        error?.message ||
+        "Failed to create campaign";
+
+      setApiError(errorMessage);
+    } finally {
+      setSending(false);
     }
-
-    // Get connected/default account
-    const whatsappAccount = accounts.find((a: any) => 
-      String(a.status || '').toUpperCase() === 'CONNECTED' || 
-      a.isDefault === true
-    ) || accounts[0];
-
-    if (!whatsappAccount?.id) {
-      throw new Error("No valid WhatsApp account found.");
-    }
-
-    console.log("✅ Using WhatsApp Account:", {
-      id: whatsappAccount.id,
-      phoneNumberId: whatsappAccount.phoneNumberId,
-      phoneNumber: whatsappAccount.phoneNumber,
-    });
-
-    // Determine contact IDs
-    let audienceContactIds: string[] = [];
-
-    if (formData.audienceType === "all") {
-      audienceContactIds = contacts.map((c) => c.id);
-    } else if (formData.audienceType === "tags") {
-      audienceContactIds = contacts
-        .filter((c) => formData.selectedTags.some((tag) => c.tags.includes(tag)))
-        .map((c) => c.id);
-    } else if (formData.audienceType === "manual") {
-      audienceContactIds = formData.selectedContacts;
-    }
-
-    if (audienceContactIds.length === 0) {
-      throw new Error("No recipients selected. Please check your audience filters.");
-    }
-
-    // Prepare scheduledAt
-    const scheduledAt =
-      formData.scheduleType === "later"
-        ? new Date(`${formData.scheduledDate}T${formData.scheduledTime}:00`).toISOString()
-        : undefined;
-
-    // ✅ FIXED PAYLOAD - Include both whatsappAccountId AND phoneNumberId
-    const payload = {
-      name: formData.name.trim(),
-      description: formData.description?.trim() || undefined,
-      templateId: formData.templateId,
-      contactIds: audienceContactIds,
-      
-      // ✅ CRITICAL: Both IDs
-      whatsappAccountId: whatsappAccount.id,
-      phoneNumberId: whatsappAccount.phoneNumberId,
-      
-      // ✅ Additional context
-      audienceFilter:
-        formData.audienceType === "tags"
-          ? { tags: formData.selectedTags }
-          : formData.audienceType === "all"
-          ? { all: true }
-          : undefined,
-      variableMapping:
-        Object.keys(formData.variableMapping).length > 0
-          ? formData.variableMapping
-          : undefined,
-      scheduledAt,
-    };
-
-    console.log("📤 Campaign Payload:", JSON.stringify(payload, null, 2));
-
-    const response = await campaignApi.create(payload);
-    console.log("✅ Campaign created:", response.data);
-
-    navigate("/dashboard/campaigns");
-    
-  } catch (error: any) {
-    console.error("❌ Campaign creation error:", error);
-    
-    const errorMessage =
-      error.response?.data?.message ||
-      error.response?.data?.error ||
-      error.message ||
-      "Failed to create campaign";
-    
-    setApiError(errorMessage);
-  } finally {
-    setSending(false);
-  }
-};
+  };
 
   // ==========================================
   // LOADING STATE
   // ==========================================
-  if (loadingData) {
+  if (loadingAccounts || loadingData) {
     return (
       <div className="flex items-center justify-center h-screen bg-gray-50 dark:bg-gray-900">
         <div className="text-center">
           <Loader2 className="w-10 h-10 text-primary-500 animate-spin mx-auto mb-4" />
-          <p className="text-gray-500 dark:text-gray-400">Loading templates and contacts...</p>
+          <p className="text-gray-500 dark:text-gray-400">
+            Loading WhatsApp accounts, templates and contacts...
+          </p>
         </div>
       </div>
     );
@@ -459,8 +464,8 @@ const handleSend = async () => {
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center space-x-4">
-              <Link 
-                to="/dashboard/campaigns" 
+              <Link
+                to="/dashboard/campaigns"
                 className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
               >
                 <ArrowLeft className="w-5 h-5 text-gray-600 dark:text-gray-400" />
@@ -472,7 +477,7 @@ const handleSend = async () => {
                   <span>•</span>
                   <span className="flex items-center text-green-600 dark:text-green-400">
                     <Wifi className="w-3 h-3 mr-1" />
-                    Auto-Connected
+                    Connected
                   </span>
                 </div>
               </div>
@@ -500,8 +505,8 @@ const handleSend = async () => {
               <p className="text-red-700 dark:text-red-300 font-medium">Error</p>
               <p className="text-red-600 dark:text-red-400 text-sm">{apiError}</p>
             </div>
-            <button 
-              onClick={() => setApiError(null)} 
+            <button
+              onClick={() => setApiError(null)}
               className="text-red-400 hover:text-red-600 dark:hover:text-red-300 text-xl"
             >
               ×
@@ -516,28 +521,33 @@ const handleSend = async () => {
               <React.Fragment key={step.number}>
                 <div className="flex items-center">
                   <div
-                    className={`w-10 h-10 rounded-full flex items-center justify-center font-semibold transition-all ${
-                      step.number < currentStep
+                    className={`w-10 h-10 rounded-full flex items-center justify-center font-semibold transition-all ${step.number < currentStep
                         ? "bg-primary-500 text-white"
                         : step.number === currentStep
-                        ? "bg-primary-500 text-white ring-4 ring-primary-100 dark:ring-primary-900"
-                        : "bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400"
-                    }`}
+                          ? "bg-primary-500 text-white ring-4 ring-primary-100 dark:ring-primary-900"
+                          : "bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400"
+                      }`}
                   >
-                    {step.number < currentStep ? <Check className="w-5 h-5" /> : <step.icon className="w-5 h-5" />}
+                    {step.number < currentStep ? (
+                      <Check className="w-5 h-5" />
+                    ) : (
+                      <step.icon className="w-5 h-5" />
+                    )}
                   </div>
                   <span
-                    className={`ml-3 font-medium hidden sm:inline ${
-                      step.number <= currentStep ? "text-gray-900 dark:text-white" : "text-gray-500 dark:text-gray-400"
-                    }`}
+                    className={`ml-3 font-medium hidden sm:inline ${step.number <= currentStep
+                        ? "text-gray-900 dark:text-white"
+                        : "text-gray-500 dark:text-gray-400"
+                      }`}
                   >
                     {step.title}
                   </span>
                 </div>
                 {index < steps.length - 1 && (
-                  <div className={`flex-1 h-1 mx-4 rounded ${
-                    step.number < currentStep ? "bg-primary-500" : "bg-gray-200 dark:bg-gray-700"
-                  }`} />
+                  <div
+                    className={`flex-1 h-1 mx-4 rounded ${step.number < currentStep ? "bg-primary-500" : "bg-gray-200 dark:bg-gray-700"
+                      }`}
+                  />
                 )}
               </React.Fragment>
             ))}
@@ -554,7 +564,28 @@ const handleSend = async () => {
                   Campaign Details
                 </h2>
                 <p className="text-gray-500 dark:text-gray-400">
-                  Name your campaign and select a template
+                  Select WhatsApp account and a template
+                </p>
+              </div>
+
+              {/* ✅ WhatsApp Account Select */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  WhatsApp Account *
+                </label>
+                <select
+                  value={selectedAccountId}
+                  onChange={(e) => setSelectedAccountId(e.target.value)}
+                  className="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                >
+                  {whatsappAccounts.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {(a.displayName || "WhatsApp")} - {(a.phoneNumber || "")} {a.isDefault ? "(Default)" : ""}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  Templates will be filtered for this account.
                 </p>
               </div>
 
@@ -567,8 +598,8 @@ const handleSend = async () => {
                     type="text"
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    placeholder="e.g., Diwali Sale 2024"
-                    className="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500"
+                    placeholder="e.g., Diwali Sale 2026"
+                    className="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none"
                   />
                 </div>
 
@@ -579,9 +610,9 @@ const handleSend = async () => {
                   <textarea
                     value={formData.description}
                     onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                    placeholder="Brief description of this campaign..."
+                    placeholder="Brief description..."
                     rows={2}
-                    className="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 resize-none"
+                    className="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white resize-none"
                   />
                 </div>
               </div>
@@ -590,6 +621,7 @@ const handleSend = async () => {
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   Select Template *
                 </label>
+
                 {templates.length > 0 ? (
                   <TemplateSelector
                     templates={templates}
@@ -600,13 +632,12 @@ const handleSend = async () => {
                 ) : (
                   <div className="text-center py-8 bg-gray-50 dark:bg-gray-900 rounded-xl border border-dashed border-gray-300 dark:border-gray-600">
                     <FileText className="w-10 h-10 text-gray-400 mx-auto mb-2" />
-                    <p className="text-gray-500 dark:text-gray-400">No templates found.</p>
-                    <Link 
-                      to="/dashboard/templates/new" 
-                      className="text-primary-600 hover:underline mt-2 inline-block font-medium"
-                    >
-                      Create Template →
-                    </Link>
+                    <p className="text-gray-500 dark:text-gray-400">
+                      No templates found for this WhatsApp account.
+                    </p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                      Sync templates for this number, or create a new template for this account.
+                    </p>
                   </div>
                 )}
               </div>
@@ -666,17 +697,14 @@ const handleSend = async () => {
                 <VariableMapper
                   variables={selectedTemplate.variables}
                   mapping={formData.variableMapping}
-                  onMappingChange={(mapping) => setFormData({ ...formData, variableMapping: mapping })}
+                  onMappingChange={(mapping) =>
+                    setFormData({ ...formData, variableMapping: mapping })
+                  }
                 />
               ) : (
                 <div className="text-center py-8 bg-green-50 dark:bg-green-900/20 rounded-xl border border-green-200 dark:border-green-800">
                   <Check className="w-10 h-10 text-green-500 dark:text-green-400 mx-auto mb-2" />
-                  <p className="text-green-700 dark:text-green-300 font-medium">
-                    No Variables Required
-                  </p>
-                  <p className="text-green-600 dark:text-green-400 text-sm">
-                    This template has no variables to map.
-                  </p>
+                  <p className="text-green-700 dark:text-green-300 font-medium">No Variables Required</p>
                 </div>
               )}
             </div>
@@ -711,7 +739,7 @@ const handleSend = async () => {
           <button
             onClick={handleBack}
             disabled={currentStep === 1}
-            className="flex items-center space-x-2 px-5 py-2.5 text-gray-700 dark:text-gray-300 font-medium rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="flex items-center space-x-2 px-5 py-2.5 text-gray-700 dark:text-gray-300 font-medium rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-50"
           >
             <ArrowLeft className="w-5 h-5" />
             <span>Back</span>
@@ -721,7 +749,7 @@ const handleSend = async () => {
             <button
               onClick={handleNext}
               disabled={!validateStep(currentStep)}
-              className="flex items-center space-x-2 px-5 py-2.5 bg-primary-500 hover:bg-primary-600 text-white font-medium rounded-xl disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              className="flex items-center space-x-2 px-5 py-2.5 bg-primary-500 hover:bg-primary-600 text-white font-medium rounded-xl disabled:opacity-50"
             >
               <span>Continue</span>
               <ArrowRight className="w-5 h-5" />
@@ -730,7 +758,7 @@ const handleSend = async () => {
             <button
               onClick={handleSend}
               disabled={sending || !validateStep(currentStep)}
-              className="flex items-center space-x-2 px-6 py-2.5 bg-primary-500 hover:bg-primary-600 text-white font-medium rounded-xl disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              className="flex items-center space-x-2 px-6 py-2.5 bg-primary-500 hover:bg-primary-600 text-white font-medium rounded-xl disabled:opacity-50"
             >
               {sending ? (
                 <>
