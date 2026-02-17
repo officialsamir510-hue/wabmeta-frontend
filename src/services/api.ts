@@ -652,30 +652,98 @@ export const dashboard = {
 
 // ---------- ADMIN ----------
 export const admin = {
+  // Auth
   login: (data: { email: string; password: string }) =>
-    api.post<ApiResponse<{ token: string }>>('/admin/login', data),
-  getDashboard: () => api.get<ApiResponse>('/admin/dashboard'),
-  getUsers: (params?: any) => api.get<ApiResponse>('/admin/users', { params }),
-  updateUserStatus: (id: string, status: string) =>
-    api.put<ApiResponse>(`/admin/users/${id}/status`, { status }),
-  deleteUser: (id: string) => api.delete<ApiResponse>(`/admin/users/${id}`),
-  getOrganizations: (params?: any) => api.get<ApiResponse>('/admin/organizations', { params }),
-  getPlans: () => api.get<ApiResponse>('/admin/plans'),
-  createPlan: (data: any) => api.post<ApiResponse>('/admin/plans', data),
-  updatePlan: (id: string, data: any) => api.put<ApiResponse>(`/admin/plans/${id}`, data),
-};
+    api.post<ApiResponse<{ token: string; admin: any }>>('/admin/login', data),
 
-// ---------- HEALTH ----------
-export const health = {
-  check: async (): Promise<boolean> => {
-    try {
-      await api.get('/health');
-      return true;
-    } catch {
-      return false;
-    }
-  },
-  ping: () => api.get('/health'),
+  getProfile: () => api.get<ApiResponse>('/admin/profile'),
+
+  // Dashboard
+  getDashboard: () => api.get<ApiResponse>('/admin/dashboard'),
+
+  // Users Management
+  getUsers: (params?: {
+    search?: string;
+    page?: number;
+    limit?: number;
+    status?: string;
+    sortBy?: string;
+    sortOrder?: string;
+  }) => api.get<ApiResponse>('/admin/users', { params }),
+
+  getUser: (id: string) =>
+    api.get<ApiResponse>(`/admin/users/${id}`),
+
+  updateUser: (id: string, data: any) =>
+    api.put<ApiResponse>(`/admin/users/${id}`, data),
+
+  updateUserStatus: (id: string, status: string) =>
+    api.patch<ApiResponse>(`/admin/users/${id}/status`, { status }),
+
+  suspendUser: (id: string) =>
+    api.post<ApiResponse>(`/admin/users/${id}/suspend`),
+
+  activateUser: (id: string) =>
+    api.post<ApiResponse>(`/admin/users/${id}/activate`),
+
+  deleteUser: (id: string) =>
+    api.delete<ApiResponse>(`/admin/users/${id}`),
+
+  // Organizations
+  getOrganizations: (params?: {
+    search?: string;
+    page?: number;
+    limit?: number;
+    planType?: string;
+    sortBy?: string;
+    sortOrder?: string;
+  }) => api.get<ApiResponse>('/admin/organizations', { params }),
+
+  getOrganization: (id: string) =>
+    api.get<ApiResponse>(`/admin/organizations/${id}`),
+
+  updateOrganization: (id: string, data: any) =>
+    api.put<ApiResponse>(`/admin/organizations/${id}`, data),
+
+  deleteOrganization: (id: string) =>
+    api.delete<ApiResponse>(`/admin/organizations/${id}`),
+
+  updateSubscription: (id: string, data: any) =>
+    api.put<ApiResponse>(`/admin/organizations/${id}/subscription`, data),
+
+  // Plans
+  getPlans: () => api.get<ApiResponse>('/admin/plans'),
+
+  createPlan: (data: any) =>
+    api.post<ApiResponse>('/admin/plans', data),
+
+  updatePlan: (id: string, data: any) =>
+    api.put<ApiResponse>(`/admin/plans/${id}`, data),
+
+  deletePlan: (id: string) =>
+    api.delete<ApiResponse>(`/admin/plans/${id}`),
+
+  // Admin Management
+  getAdmins: () => api.get<ApiResponse>('/admin/admins'),
+
+  createAdmin: (data: any) =>
+    api.post<ApiResponse>('/admin/admins', data),
+
+  updateAdmin: (id: string, data: any) =>
+    api.put<ApiResponse>(`/admin/admins/${id}`, data),
+
+  deleteAdmin: (id: string) =>
+    api.delete<ApiResponse>(`/admin/admins/${id}`),
+
+  // Activity Logs
+  getActivityLogs: (params?: any) =>
+    api.get<ApiResponse>('/admin/activity-logs', { params }),
+
+  // System Settings
+  getSettings: () => api.get<ApiResponse>('/admin/settings'),
+
+  updateSettings: (data: any) =>
+    api.put<ApiResponse>('/admin/settings', data),
 };
 
 // ============================================
