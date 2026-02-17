@@ -9,10 +9,28 @@ function getSystemTheme(): 'light' | 'dark' {
     return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
 }
 
+// Check if a path is a public page that should always be in light mode
+function isPublicPath(pathname: string): boolean {
+    const publicPaths = [
+        '/',
+        '/login',
+        '/signup',
+        '/forgot-password',
+        '/reset-password',
+        '/verify-email',
+        '/verify-otp',
+        '/privacy',
+        '/terms',
+        '/data-deletion'
+    ];
+
+    return publicPaths.includes(pathname) ||
+        pathname.startsWith('/features/') ||
+        pathname.startsWith('/pricing');
+}
+
 export const ThemeProvider: React.FC<React.PropsWithChildren> = ({ children }) => {
     const { pathname } = useLocation();
-    const publicPaths = ['/', '/login', '/signup', '/forgot-password', '/reset-password', '/verify-email', '/verify-otp', '/privacy', '/terms', '/data-deletion'];
-    const isPublicPage = publicPaths.includes(pathname) || pathname.startsWith('/features/') || pathname.startsWith('/pricing');
 
     const [mode, setModeState] = useState<ThemeMode>(() => {
         if (typeof window === 'undefined') return 'system';
@@ -20,47 +38,58 @@ export const ThemeProvider: React.FC<React.PropsWithChildren> = ({ children }) =
         return saved && ['light', 'dark', 'system'].includes(saved) ? saved : 'system';
     });
 
-    const [resolved, setResolved] = useState<'light' | 'dark'>(() => {
-        if (isPublicPage) return 'light';
-        return mode === 'system' ? getSystemTheme() : mode;
-    });
+    const [resolved, setResolved] = useState<'light' | 'dark'>('light');
 
+    // Apply theme whenever pathname or mode changes
     useEffect(() => {
-        const apply = () => {
-            let nextResolved = mode === 'system' ? getSystemTheme() : mode;
+        const isPublic = isPublicPath(pathname);
 
-            // Force light mode for landing, login, and signup pages
-            if (isPublicPage) {
-                nextResolved = 'light';
-            }
+        let nextResolved: 'light' | 'dark';
 
-            setResolved(nextResolved);
+        // Force light mode for public pages
+        if (isPublic) {
+            nextResolved = 'light';
+        } else {
+            nextResolved = mode === 'system' ? getSystemTheme() : mode;
+        }
+
+        setResolved(nextResolved);
+
+        const root = document.documentElement;
+        root.classList.remove('light', 'dark');
+        root.classList.add(nextResolved);
+    }, [pathname, mode]);
+
+    // Listen for system theme changes
+    useEffect(() => {
+        const isPublic = isPublicPath(pathname);
+
+        // Only listen to system theme changes if not on public page and mode is 'system'
+        if (isPublic || mode !== 'system') {
+            return;
+        }
+
+        const mq = window.matchMedia('(prefers-color-scheme: dark)');
+        const handler = () => {
+            const systemTheme = getSystemTheme();
+            setResolved(systemTheme);
 
             const root = document.documentElement;
             root.classList.remove('light', 'dark');
-            root.classList.add(nextResolved);
-        };
-
-        apply();
-
-        // system theme changes
-        const mq = window.matchMedia('(prefers-color-scheme: dark)');
-        const handler = () => {
-            if (mode === 'system') apply();
+            root.classList.add(systemTheme);
         };
 
         mq.addEventListener?.('change', handler);
         return () => mq.removeEventListener?.('change', handler);
-    }, [mode, isPublicPage]);
-
+    }, [pathname, mode]);
 
     const setMode = useCallback((m: ThemeMode) => {
         setModeState(m);
-        if (typeof window !== 'undefined') localStorage.setItem(STORAGE_KEY, m);
+        if (typeof window !== 'undefined') {
+            localStorage.setItem(STORAGE_KEY, m);
+        }
     }, []);
 
-
-    // Real implementation of toggle:
     const handleToggle = useCallback(() => {
         setMode(resolved === 'dark' ? 'light' : 'dark');
     }, [resolved, setMode]);
@@ -74,4 +103,3 @@ export const ThemeProvider: React.FC<React.PropsWithChildren> = ({ children }) =
 
     return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
 };
-
