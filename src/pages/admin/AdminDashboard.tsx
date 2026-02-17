@@ -6,19 +6,17 @@ import {
   Building2,
   MessageSquare,
   CreditCard,
-  TrendingUp,
-  TrendingDown,
   Activity,
   Smartphone,
-  BarChart3,
   ArrowUpRight,
   ArrowDownRight,
-  Loader2,
-  RefreshCw,
-  AlertCircle,
   CheckCircle,
   Clock,
-  Ban
+  Ban,
+  Loader2,
+  AlertCircle,
+  RefreshCw,
+  BarChart3
 } from 'lucide-react';
 import { admin } from '../../services/api';
 import { Link } from 'react-router-dom';

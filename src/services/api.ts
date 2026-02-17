@@ -656,6 +656,9 @@ export const admin = {
     api.post<ApiResponse<{ token: string }>>('/admin/login', data),
   getDashboard: () => api.get<ApiResponse>('/admin/dashboard'),
   getUsers: (params?: any) => api.get<ApiResponse>('/admin/users', { params }),
+  updateUserStatus: (id: string, status: string) =>
+    api.put<ApiResponse>(`/admin/users/${id}/status`, { status }),
+  deleteUser: (id: string) => api.delete<ApiResponse>(`/admin/users/${id}`),
   getOrganizations: (params?: any) => api.get<ApiResponse>('/admin/organizations', { params }),
   getPlans: () => api.get<ApiResponse>('/admin/plans'),
   createPlan: (data: any) => api.post<ApiResponse>('/admin/plans', data),
