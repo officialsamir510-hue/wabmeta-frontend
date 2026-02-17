@@ -17,7 +17,6 @@ import ErrorBoundary from './components/common/ErrorBoundary';
 // Layouts
 import DashboardLayout from './components/dashboard/DashboardLayout';
 import AdminLayout from './components/admin/AdminLayout';
-import AuthLayout from './components/auth/AuthLayout';
 
 // ============================================
 // LAZY LOADED PAGES
@@ -276,14 +275,7 @@ const AppRoutes: React.FC = () => {
         {/* ============================== */}
         {/* AUTH ROUTES */}
         {/* ============================== */}
-        <Route
-          path="/login"
-          element={
-            <AuthLayout title="Welcome back" subtitle="Login to continue">
-              <Login />
-            </AuthLayout>
-          }
-        />
+        <Route path="/login" element={<Login />} />
         <Route
           path="/signup"
           element={<Signup />}

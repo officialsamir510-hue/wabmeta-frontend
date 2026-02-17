@@ -8,6 +8,7 @@ export interface User {
   phone?: string | null;
   avatar?: string | null;
   emailVerified: boolean;
+  role?: 'user' | 'admin' | 'superadmin';
   status?: 'ACTIVE' | 'INACTIVE' | 'SUSPENDED' | 'PENDING_VERIFICATION';
   createdAt: string;
   updatedAt?: string;
