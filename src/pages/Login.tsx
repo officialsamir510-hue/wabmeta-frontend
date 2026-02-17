@@ -1,25 +1,24 @@
+// src/pages/Login.tsx
+
 import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Mail, Lock, ArrowRight, Phone, AlertCircle } from "lucide-react";
+import { Mail, Lock, ArrowRight, AlertCircle } from "lucide-react";
+import AuthLayout from "../components/auth/AuthLayout";
 import Input from "../components/common/Input";
 import Button from "../components/common/Button";
 import Checkbox from "../components/common/Checkbox";
 import SocialLoginButtons from "../components/auth/SocialLoginButtons";
 import { useAuth } from "../context/AuthContext";
 
-type LoginMethod = "email" | "phone";
-
 const Login: React.FC = () => {
   const navigate = useNavigate();
   const { login } = useAuth();
 
-  const [loginMethod, setLoginMethod] = useState<LoginMethod>("email");
   const [loading, setLoading] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
 
   const [formData, setFormData] = useState({
     email: "",
-    phone: "",
     password: "",
   });
 
@@ -29,18 +28,14 @@ const Login: React.FC = () => {
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
 
-    if (loginMethod === "email") {
-      if (!formData.email) newErrors.email = "Email is required";
-      else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
-        newErrors.email = "Please enter a valid email";
-      }
-    } else {
-      newErrors.phone = "Phone login is not supported yet. Please use Email login.";
+    if (!formData.email) {
+      newErrors.email = "Email is required";
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+      newErrors.email = "Please enter a valid email";
     }
 
-    if (!formData.password) newErrors.password = "Password is required";
-    else if (formData.password.length < 8) {
-      newErrors.password = "Password must be at least 8 characters";
+    if (!formData.password) {
+      newErrors.password = "Password is required";
     }
 
     setErrors(newErrors);
@@ -56,114 +51,82 @@ const Login: React.FC = () => {
     setLoading(true);
 
     try {
-      // ✅ IMPORTANT: use AuthProvider login
       await login(formData.email.trim().toLowerCase(), formData.password);
 
-      if (rememberMe) localStorage.setItem("remember_me", "true");
-      else localStorage.removeItem("remember_me");
+      if (rememberMe) {
+        localStorage.setItem("remember_me", "true");
+      } else {
+        localStorage.removeItem("remember_me");
+      }
 
       navigate("/dashboard");
     } catch (error: any) {
       console.error("❌ Login Error:", error);
-      const message =
-        error?.response?.data?.message ||
-        error?.message ||
-        "Login failed. Please check your credentials.";
-      setApiError(message);
+
+      const status = error?.response?.status;
+      const message = error?.response?.data?.message || error?.message;
+
+      if (status === 401) {
+        setApiError("Invalid email or password. Please try again.");
+      } else if (status === 403) {
+        if (message?.toLowerCase().includes("verify")) {
+          setApiError("Please verify your email before logging in.");
+        } else if (message?.toLowerCase().includes("suspend")) {
+          setApiError("Your account has been suspended. Please contact support.");
+        } else {
+          setApiError(message || "Access denied.");
+        }
+      } else if (status === 429) {
+        setApiError("Too many login attempts. Please try again later.");
+      } else {
+        setApiError(message || "Login failed. Please check your credentials.");
+      }
     } finally {
       setLoading(false);
     }
   };
 
+  const updateField = (field: string, value: string) => {
+    setFormData({ ...formData, [field]: value });
+    if (errors[field]) {
+      setErrors({ ...errors, [field]: "" });
+    }
+    if (apiError) {
+      setApiError(null);
+    }
+  };
+
   return (
-    <>
+    <AuthLayout
+      title="Welcome back"
+      subtitle="Sign in to continue to your dashboard"
+    >
       {apiError && (
-        <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl flex items-center space-x-3 text-red-600 animate-fade-in">
-          <AlertCircle className="w-5 h-5 shrink-0" />
+        <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl flex items-start space-x-3 text-red-600 animate-fade-in">
+          <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
           <p className="text-sm font-medium">{apiError}</p>
         </div>
       )}
 
       <form onSubmit={handleSubmit} className="space-y-6">
-        {/* Login Method Toggle */}
-        <div className="flex bg-gray-100 rounded-xl p-1">
-          <button
-            type="button"
-            onClick={() => {
-              setLoginMethod("email");
-              setErrors({});
-              setApiError(null);
-            }}
-            className={`flex-1 flex items-center justify-center space-x-2 py-2.5 rounded-lg font-medium transition-all duration-300 ${loginMethod === "email"
-              ? "bg-white text-gray-900 shadow-sm"
-              : "text-gray-500 hover:text-gray-700"
-              }`}
-          >
-            <Mail className="w-4 h-4" />
-            <span>Email</span>
-          </button>
+        <Input
+          label="Email Address"
+          type="email"
+          placeholder="Enter your email"
+          icon={<Mail className="w-5 h-5" />}
+          value={formData.email}
+          onChange={(e) => updateField("email", e.target.value)}
+          error={errors.email}
+          autoFocus
+        />
 
-          <button
-            type="button"
-            onClick={() => {
-              setLoginMethod("phone");
-              setErrors({});
-              setApiError(null);
-            }}
-            className={`flex-1 flex items-center justify-center space-x-2 py-2.5 rounded-lg font-medium transition-all duration-300 ${loginMethod === "phone"
-              ? "bg-white text-gray-900 shadow-sm"
-              : "text-gray-500 hover:text-gray-700"
-              }`}
-          >
-            <Phone className="w-4 h-4" />
-            <span>Phone</span>
-          </button>
-        </div>
-
-        {/* Email/Phone Input */}
-        {loginMethod === "email" ? (
-          <Input
-            label="Email Address"
-            type="email"
-            placeholder="Enter your email"
-            icon={<Mail className="w-5 h-5" />}
-            value={formData.email}
-            onChange={(e: any) => setFormData({ ...formData, email: e.target.value })}
-            error={errors.email}
-          />
-        ) : (
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Phone Number
-            </label>
-            <div className="flex">
-              <div className="flex items-center px-4 bg-gray-100 border border-r-0 border-gray-200 rounded-l-xl">
-                <span className="text-gray-600 font-medium">+91</span>
-              </div>
-              <input
-                type="tel"
-                placeholder="Phone login not supported yet"
-                value={formData.phone}
-                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                className={`flex-1 px-4 py-3.5 border rounded-r-xl transition-all duration-300 focus:outline-none focus:ring-2 ${errors.phone
-                  ? "border-red-300 focus:border-red-500 focus:ring-red-500/20"
-                  : "border-gray-200 focus:border-primary-500 focus:ring-primary-500/20"
-                  }`}
-                disabled
-              />
-            </div>
-            {errors.phone && <p className="mt-2 text-sm text-red-600">{errors.phone}</p>}
-          </div>
-        )}
-
-        {/* Password */}
         <Input
           label="Password"
           type="password"
           placeholder="Enter your password"
           icon={<Lock className="w-5 h-5" />}
           value={formData.password}
-          onChange={(e: any) => setFormData({ ...formData, password: e.target.value })}
+          onChange={(e) => updateField("password", e.target.value)}
           error={errors.password}
         />
 
@@ -201,9 +164,7 @@ const Login: React.FC = () => {
           </div>
         </div>
 
-        <SocialLoginButtons
-          loading={loading}
-        />
+        <SocialLoginButtons loading={loading} />
 
         <p className="text-center text-gray-600">
           Don't have an account?{" "}
@@ -215,7 +176,7 @@ const Login: React.FC = () => {
           </Link>
         </p>
       </form>
-    </>
+    </AuthLayout>
   );
 };
 

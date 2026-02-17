@@ -1,3 +1,5 @@
+// src/context/AuthProvider.tsx
+
 import React, { useState, useEffect, type ReactNode, useCallback } from "react";
 import { auth, organizations } from "../services/api";
 import { AuthContext, type AuthContextType } from "./AuthContext";
@@ -7,28 +9,20 @@ interface AuthProviderProps {
     children: ReactNode;
 }
 
-type LoginResponseData = any;
-
-const extractAccessToken = (data: LoginResponseData): string | null => {
-    return data?.accessToken || data?.tokens?.accessToken || data?.tokens?.access_token || null;
-};
-
-const extractRefreshToken = (data: LoginResponseData): string | null => {
-    return data?.refreshToken || data?.tokens?.refreshToken || data?.tokens?.refresh_token || null;
-};
-
-const extractUser = (data: LoginResponseData): any => {
-    return data?.user || data?.profile || null;
-};
-
-const extractOrg = (data: LoginResponseData): any => {
-    return data?.organization || data?.org || data?.currentOrganization || null;
+const TOKEN_KEYS = {
+    ACCESS: 'accessToken',
+    REFRESH: 'refreshToken',
+    USER: 'wabmeta_user',
+    ORG: 'wabmeta_org',
+    ORG_ID: 'currentOrganizationId',
+    LEGACY_TOKEN: 'token',
+    LEGACY_WABMETA: 'wabmeta_token',
 };
 
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     const [user, setUser] = useState<User | null>(() => {
         try {
-            const u = localStorage.getItem("wabmeta_user");
+            const u = localStorage.getItem(TOKEN_KEYS.USER);
             return u ? (JSON.parse(u) as User) : null;
         } catch {
             return null;
@@ -37,45 +31,46 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
     const [isLoading, setIsLoading] = useState(true);
 
-    const hasAccessToken = () => {
+    const hasAccessToken = useCallback(() => {
         const t =
-            localStorage.getItem("accessToken") ||
-            localStorage.getItem("token") ||
-            localStorage.getItem("wabmeta_token");
+            localStorage.getItem(TOKEN_KEYS.ACCESS) ||
+            localStorage.getItem(TOKEN_KEYS.LEGACY_TOKEN) ||
+            localStorage.getItem(TOKEN_KEYS.LEGACY_WABMETA);
         return !!t;
-    };
+    }, []);
 
-    const storeTokens = (accessToken: string, refreshToken?: string | null) => {
-        localStorage.setItem("accessToken", accessToken);
-        localStorage.setItem("token", accessToken);
-        localStorage.setItem("wabmeta_token", accessToken);
+    const storeTokens = useCallback((accessToken: string, refreshToken?: string | null) => {
+        localStorage.setItem(TOKEN_KEYS.ACCESS, accessToken);
+        localStorage.setItem(TOKEN_KEYS.LEGACY_TOKEN, accessToken);
+        localStorage.setItem(TOKEN_KEYS.LEGACY_WABMETA, accessToken);
 
         if (refreshToken) {
-            localStorage.setItem("refreshToken", refreshToken);
+            localStorage.setItem(TOKEN_KEYS.REFRESH, refreshToken);
         }
-    };
+    }, []);
 
-    const storeUser = (u: any) => {
-        if (!u) return;
-        localStorage.setItem("wabmeta_user", JSON.stringify(u));
-        setUser(u as User);
-    };
+    const storeUser = useCallback((u: User | null) => {
+        if (!u) {
+            localStorage.removeItem(TOKEN_KEYS.USER);
+            setUser(null);
+            return;
+        }
+        localStorage.setItem(TOKEN_KEYS.USER, JSON.stringify(u));
+        setUser(u);
+    }, []);
 
-    const storeOrg = (org: any) => {
+    const storeOrg = useCallback((org: any) => {
         if (!org?.id) return;
-        localStorage.setItem("wabmeta_org", JSON.stringify(org));
-        localStorage.setItem("currentOrganizationId", org.id);
-    };
+        localStorage.setItem(TOKEN_KEYS.ORG, JSON.stringify(org));
+        localStorage.setItem(TOKEN_KEYS.ORG_ID, org.id);
+    }, []);
 
-    const clearAuthStorage = () => {
-        localStorage.removeItem("accessToken");
-        localStorage.removeItem("token");
-        localStorage.removeItem("wabmeta_token");
-        localStorage.removeItem("refreshToken");
-        localStorage.removeItem("wabmeta_user");
-        localStorage.removeItem("wabmeta_org");
-        localStorage.removeItem("currentOrganizationId");
-    };
+    const clearAuthStorage = useCallback(() => {
+        Object.values(TOKEN_KEYS).forEach(key => {
+            localStorage.removeItem(key);
+        });
+        setUser(null);
+    }, []);
 
     const checkAuth = useCallback(async () => {
         try {
@@ -85,20 +80,23 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             }
 
             const response = await auth.me();
+
             if (response.data?.success && response.data?.data) {
-                storeUser(response.data.data);
+                storeUser(response.data.data as User);
             } else {
                 clearAuthStorage();
-                setUser(null);
             }
-        } catch (error) {
+        } catch (error: any) {
             console.error("Auth check failed:", error);
-            clearAuthStorage();
-            setUser(null);
+
+            // Only clear if it's a 401 error
+            if (error?.response?.status === 401) {
+                clearAuthStorage();
+            }
         } finally {
             setIsLoading(false);
         }
-    }, []);
+    }, [hasAccessToken, storeUser, clearAuthStorage]);
 
     useEffect(() => {
         checkAuth();
@@ -113,10 +111,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
         const data = response.data.data;
 
-        const accessToken = extractAccessToken(data);
-        const refreshToken = extractRefreshToken(data);
-        const userData = extractUser(data);
-        const org = extractOrg(data);
+        const accessToken = data?.tokens?.accessToken;
+        const refreshToken = data?.tokens?.refreshToken;
+        const userData = data?.user;
+        const org = data?.organization;
 
         if (!accessToken) {
             throw new Error("Access token missing from login response");
@@ -124,10 +122,15 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
         storeTokens(accessToken, refreshToken);
 
-        if (userData) storeUser(userData);
-        if (org?.id) storeOrg(org);
+        if (userData) {
+            storeUser(userData as User);
+        }
 
-        // fallback: get current org if not returned
+        if (org?.id) {
+            storeOrg(org);
+        }
+
+        // Fallback: get current org if not returned
         if (!org?.id) {
             try {
                 const orgRes = await organizations.getCurrent();
@@ -135,11 +138,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
                     storeOrg(orgRes.data.data);
                 }
             } catch {
-                // ignore
+                // ignore - org is optional
             }
         }
 
-        // fallback: get user if not returned
+        // Fallback: get user if not returned
         if (!userData) {
             await refreshUser();
         }
@@ -152,7 +155,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             console.error("Logout error:", error);
         } finally {
             clearAuthStorage();
-            setUser(null);
         }
     };
 
@@ -160,7 +162,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         try {
             const response = await auth.me();
             if (response.data?.success && response.data?.data) {
-                storeUser(response.data.data);
+                storeUser(response.data.data as User);
             }
         } catch (error) {
             console.error("Refresh user failed:", error);
