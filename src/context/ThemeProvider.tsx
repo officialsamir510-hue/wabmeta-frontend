@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState, useCallback } from 'react';
+import { useLocation } from 'react-router-dom';
 import { ThemeContext, type ThemeMode, type ThemeContextValue } from './ThemeContext';
 
 const STORAGE_KEY = 'wabmeta_theme_mode';
@@ -9,6 +10,10 @@ function getSystemTheme(): 'light' | 'dark' {
 }
 
 export const ThemeProvider: React.FC<React.PropsWithChildren> = ({ children }) => {
+    const { pathname } = useLocation();
+    const publicPaths = ['/', '/login', '/signup', '/forgot-password', '/reset-password', '/verify-email', '/verify-otp', '/privacy', '/terms', '/data-deletion'];
+    const isPublicPage = publicPaths.includes(pathname) || pathname.startsWith('/features/') || pathname.startsWith('/pricing');
+
     const [mode, setModeState] = useState<ThemeMode>(() => {
         if (typeof window === 'undefined') return 'system';
         const saved = localStorage.getItem(STORAGE_KEY) as ThemeMode | null;
@@ -16,12 +21,19 @@ export const ThemeProvider: React.FC<React.PropsWithChildren> = ({ children }) =
     });
 
     const [resolved, setResolved] = useState<'light' | 'dark'>(() => {
+        if (isPublicPage) return 'light';
         return mode === 'system' ? getSystemTheme() : mode;
     });
 
     useEffect(() => {
         const apply = () => {
-            const nextResolved = mode === 'system' ? getSystemTheme() : mode;
+            let nextResolved = mode === 'system' ? getSystemTheme() : mode;
+
+            // Force light mode for landing, login, and signup pages
+            if (isPublicPage) {
+                nextResolved = 'light';
+            }
+
             setResolved(nextResolved);
 
             const root = document.documentElement;
@@ -39,7 +51,8 @@ export const ThemeProvider: React.FC<React.PropsWithChildren> = ({ children }) =
 
         mq.addEventListener?.('change', handler);
         return () => mq.removeEventListener?.('change', handler);
-    }, [mode]);
+    }, [mode, isPublicPage]);
+
 
     const setMode = useCallback((m: ThemeMode) => {
         setModeState(m);
@@ -61,3 +74,4 @@ export const ThemeProvider: React.FC<React.PropsWithChildren> = ({ children }) =
 
     return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
 };
+
