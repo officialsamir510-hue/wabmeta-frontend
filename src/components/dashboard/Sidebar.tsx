@@ -94,10 +94,10 @@ const prefetchRouteChunk = (href: string) => {
 // helper
 const getDisplayName = (u: User | null): string => {
   if (!u) return "Guest";
-  // @ts-ignore - legacy support for firstName/lastName if not in User type yet, or just name
   const full = [u.firstName, u.lastName].filter(Boolean).join(" ").trim();
   if (full) return full;
-  if (u.name && u.name.trim()) return u.name.trim();
+  const legacyName = (u as any).name;
+  if (legacyName && legacyName.trim()) return legacyName.trim();
   if (u.email && u.email.trim()) return u.email.trim();
   return "User";
 };

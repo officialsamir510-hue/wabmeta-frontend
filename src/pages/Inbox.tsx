@@ -15,16 +15,22 @@ import {
   Loader2,
   MessageSquare,
   AlertCircle,
-  Users
+  RefreshCw,
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { useSocket } from '../context/SocketContext';
 import { inbox as inboxApi, whatsapp as whatsappApi } from '../services/api';
 import toast from 'react-hot-toast';
 
+// ============================================
+// TYPES
+// ============================================
+
 interface Contact {
   id: string;
   name?: string;
+  firstName?: string;
+  lastName?: string;
   phone: string;
   avatar?: string;
   lastSeen?: string;
@@ -33,11 +39,14 @@ interface Contact {
 interface Message {
   id: string;
   content: string;
-  type: 'TEXT' | 'IMAGE' | 'VIDEO' | 'AUDIO' | 'DOCUMENT';
+  type: 'TEXT' | 'IMAGE' | 'VIDEO' | 'AUDIO' | 'DOCUMENT' | 'TEMPLATE';
   direction: 'INBOUND' | 'OUTBOUND';
   status?: 'PENDING' | 'SENT' | 'DELIVERED' | 'READ' | 'FAILED';
   createdAt: string;
+  sentAt?: string;
   mediaUrl?: string;
+  templateId?: string;
+  metadata?: any;
 }
 
 interface Conversation {
@@ -47,8 +56,15 @@ interface Conversation {
   lastMessagePreview?: string;
   unreadCount: number;
   isArchived: boolean;
+  isRead?: boolean;
+  isWindowOpen?: boolean;
   labels?: string[];
+  assignedTo?: string;
 }
+
+// ============================================
+// INBOX COMPONENT
+// ============================================
 
 const Inbox: React.FC = () => {
   const { conversationId } = useParams();
@@ -56,6 +72,7 @@ const Inbox: React.FC = () => {
   const { socket, isConnected } = useSocket();
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  // State
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
   const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
@@ -65,62 +82,158 @@ const Inbox: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [messageText, setMessageText] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [filter, setFilter] = useState<'all' | 'unread' | 'archived'>('all');
 
-  // Auto-scroll to bottom
+  // ============================================
+  // HELPERS
+  // ============================================
+
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
+  const getContactName = (contact: Contact): string => {
+    if (contact.name) return contact.name;
+    if (contact.firstName || contact.lastName) {
+      return [contact.firstName, contact.lastName].filter(Boolean).join(' ');
+    }
+    return contact.phone;
+  };
 
-  // Fetch conversations
+  const getContactInitial = (contact: Contact): string => {
+    const name = getContactName(contact);
+    return name.charAt(0).toUpperCase();
+  };
+
+  const parseMessageContent = (message: Message): string => {
+    // Handle template messages
+    if (message.type === 'TEMPLATE' && message.content) {
+      try {
+        const parsed = JSON.parse(message.content);
+        return `📋 Template: ${parsed.templateName || 'Unknown'}`;
+      } catch {
+        return message.content;
+      }
+    }
+    return message.content || '';
+  };
+
+  // ============================================
+  // FETCH CONVERSATIONS - ✅ FIXED
+  // ============================================
   const fetchConversations = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
 
-      const response = await inboxApi.getConversations({
+      const params: any = {
         search: searchQuery || undefined,
-        limit: 50
-      });
+        limit: 50,
+      };
+
+      // Apply filters
+      if (filter === 'unread') {
+        params.isRead = false;
+      } else if (filter === 'archived') {
+        params.isArchived = true;
+      } else {
+        params.isArchived = false;
+      }
+
+      const response = await inboxApi.getConversations(params);
+
+      console.log('🔍 API Response:', response.data);
 
       if (response.data.success) {
-        const conversationsData = Array.isArray(response.data.data)
-          ? response.data.data
-          : [];
-        setConversations(conversationsData);
+        // ✅ FIX: Backend returns { success: true, data: [...], meta: {...} }
+        // Handle multiple possible response structures
+        let conversationsData: Conversation[] = [];
+
+        if (Array.isArray(response.data.data)) {
+          // Direct array: { data: [...] }
+          conversationsData = response.data.data;
+        } else if (response.data.data?.conversations) {
+          // Nested: { data: { conversations: [...] } }
+          conversationsData = response.data.data.conversations;
+        } else if ((response.data as any).conversations && Array.isArray((response.data as any).conversations)) {
+          // Alternative: { conversations: [...] }
+          conversationsData = (response.data as any).conversations;
+        }
+
+        // Validate and set conversations
+        const validConversations = conversationsData.filter(
+          (conv) => conv && conv.id && conv.contact
+        );
+
+        setConversations(validConversations);
+        console.log(`✅ Loaded ${validConversations.length} conversations`);
+
+        // If we have a conversationId in URL, select it
+        if (conversationId && validConversations.length > 0) {
+          const conv = validConversations.find((c) => c.id === conversationId);
+          if (conv) {
+            setSelectedConversation(conv);
+          }
+        }
       } else {
         throw new Error(response.data.message || 'Failed to load conversations');
       }
     } catch (error: any) {
       console.error('❌ Fetch conversations error:', error);
-      setError(error.message || 'Failed to load conversations');
+      setError(error.response?.data?.message || error.message || 'Failed to load conversations');
       setConversations([]);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
-  }, [searchQuery]);
+  }, [searchQuery, filter, conversationId]);
 
-  // Fetch messages for selected conversation
+  // ============================================
+  // FETCH MESSAGES
+  // ============================================
   const fetchMessages = useCallback(async (convId: string) => {
     try {
       setLoadingMessages(true);
 
       const response = await inboxApi.getMessages(convId, {
-        limit: 100
+        limit: 100,
       });
 
+      console.log('🔍 Messages Response:', response.data);
+
       if (response.data.success) {
-        const messagesData = Array.isArray(response.data.data)
-          ? response.data.data
-          : [];
+        // Handle multiple response structures
+        let messagesData: Message[] = [];
+
+        if (Array.isArray(response.data.data)) {
+          messagesData = response.data.data;
+        } else if (response.data.data?.messages) {
+          messagesData = response.data.data.messages;
+        } else if (Array.isArray((response.data as any).messages)) {
+          messagesData = (response.data as any).messages;
+        }
+
+        // Sort by date (oldest first)
+        messagesData.sort(
+          (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+        );
+
         setMessages(messagesData);
-        scrollToBottom();
+        console.log(`✅ Loaded ${messagesData.length} messages`);
+
+        // Scroll to bottom after messages load
+        setTimeout(scrollToBottom, 100);
 
         // Mark as read
         await inboxApi.markAsRead(convId).catch(console.error);
+
+        // Update unread count in conversations list
+        setConversations((prev) =>
+          prev.map((conv) =>
+            conv.id === convId ? { ...conv, unreadCount: 0, isRead: true } : conv
+          )
+        );
       }
     } catch (error: any) {
       console.error('❌ Fetch messages error:', error);
@@ -131,7 +244,9 @@ const Inbox: React.FC = () => {
     }
   }, []);
 
-  // ✅ Send Message Implementation
+  // ============================================
+  // SEND MESSAGE
+  // ============================================
   const handleSendMessage = async () => {
     if (!messageText.trim() || !selectedConversation) return;
 
@@ -142,11 +257,12 @@ const Inbox: React.FC = () => {
       type: 'TEXT',
       direction: 'OUTBOUND',
       status: 'PENDING',
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
     };
 
     // Optimistic UI Update
-    setMessages(prev => [...prev, tempMessage]);
+    setMessages((prev) => [...prev, tempMessage]);
+    const sentText = messageText;
     setMessageText('');
     setSending(true);
     scrollToBottom();
@@ -154,80 +270,109 @@ const Inbox: React.FC = () => {
     try {
       // Get Default WhatsApp Account
       const accountsRes = await whatsappApi.accounts();
-      const accountId = accountsRes.data?.data?.[0]?.id;
+      const accounts = accountsRes.data?.data || [];
+      const connectedAccount = accounts.find((a: any) => a.status === 'CONNECTED');
+      const accountId = connectedAccount?.id || accounts[0]?.id;
 
       if (!accountId) {
-        throw new Error('No WhatsApp account connected. Please connect in Settings.');
+        throw new Error('No WhatsApp account connected. Please connect in Settings → WhatsApp.');
       }
 
       // Send API Call
       const response = await whatsappApi.sendText({
         whatsappAccountId: accountId,
         to: selectedConversation.contact.phone,
-        message: tempMessage.content
+        message: sentText,
       });
 
       if (response.data.success) {
         // Update temp message with real data
-        setMessages(prev =>
-          prev.map(msg =>
+        const realMessage = response.data.data;
+        setMessages((prev) =>
+          prev.map((msg) =>
             msg.id === tempId
-              ? { ...response.data.data, status: 'SENT' }
+              ? {
+                ...realMessage,
+                id: realMessage.id || tempId,
+                status: 'SENT',
+                content: sentText,
+              }
               : msg
           )
         );
 
         // Update conversation preview
-        setConversations(prev =>
-          prev.map(conv =>
+        setConversations((prev) =>
+          prev.map((conv) =>
             conv.id === selectedConversation.id
               ? {
                 ...conv,
-                lastMessagePreview: tempMessage.content,
-                lastMessageAt: new Date().toISOString()
+                lastMessagePreview: sentText,
+                lastMessageAt: new Date().toISOString(),
               }
               : conv
           )
         );
+
+        toast.success('Message sent!');
+      } else {
+        throw new Error(response.data.message || 'Failed to send message');
       }
     } catch (error: any) {
       console.error('❌ Send message error:', error);
-      toast.error(error.message || 'Failed to send message');
+      toast.error(error.response?.data?.message || error.message || 'Failed to send message');
 
       // Mark as failed
-      setMessages(prev =>
-        prev.map(msg =>
-          msg.id === tempId
-            ? { ...msg, status: 'FAILED' }
-            : msg
-        )
+      setMessages((prev) =>
+        prev.map((msg) => (msg.id === tempId ? { ...msg, status: 'FAILED' } : msg))
       );
     } finally {
       setSending(false);
     }
   };
 
-  // Socket listeners
+  // ============================================
+  // REFRESH
+  // ============================================
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await fetchConversations();
+    if (selectedConversation) {
+      await fetchMessages(selectedConversation.id);
+    }
+  };
+
+  // ============================================
+  // SOCKET LISTENERS
+  // ============================================
   useEffect(() => {
     if (!socket || !isConnected) return;
 
     const handleNewMessage = (data: any) => {
-      console.log('📨 New message:', data);
+      console.log('📨 New message received:', data);
 
+      // If this message is for the selected conversation, add it
       if (selectedConversation?.id === data.conversationId) {
-        setMessages(prev => [...prev, data.message]);
+        setMessages((prev) => {
+          // Check for duplicate
+          if (prev.some((m) => m.id === data.message?.id || m.id === data.id)) {
+            return prev;
+          }
+          return [...prev, data.message || data];
+        });
         scrollToBottom();
       }
 
+      // Refresh conversations list
       fetchConversations();
     };
 
     const handleMessageStatus = (data: any) => {
       console.log('📊 Message status update:', data);
 
-      setMessages(prev =>
-        prev.map(msg =>
-          msg.id === data.messageId
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === data.messageId || msg.id === data.waMessageId
             ? { ...msg, status: data.status }
             : msg
         )
@@ -236,12 +381,25 @@ const Inbox: React.FC = () => {
 
     socket.on('message:new', handleNewMessage);
     socket.on('message:status', handleMessageStatus);
+    socket.on('newMessage', handleNewMessage);
+    socket.on('messageStatus', handleMessageStatus);
 
     return () => {
       socket.off('message:new', handleNewMessage);
       socket.off('message:status', handleMessageStatus);
+      socket.off('newMessage', handleNewMessage);
+      socket.off('messageStatus', handleMessageStatus);
     };
   }, [socket, isConnected, selectedConversation, fetchConversations]);
+
+  // ============================================
+  // EFFECTS
+  // ============================================
+
+  // Auto-scroll on new messages
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
 
   // Initial load
   useEffect(() => {
@@ -251,7 +409,7 @@ const Inbox: React.FC = () => {
   // Load conversation from URL
   useEffect(() => {
     if (conversationId && conversations.length > 0) {
-      const conv = conversations.find(c => c.id === conversationId);
+      const conv = conversations.find((c) => c.id === conversationId);
       if (conv) {
         setSelectedConversation(conv);
         fetchMessages(conversationId);
@@ -259,43 +417,77 @@ const Inbox: React.FC = () => {
     }
   }, [conversationId, conversations, fetchMessages]);
 
+  // ============================================
+  // SELECT CONVERSATION
+  // ============================================
   const selectConversation = (conv: Conversation) => {
     setSelectedConversation(conv);
     navigate(`/dashboard/inbox/${conv.id}`);
     fetchMessages(conv.id);
   };
 
-  if (loading) {
+  // ============================================
+  // RENDER: LOADING STATE
+  // ============================================
+  if (loading && conversations.length === 0) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <Loader2 className="w-8 h-8 animate-spin text-green-600" />
+      <div className="flex items-center justify-center h-full bg-gray-50 dark:bg-gray-900">
+        <div className="text-center">
+          <Loader2 className="w-10 h-10 animate-spin text-green-600 mx-auto mb-4" />
+          <p className="text-gray-600 dark:text-gray-400">Loading conversations...</p>
+        </div>
       </div>
     );
   }
 
-  if (error) {
+  // ============================================
+  // RENDER: ERROR STATE
+  // ============================================
+  if (error && conversations.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center h-full">
-        <AlertCircle className="w-12 h-12 text-red-500 mb-4" />
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+      <div className="flex flex-col items-center justify-center h-full bg-gray-50 dark:bg-gray-900">
+        <AlertCircle className="w-16 h-16 text-red-500 mb-4" />
+        <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
           Failed to Load Inbox
         </h3>
-        <p className="text-gray-600 dark:text-gray-400 mb-4">{error}</p>
+        <p className="text-gray-600 dark:text-gray-400 mb-6 text-center max-w-md">{error}</p>
         <button
           onClick={fetchConversations}
-          className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+          className="flex items-center gap-2 px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
         >
-          Retry
+          <RefreshCw className="w-5 h-5" />
+          Try Again
         </button>
       </div>
     );
   }
 
+  // ============================================
+  // RENDER: MAIN UI
+  // ============================================
   return (
     <div className="flex h-[calc(100vh-4rem)] bg-gray-50 dark:bg-gray-900">
-      {/* Conversations List */}
+      {/* ============================================ */}
+      {/* LEFT SIDEBAR: CONVERSATIONS LIST */}
+      {/* ============================================ */}
       <div className="w-80 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col">
+        {/* Search Header */}
         <div className="p-4 border-b border-gray-200 dark:border-gray-700">
+          <div className="flex items-center gap-2 mb-3">
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white flex-1">Inbox</h2>
+            <button
+              onClick={handleRefresh}
+              disabled={refreshing}
+              className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+              title="Refresh"
+            >
+              <RefreshCw
+                className={`w-5 h-5 text-gray-500 ${refreshing ? 'animate-spin' : ''}`}
+              />
+            </button>
+          </div>
+
+          {/* Search Input */}
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
             <input
@@ -303,116 +495,177 @@ const Inbox: React.FC = () => {
               placeholder="Search conversations..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 bg-gray-100 dark:bg-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+              className="w-full pl-10 pr-4 py-2 bg-gray-100 dark:bg-gray-700 border-none rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 text-gray-900 dark:text-white placeholder-gray-500"
             />
+          </div>
+
+          {/* Filter Tabs */}
+          <div className="flex gap-1 mt-3">
+            {(['all', 'unread', 'archived'] as const).map((f) => (
+              <button
+                key={f}
+                onClick={() => setFilter(f)}
+                className={`flex-1 px-3 py-1.5 text-sm rounded-lg transition-colors capitalize ${filter === f
+                  ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 font-medium'
+                  : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
+                  }`}
+              >
+                {f}
+              </button>
+            ))}
           </div>
         </div>
 
+        {/* Conversations List */}
         <div className="flex-1 overflow-y-auto">
           {conversations.length > 0 ? (
             conversations.map((conv) => (
               <div
                 key={conv.id}
                 onClick={() => selectConversation(conv)}
-                className={`flex items-center gap-3 px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer transition-colors ${selectedConversation?.id === conv.id
-                  ? 'bg-green-50 dark:bg-green-900/20 border-l-4 border-green-500'
+                className={`flex items-center gap-3 px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer transition-colors border-b border-gray-100 dark:border-gray-700/50 ${selectedConversation?.id === conv.id
+                  ? 'bg-green-50 dark:bg-green-900/20 border-l-4 border-l-green-500'
                   : ''
-                  }`}
+                  } ${!conv.isRead && conv.unreadCount > 0 ? 'bg-blue-50/50 dark:bg-blue-900/10' : ''}`}
               >
-                <div className="relative">
-                  <div className="w-12 h-12 bg-gray-300 dark:bg-gray-600 rounded-full flex items-center justify-center">
+                {/* Avatar */}
+                <div className="relative flex-shrink-0">
+                  <div className="w-12 h-12 bg-gradient-to-br from-green-400 to-green-600 rounded-full flex items-center justify-center text-white font-semibold text-lg">
                     {conv.contact.avatar ? (
                       <img
                         src={conv.contact.avatar}
-                        alt={conv.contact.name || conv.contact.phone}
-                        className="w-full h-full rounded-full"
+                        alt={getContactName(conv.contact)}
+                        className="w-full h-full rounded-full object-cover"
                       />
                     ) : (
-                      <Users className="w-6 h-6 text-gray-500" />
+                      getContactInitial(conv.contact)
                     )}
                   </div>
                   {conv.unreadCount > 0 && (
-                    <div className="absolute -top-1 -right-1 w-5 h-5 bg-green-500 text-white text-xs rounded-full flex items-center justify-center">
-                      {conv.unreadCount}
+                    <div className="absolute -top-1 -right-1 w-5 h-5 bg-green-500 text-white text-xs rounded-full flex items-center justify-center font-medium shadow-sm">
+                      {conv.unreadCount > 9 ? '9+' : conv.unreadCount}
                     </div>
                   )}
                 </div>
 
+                {/* Content */}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between">
-                    <h3 className="font-medium text-gray-900 dark:text-white truncate">
-                      {conv.contact.name || conv.contact.phone}
+                    <h3
+                      className={`font-medium truncate ${conv.unreadCount > 0
+                        ? 'text-gray-900 dark:text-white'
+                        : 'text-gray-700 dark:text-gray-300'
+                        }`}
+                    >
+                      {getContactName(conv.contact)}
                     </h3>
-                    <span className="text-xs text-gray-500 dark:text-gray-400">
-                      {formatDistanceToNow(new Date(conv.lastMessageAt), { addSuffix: true })}
+                    <span className="text-xs text-gray-500 dark:text-gray-400 flex-shrink-0 ml-2">
+                      {formatDistanceToNow(new Date(conv.lastMessageAt), { addSuffix: false })}
                     </span>
                   </div>
-                  <p className="text-sm text-gray-600 dark:text-gray-400 truncate">
-                    {conv.lastMessagePreview || 'No messages'}
+                  <p
+                    className={`text-sm truncate ${conv.unreadCount > 0
+                      ? 'text-gray-700 dark:text-gray-300 font-medium'
+                      : 'text-gray-500 dark:text-gray-400'
+                      }`}
+                  >
+                    {conv.lastMessagePreview || 'No messages yet'}
                   </p>
                 </div>
               </div>
             ))
           ) : (
-            <div className="flex flex-col items-center justify-center h-64 text-gray-500">
-              <MessageSquare className="w-12 h-12 mb-2" />
-              <p>No conversations</p>
+            <div className="flex flex-col items-center justify-center h-64 text-gray-500 dark:text-gray-400">
+              <MessageSquare className="w-16 h-16 mb-4 opacity-50" />
+              <p className="text-lg font-medium">No conversations</p>
+              <p className="text-sm mt-1">
+                {filter === 'unread'
+                  ? 'No unread messages'
+                  : filter === 'archived'
+                    ? 'No archived conversations'
+                    : 'Start a campaign to see conversations'}
+              </p>
             </div>
           )}
         </div>
       </div>
 
-      {/* Chat Area */}
+      {/* ============================================ */}
+      {/* RIGHT SIDE: CHAT AREA */}
+      {/* ============================================ */}
       <div className="flex-1 flex flex-col h-full overflow-hidden">
         {selectedConversation ? (
           <>
-            {/* Header */}
+            {/* Chat Header */}
             <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-4 flex-shrink-0">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-gray-300 dark:bg-gray-600 rounded-full flex items-center justify-center">
+                  <div className="w-10 h-10 bg-gradient-to-br from-green-400 to-green-600 rounded-full flex items-center justify-center text-white font-semibold">
                     {selectedConversation.contact.avatar ? (
                       <img
                         src={selectedConversation.contact.avatar}
-                        alt={selectedConversation.contact.name}
-                        className="w-full h-full rounded-full"
+                        alt={getContactName(selectedConversation.contact)}
+                        className="w-full h-full rounded-full object-cover"
                       />
                     ) : (
-                      <Users className="w-5 h-5 text-gray-500" />
+                      getContactInitial(selectedConversation.contact)
                     )}
                   </div>
                   <div>
                     <h2 className="font-semibold text-gray-900 dark:text-white">
-                      {selectedConversation.contact.name || selectedConversation.contact.phone}
+                      {getContactName(selectedConversation.contact)}
                     </h2>
                     <p className="text-xs text-gray-500 dark:text-gray-400">
                       {selectedConversation.contact.phone}
+                      {selectedConversation.isWindowOpen && (
+                        <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">
+                          Window Open
+                        </span>
+                      )}
                     </p>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2">
-                  <button className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">
+                <div className="flex items-center gap-1">
+                  <button
+                    className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                    title="Call"
+                  >
                     <Phone className="w-5 h-5 text-gray-600 dark:text-gray-400" />
                   </button>
-                  <button className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">
+                  <button
+                    className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                    title="Video"
+                  >
                     <Video className="w-5 h-5 text-gray-600 dark:text-gray-400" />
                   </button>
-                  <button className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">
+                  <button
+                    className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                    title="Info"
+                  >
                     <Info className="w-5 h-5 text-gray-600 dark:text-gray-400" />
                   </button>
-                  <button className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">
+                  <button
+                    className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                    title="More"
+                  >
                     <MoreVertical className="w-5 h-5 text-gray-600 dark:text-gray-400" />
                   </button>
                 </div>
               </div>
             </div>
 
-            {/* Messages */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-[#efe7dd] dark:bg-gray-900/50">
+            {/* Messages Area */}
+            <div
+              className="flex-1 overflow-y-auto p-4 space-y-3"
+              style={{
+                backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%239C92AC' fill-opacity='0.05'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`,
+                backgroundColor: '#efe7dd',
+              }}
+            >
               {loadingMessages ? (
                 <div className="flex items-center justify-center h-full">
-                  <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
+                  <Loader2 className="w-8 h-8 animate-spin text-green-600" />
                 </div>
               ) : messages.length > 0 ? (
                 messages.map((message) => (
@@ -422,25 +675,46 @@ const Inbox: React.FC = () => {
                       }`}
                   >
                     <div
-                      className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg shadow-sm ${message.direction === 'OUTBOUND'
-                        ? 'bg-[#d9fdd3] dark:bg-green-700 text-gray-900 dark:text-white'
-                        : 'bg-white dark:bg-gray-800 text-gray-900 dark:text-white'
+                      className={`max-w-[70%] lg:max-w-md px-4 py-2 rounded-lg shadow-sm ${message.direction === 'OUTBOUND'
+                        ? 'bg-[#d9fdd3] dark:bg-green-700 text-gray-900 dark:text-white rounded-br-none'
+                        : 'bg-white dark:bg-gray-800 text-gray-900 dark:text-white rounded-bl-none'
                         }`}
                     >
-                      <p className="break-words text-sm">{message.content}</p>
+                      {/* Message Content */}
+                      <p className="break-words text-sm whitespace-pre-wrap">
+                        {parseMessageContent(message)}
+                      </p>
+
+                      {/* Message Footer */}
                       <div className="flex items-center justify-end gap-1 mt-1">
-                        <span className="text-[10px] opacity-70">
-                          {new Date(message.createdAt).toLocaleTimeString([], {
-                            hour: '2-digit',
-                            minute: '2-digit'
-                          })}
+                        <span className="text-[10px] opacity-60">
+                          {new Date(message.createdAt || message.sentAt || '').toLocaleTimeString(
+                            [],
+                            {
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            }
+                          )}
                         </span>
+
+                        {/* Status Icons */}
                         {message.direction === 'OUTBOUND' && (
-                          <span>
-                            {message.status === 'READ' && <CheckCheck className="w-3 h-3 text-blue-500" />}
-                            {message.status === 'DELIVERED' && <CheckCheck className="w-3 h-3 text-gray-500" />}
-                            {message.status === 'SENT' && <Check className="w-3 h-3 text-gray-500" />}
-                            {message.status === 'PENDING' && <Clock className="w-3 h-3 text-gray-400" />}
+                          <span className="ml-1">
+                            {message.status === 'READ' && (
+                              <CheckCheck className="w-4 h-4 text-blue-500" />
+                            )}
+                            {message.status === 'DELIVERED' && (
+                              <CheckCheck className="w-4 h-4 text-gray-500 dark:text-gray-400" />
+                            )}
+                            {message.status === 'SENT' && (
+                              <Check className="w-4 h-4 text-gray-500 dark:text-gray-400" />
+                            )}
+                            {message.status === 'PENDING' && (
+                              <Clock className="w-4 h-4 text-gray-400" />
+                            )}
+                            {message.status === 'FAILED' && (
+                              <AlertCircle className="w-4 h-4 text-red-500" />
+                            )}
                           </span>
                         )}
                       </div>
@@ -448,10 +722,10 @@ const Inbox: React.FC = () => {
                   </div>
                 ))
               ) : (
-                <div className="flex flex-col items-center justify-center h-full text-gray-500">
-                  <MessageSquare className="w-12 h-12 mb-2" />
-                  <p>No messages yet</p>
-                  <p className="text-sm">Send a message to start conversation</p>
+                <div className="flex flex-col items-center justify-center h-full text-gray-500 dark:text-gray-400">
+                  <MessageSquare className="w-16 h-16 mb-4 opacity-50" />
+                  <p className="text-lg font-medium">No messages yet</p>
+                  <p className="text-sm mt-1">Send a message to start the conversation</p>
                 </div>
               )}
               <div ref={messagesEndRef} />
@@ -460,29 +734,40 @@ const Inbox: React.FC = () => {
             {/* Input Area */}
             <div className="bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 px-4 py-3 flex-shrink-0">
               <div className="flex items-center gap-3">
-                <button className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors">
+                <button
+                  className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors"
+                  title="Emoji"
+                >
                   <Smile className="w-6 h-6 text-gray-500 dark:text-gray-400" />
                 </button>
-                <button className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors">
+                <button
+                  className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors"
+                  title="Attach"
+                >
                   <Paperclip className="w-6 h-6 text-gray-500 dark:text-gray-400" />
                 </button>
 
-                <div className="flex-1 relative">
+                <div className="flex-1">
                   <input
                     type="text"
                     value={messageText}
                     onChange={(e) => setMessageText(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        handleSendMessage();
+                      }
+                    }}
                     placeholder="Type a message..."
                     disabled={sending}
-                    className="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 border-none rounded-lg focus:ring-2 focus:ring-green-500 outline-none text-gray-900 dark:text-white placeholder-gray-500"
+                    className="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 border-none rounded-full focus:ring-2 focus:ring-green-500 outline-none text-gray-900 dark:text-white placeholder-gray-500"
                   />
                 </div>
 
                 <button
                   onClick={handleSendMessage}
                   disabled={!messageText.trim() || sending}
-                  className="p-3 bg-green-500 text-white rounded-full hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed transition-transform hover:scale-105"
+                  className="p-3 bg-green-500 text-white rounded-full hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all hover:scale-105 active:scale-95"
                 >
                   {sending ? (
                     <Loader2 className="w-5 h-5 animate-spin" />
@@ -494,14 +779,17 @@ const Inbox: React.FC = () => {
             </div>
           </>
         ) : (
+          /* No Conversation Selected */
           <div className="flex-1 flex items-center justify-center bg-gray-50 dark:bg-gray-900">
             <div className="text-center">
-              <MessageSquare className="w-16 h-16 mx-auto mb-4 text-gray-400" />
-              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-1">
-                Select a conversation
+              <div className="w-24 h-24 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mx-auto mb-6">
+                <MessageSquare className="w-12 h-12 text-green-600 dark:text-green-400" />
+              </div>
+              <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
+                Select a Conversation
               </h3>
-              <p className="text-gray-600 dark:text-gray-400">
-                Choose a conversation from the list to start messaging
+              <p className="text-gray-600 dark:text-gray-400 max-w-sm">
+                Choose a conversation from the list to view messages and start chatting
               </p>
             </div>
           </div>
