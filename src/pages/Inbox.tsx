@@ -85,12 +85,18 @@ const Inbox: React.FC = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [filter, setFilter] = useState<'all' | 'unread' | 'archived'>('all');
 
+  // ✅ Refs to prevent infinite loops
+  const fetchingMessagesRef = useRef(false);
+  const lastFetchedConvId = useRef<string | null>(null);
+
   // ============================================
   // HELPERS
   // ============================================
 
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    setTimeout(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, 100);
   };
 
   const getContactName = (contact: Contact): string => {
@@ -107,7 +113,6 @@ const Inbox: React.FC = () => {
   };
 
   const parseMessageContent = (message: Message): string => {
-    // Handle template messages
     if (message.type === 'TEMPLATE' && message.content) {
       try {
         const parsed = JSON.parse(message.content);
@@ -120,7 +125,7 @@ const Inbox: React.FC = () => {
   };
 
   // ============================================
-  // FETCH CONVERSATIONS - ✅ FIXED
+  // FETCH CONVERSATIONS
   // ============================================
   const fetchConversations = useCallback(async () => {
     try {
@@ -132,7 +137,6 @@ const Inbox: React.FC = () => {
         limit: 50,
       };
 
-      // Apply filters
       if (filter === 'unread') {
         params.isRead = false;
       } else if (filter === 'archived') {
@@ -143,39 +147,26 @@ const Inbox: React.FC = () => {
 
       const response = await inboxApi.getConversations(params);
 
-      console.log('🔍 API Response:', response.data);
+      console.log('🔍 Conversations API Response:', response.data);
 
       if (response.data.success) {
-        // ✅ FIX: Backend returns { success: true, data: [...], meta: {...} }
-        // Handle multiple possible response structures
+        // ✅ Handle multiple response structures
         let conversationsData: Conversation[] = [];
 
         if (Array.isArray(response.data.data)) {
-          // Direct array: { data: [...] }
           conversationsData = response.data.data;
         } else if (response.data.data?.conversations) {
-          // Nested: { data: { conversations: [...] } }
           conversationsData = response.data.data.conversations;
-        } else if ((response.data as any).conversations && Array.isArray((response.data as any).conversations)) {
-          // Alternative: { conversations: [...] }
+        } else if (Array.isArray((response.data as any).conversations)) {
           conversationsData = (response.data as any).conversations;
         }
 
-        // Validate and set conversations
         const validConversations = conversationsData.filter(
           (conv) => conv && conv.id && conv.contact
         );
 
         setConversations(validConversations);
         console.log(`✅ Loaded ${validConversations.length} conversations`);
-
-        // If we have a conversationId in URL, select it
-        if (conversationId && validConversations.length > 0) {
-          const conv = validConversations.find((c) => c.id === conversationId);
-          if (conv) {
-            setSelectedConversation(conv);
-          }
-        }
       } else {
         throw new Error(response.data.message || 'Failed to load conversations');
       }
@@ -187,31 +178,50 @@ const Inbox: React.FC = () => {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [searchQuery, filter, conversationId]);
+  }, [searchQuery, filter]);
 
   // ============================================
-  // FETCH MESSAGES
+  // FETCH MESSAGES - ✅ FIXED INFINITE LOOP
   // ============================================
   const fetchMessages = useCallback(async (convId: string) => {
+    // ✅ Prevent duplicate/concurrent fetches
+    if (fetchingMessagesRef.current) {
+      console.log('⚠️ Already fetching messages, skipping...');
+      return;
+    }
+
+    // ✅ Prevent re-fetching same conversation
+    if (lastFetchedConvId.current === convId && messages.length > 0) {
+      console.log('⚠️ Already loaded this conversation, skipping...');
+      return;
+    }
+
     try {
+      fetchingMessagesRef.current = true;
       setLoadingMessages(true);
 
       const response = await inboxApi.getMessages(convId, {
         limit: 100,
       });
 
-      console.log('🔍 Messages Response:', response.data);
+      console.log('🔍 Messages API Response:', response.data);
 
       if (response.data.success) {
-        // Handle multiple response structures
+        // ✅ FIX: Handle nested data structure { data: { messages: [...] } }
         let messagesData: Message[] = [];
 
         if (Array.isArray(response.data.data)) {
+          // Direct array: { data: [...] }
           messagesData = response.data.data;
-        } else if (response.data.data?.messages) {
+        } else if (response.data.data?.messages && Array.isArray(response.data.data.messages)) {
+          // Nested: { data: { messages: [...] } }
           messagesData = response.data.data.messages;
         } else if (Array.isArray((response.data as any).messages)) {
+          // Alternative: { messages: [...] }
           messagesData = (response.data as any).messages;
+        } else {
+          console.warn('⚠️ Unknown messages data structure:', response.data.data);
+          messagesData = [];
         }
 
         // Sort by date (oldest first)
@@ -220,13 +230,13 @@ const Inbox: React.FC = () => {
         );
 
         setMessages(messagesData);
-        console.log(`✅ Loaded ${messagesData.length} messages`);
+        lastFetchedConvId.current = convId;
+        console.log(`✅ Loaded ${messagesData.length} messages for conversation ${convId}`);
 
-        // Scroll to bottom after messages load
-        setTimeout(scrollToBottom, 100);
+        scrollToBottom();
 
-        // Mark as read
-        await inboxApi.markAsRead(convId).catch(console.error);
+        // Mark as read (silent)
+        inboxApi.markAsRead(convId).catch(() => { });
 
         // Update unread count in conversations list
         setConversations((prev) =>
@@ -241,8 +251,9 @@ const Inbox: React.FC = () => {
       setMessages([]);
     } finally {
       setLoadingMessages(false);
+      fetchingMessagesRef.current = false;
     }
-  }, []);
+  }, []); // ✅ No dependencies to prevent re-creation
 
   // ============================================
   // SEND MESSAGE
@@ -260,7 +271,6 @@ const Inbox: React.FC = () => {
       createdAt: new Date().toISOString(),
     };
 
-    // Optimistic UI Update
     setMessages((prev) => [...prev, tempMessage]);
     const sentText = messageText;
     setMessageText('');
@@ -268,7 +278,6 @@ const Inbox: React.FC = () => {
     scrollToBottom();
 
     try {
-      // Get Default WhatsApp Account
       const accountsRes = await whatsappApi.accounts();
       const accounts = accountsRes.data?.data || [];
       const connectedAccount = accounts.find((a: any) => a.status === 'CONNECTED');
@@ -278,7 +287,6 @@ const Inbox: React.FC = () => {
         throw new Error('No WhatsApp account connected. Please connect in Settings → WhatsApp.');
       }
 
-      // Send API Call
       const response = await whatsappApi.sendText({
         whatsappAccountId: accountId,
         to: selectedConversation.contact.phone,
@@ -286,7 +294,6 @@ const Inbox: React.FC = () => {
       });
 
       if (response.data.success) {
-        // Update temp message with real data
         const realMessage = response.data.data;
         setMessages((prev) =>
           prev.map((msg) =>
@@ -301,7 +308,6 @@ const Inbox: React.FC = () => {
           )
         );
 
-        // Update conversation preview
         setConversations((prev) =>
           prev.map((conv) =>
             conv.id === selectedConversation.id
@@ -322,7 +328,6 @@ const Inbox: React.FC = () => {
       console.error('❌ Send message error:', error);
       toast.error(error.response?.data?.message || error.message || 'Failed to send message');
 
-      // Mark as failed
       setMessages((prev) =>
         prev.map((msg) => (msg.id === tempId ? { ...msg, status: 'FAILED' } : msg))
       );
@@ -332,10 +337,28 @@ const Inbox: React.FC = () => {
   };
 
   // ============================================
+  // SELECT CONVERSATION
+  // ============================================
+  const selectConversation = (conv: Conversation) => {
+    // ✅ Prevent re-selecting same conversation
+    if (selectedConversation?.id === conv.id) {
+      return;
+    }
+
+    // Reset messages and refs for new conversation
+    setMessages([]);
+    lastFetchedConvId.current = null;
+    setSelectedConversation(conv);
+    navigate(`/dashboard/inbox/${conv.id}`);
+    fetchMessages(conv.id);
+  };
+
+  // ============================================
   // REFRESH
   // ============================================
   const handleRefresh = async () => {
     setRefreshing(true);
+    lastFetchedConvId.current = null; // Reset to allow re-fetch
     await fetchConversations();
     if (selectedConversation) {
       await fetchMessages(selectedConversation.id);
@@ -351,10 +374,8 @@ const Inbox: React.FC = () => {
     const handleNewMessage = (data: any) => {
       console.log('📨 New message received:', data);
 
-      // If this message is for the selected conversation, add it
       if (selectedConversation?.id === data.conversationId) {
         setMessages((prev) => {
-          // Check for duplicate
           if (prev.some((m) => m.id === data.message?.id || m.id === data.id)) {
             return prev;
           }
@@ -363,7 +384,6 @@ const Inbox: React.FC = () => {
         scrollToBottom();
       }
 
-      // Refresh conversations list
       fetchConversations();
     };
 
@@ -393,38 +413,31 @@ const Inbox: React.FC = () => {
   }, [socket, isConnected, selectedConversation, fetchConversations]);
 
   // ============================================
-  // EFFECTS
+  // INITIAL LOAD - ✅ FIXED
   // ============================================
-
-  // Auto-scroll on new messages
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
-
-  // Initial load
   useEffect(() => {
     fetchConversations();
-  }, [fetchConversations]);
+  }, [filter, searchQuery]); // ✅ Only re-fetch when filter/search changes
 
-  // Load conversation from URL
+  // ============================================
+  // LOAD CONVERSATION FROM URL - ✅ FIXED
+  // ============================================
   useEffect(() => {
-    if (conversationId && conversations.length > 0) {
-      const conv = conversations.find((c) => c.id === conversationId);
-      if (conv) {
-        setSelectedConversation(conv);
+    if (!conversationId || conversations.length === 0) return;
+
+    // ✅ Prevent selecting if already selected
+    if (selectedConversation?.id === conversationId) return;
+
+    const conv = conversations.find((c) => c.id === conversationId);
+    if (conv) {
+      setSelectedConversation(conv);
+
+      // ✅ Only fetch if not already loaded
+      if (lastFetchedConvId.current !== conversationId) {
         fetchMessages(conversationId);
       }
     }
-  }, [conversationId, conversations, fetchMessages]);
-
-  // ============================================
-  // SELECT CONVERSATION
-  // ============================================
-  const selectConversation = (conv: Conversation) => {
-    setSelectedConversation(conv);
-    navigate(`/dashboard/inbox/${conv.id}`);
-    fetchMessages(conv.id);
-  };
+  }, [conversationId, conversations]); // ✅ Removed fetchMessages from deps
 
   // ============================================
   // RENDER: LOADING STATE
