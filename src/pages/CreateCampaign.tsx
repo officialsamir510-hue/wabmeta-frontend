@@ -1,4 +1,4 @@
-// src/pages/CreateCampaign.tsx
+// 📁 src/pages/CreateCampaign.tsx - COMPLETE WITH CSV CONTACT ID FIX
 
 import React, { useState, useMemo, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
@@ -15,6 +15,7 @@ import {
   Eye,
   AlertCircle,
   Wifi,
+  Upload,
 } from "lucide-react";
 
 import TemplateSelector from "../components/campaigns/TemplateSelector";
@@ -44,8 +45,6 @@ interface MappedTemplate {
   body: string;
   buttons: { text: string }[];
   variables: string[];
-
-  // ✅ IMPORTANT: so we can filter by account if needed
   whatsappAccountId?: string;
   wabaId?: string;
 }
@@ -66,6 +65,14 @@ type WhatsAppAccountLite = {
   status?: string;
 };
 
+// ✅ Type for CSV uploaded contact
+interface CsvUploadedContact {
+  id: string;
+  phone: string;
+  firstName?: string;
+  lastName?: string;
+}
+
 // ============================================
 // HELPER FUNCTIONS
 // ============================================
@@ -78,23 +85,17 @@ const extractVariablesFromBody = (bodyText: string): string[] => {
 };
 
 const parseApiArray = <T,>(resp: any, keys: string[] = []): T[] => {
-  // supports axios response.data and your ApiResponse wrapper shapes
   const data = resp?.data ?? resp;
 
-  // If direct array
   if (Array.isArray(data)) return data;
-
-  // If { success, data: [...] }
   if (Array.isArray(data?.data)) return data.data;
 
-  // If { success, data: { templates: [...] } }
   if (data?.data && typeof data.data === "object") {
     for (const k of keys) {
       if (Array.isArray(data.data[k])) return data.data[k];
     }
   }
 
-  // If { templates: [...] }
   for (const k of keys) {
     if (Array.isArray(data?.[k])) return data[k];
   }
@@ -129,10 +130,14 @@ const CreateCampaign: React.FC = () => {
   const [loadingData, setLoadingData] = useState(true);
   const [apiError, setApiError] = useState<string | null>(null);
 
-  // ✅ WhatsApp account state
+  // WhatsApp account state
   const [whatsappAccounts, setWhatsappAccounts] = useState<WhatsAppAccountLite[]>([]);
   const [selectedAccountId, setSelectedAccountId] = useState<string>("");
   const [loadingAccounts, setLoadingAccounts] = useState(true);
+
+  // ✅ NEW: CSV Contact IDs state
+  const [csvContactIds, setCsvContactIds] = useState<string[]>([]);
+  const [csvUploadCount, setCsvUploadCount] = useState(0);
 
   // Form State
   const [formData, setFormData] = useState<CampaignFormData>({
@@ -182,13 +187,13 @@ const CreateCampaign: React.FC = () => {
     loadAccounts();
   }, []);
 
-  // Clear selected template when account changes (prevents mismatch)
+  // Clear selected template when account changes
   useEffect(() => {
     setFormData((p) => ({ ...p, templateId: "" }));
   }, [selectedAccountId]);
 
   // ==========================================
-  // FETCH TEMPLATES (ACCOUNT-SPECIFIC) + CONTACTS
+  // FETCH TEMPLATES + CONTACTS
   // ==========================================
   useEffect(() => {
     const fetchData = async () => {
@@ -199,7 +204,6 @@ const CreateCampaign: React.FC = () => {
 
       try {
         const [templatesRes, contactsRes] = await Promise.all([
-          // ✅ IMPORTANT: filter templates by whatsappAccountId
           templateApi.getAll({ whatsappAccountId: selectedAccountId }),
           contactApi.getAll(),
         ]);
@@ -252,39 +256,58 @@ const CreateCampaign: React.FC = () => {
   }, [loadingAccounts, selectedAccountId]);
 
   // ==========================================
-  // CSV IMPORT HANDLER
+  // ✅ FIXED: CSV IMPORT HANDLER
   // ==========================================
-  const handleCsvImported = async (batchTag: string) => {
+  const handleCsvImported = async (uploadedContacts: CsvUploadedContact[]) => {
     try {
-      const res = await contactApi.getAll({ tags: batchTag, limit: 10000 });
-      const importedArray = parseApiArray<any>(res, ["contacts", "items", "data"]);
+      console.log('✅ CSV Upload completed:', uploadedContacts.length, 'contacts');
 
-      const importedContacts: MappedContact[] = (importedArray || []).map((c: any) => ({
+      // ✅ Extract contact IDs from uploaded contacts
+      const contactIds = uploadedContacts.map((c) => c.id);
+      setCsvContactIds(contactIds);
+      setCsvUploadCount(contactIds.length);
+
+      // Refresh contact list for display
+      const res = await contactApi.getAll({ limit: 10000 });
+      const allContactsArray = parseApiArray<any>(res, ['contacts', 'items', 'data']);
+
+      const mappedContacts: MappedContact[] = (allContactsArray || []).map((c: any) => ({
         id: c._id || c.id,
-        name: `${c.firstName || ""} ${c.lastName || ""}`.trim() || c.phone || "Unknown",
-        phone: c.phone || "",
+        name: `${c.firstName || ''} ${c.lastName || ''}`.trim() || c.phone || 'Unknown',
+        phone: c.phone || '',
         tags: Array.isArray(c.tags) ? c.tags : [],
       }));
 
-      setContacts((prev) => {
-        const map = new Map<string, MappedContact>();
-        prev.forEach((p) => map.set(p.id, p));
-        importedContacts.forEach((c) => map.set(c.id, c));
-        return Array.from(map.values());
-      });
+      setContacts(mappedContacts);
 
-      setAvailableTags((prev) => Array.from(new Set([...prev, batchTag])));
+      // Update available tags
+      const tagsSet = new Set<string>();
+      mappedContacts.forEach((c) => c.tags.forEach((tag: string) => tagsSet.add(tag)));
+      setAvailableTags(Array.from(tagsSet));
 
+      // ✅ Auto-select uploaded contacts
       setFormData((prev) => ({
         ...prev,
-        audienceType: "tags",
-        selectedTags: [batchTag],
-        selectedContacts: [],
+        audienceType: 'manual',
+        selectedContacts: contactIds,
       }));
+
+      console.log(`✅ ${contactIds.length} contacts selected for campaign`);
     } catch (e: any) {
-      console.error("❌ Failed to refresh imported contacts:", e);
-      setApiError(e?.response?.data?.message || "Imported, but failed to refresh contact list.");
+      console.error('❌ Failed to refresh imported contacts:', e);
+      setApiError(e?.response?.data?.message || 'Imported, but failed to refresh contact list.');
     }
+  };
+
+  // ✅ Clear CSV selection
+  const clearCsvSelection = () => {
+    setCsvContactIds([]);
+    setCsvUploadCount(0);
+    setFormData((prev) => ({
+      ...prev,
+      audienceType: 'all',
+      selectedContacts: [],
+    }));
   };
 
   // ==========================================
@@ -295,7 +318,13 @@ const CreateCampaign: React.FC = () => {
     [formData.templateId, templates]
   );
 
+  // ✅ Updated totalRecipients to include CSV contacts
   const totalRecipients = useMemo(() => {
+    // If CSV contacts are uploaded, prioritize them
+    if (csvContactIds.length > 0) {
+      return csvContactIds.length;
+    }
+
     switch (formData.audienceType) {
       case "all":
         return contacts.length;
@@ -306,7 +335,7 @@ const CreateCampaign: React.FC = () => {
       default:
         return 0;
     }
-  }, [formData.audienceType, formData.selectedTags, formData.selectedContacts, contacts]);
+  }, [formData.audienceType, formData.selectedTags, formData.selectedContacts, contacts, csvContactIds]);
 
   // ==========================================
   // STEPS CONFIG
@@ -352,7 +381,7 @@ const CreateCampaign: React.FC = () => {
   };
 
   // ==========================================
-  // SUBMIT CAMPAIGN (USES SELECTED ACCOUNT)
+  // ✅ FIXED: SUBMIT CAMPAIGN
   // ==========================================
   const handleSend = async () => {
     setSending(true);
@@ -373,22 +402,31 @@ const CreateCampaign: React.FC = () => {
         throw new Error("Please select a template.");
       }
 
-      // Determine contact IDs
+      // ✅ Determine contact IDs (prioritize CSV if uploaded)
       let audienceContactIds: string[] = [];
 
-      if (formData.audienceType === "all") {
+      if (csvContactIds.length > 0) {
+        // ✅ Use CSV uploaded contacts
+        audienceContactIds = csvContactIds;
+        console.log(`📋 Using ${csvContactIds.length} CSV uploaded contacts`);
+      } else if (formData.audienceType === "all") {
         audienceContactIds = contacts.map((c) => c.id);
+        console.log(`📋 Using all ${audienceContactIds.length} contacts`);
       } else if (formData.audienceType === "tags") {
         audienceContactIds = contacts
           .filter((c) => formData.selectedTags.some((tag) => c.tags.includes(tag)))
           .map((c) => c.id);
+        console.log(`📋 Using ${audienceContactIds.length} contacts with tags: ${formData.selectedTags.join(', ')}`);
       } else if (formData.audienceType === "manual") {
         audienceContactIds = formData.selectedContacts;
+        console.log(`📋 Using ${audienceContactIds.length} manually selected contacts`);
       }
 
       if (audienceContactIds.length === 0) {
-        throw new Error("No recipients selected. Please check your audience filters.");
+        throw new Error("No recipients selected. Please upload CSV or select contacts.");
       }
+
+      console.log(`✅ Total recipients: ${audienceContactIds.length}`);
 
       // scheduledAt
       const scheduledAt =
@@ -400,18 +438,22 @@ const CreateCampaign: React.FC = () => {
         name: formData.name.trim(),
         description: formData.description?.trim() || undefined,
         templateId: formData.templateId,
-        contactIds: audienceContactIds,
+        contactIds: audienceContactIds, // ✅ Send contact IDs
 
-        // ✅ CRITICAL: consistent account selection
+        // WhatsApp account
         whatsappAccountId: whatsappAccount.id,
         phoneNumberId: whatsappAccount.phoneNumberId,
 
+        // Audience filter (optional, for reference)
         audienceFilter:
-          formData.audienceType === "tags"
-            ? { tags: formData.selectedTags }
-            : formData.audienceType === "all"
-              ? { all: true }
-              : undefined,
+          csvContactIds.length > 0
+            ? { csvUpload: true, count: csvContactIds.length }
+            : formData.audienceType === "tags"
+              ? { tags: formData.selectedTags }
+              : formData.audienceType === "all"
+                ? { all: true }
+                : undefined,
+
         variableMapping:
           Object.keys(formData.variableMapping).length > 0
             ? formData.variableMapping
@@ -419,7 +461,10 @@ const CreateCampaign: React.FC = () => {
         scheduledAt,
       };
 
-      console.log("📤 Campaign Payload:", payload);
+      console.log("📤 Campaign Payload:", {
+        ...payload,
+        contactIds: `${payload.contactIds.length} contacts`,
+      });
 
       await campaignApi.create(payload);
       navigate("/dashboard/campaigns");
@@ -479,6 +524,15 @@ const CreateCampaign: React.FC = () => {
                     <Wifi className="w-3 h-3 mr-1" />
                     Connected
                   </span>
+                  {csvUploadCount > 0 && (
+                    <>
+                      <span>•</span>
+                      <span className="flex items-center text-blue-600 dark:text-blue-400">
+                        <Upload className="w-3 h-3 mr-1" />
+                        {csvUploadCount} CSV contacts
+                      </span>
+                    </>
+                  )}
                 </div>
               </div>
             </div>
@@ -568,7 +622,7 @@ const CreateCampaign: React.FC = () => {
                 </p>
               </div>
 
-              {/* ✅ WhatsApp Account Select */}
+              {/* WhatsApp Account Select */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   WhatsApp Account *
@@ -599,7 +653,7 @@ const CreateCampaign: React.FC = () => {
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                     placeholder="e.g., Diwali Sale 2026"
-                    className="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none"
+                    className="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
                   />
                 </div>
 
@@ -656,28 +710,76 @@ const CreateCampaign: React.FC = () => {
                 </p>
               </div>
 
-              {contacts.length > 0 ? (
-                <AudienceSelector
-                  audienceType={formData.audienceType}
-                  onTypeChange={(type) => setFormData({ ...formData, audienceType: type })}
-                  selectedTags={formData.selectedTags}
-                  onTagsChange={(tags) => setFormData({ ...formData, selectedTags: tags })}
-                  selectedContacts={formData.selectedContacts}
-                  onContactsChange={(c) => setFormData({ ...formData, selectedContacts: c })}
-                  availableTags={availableTags}
-                  contacts={contacts}
-                  totalSelected={totalRecipients}
-                />
-              ) : (
-                <div className="text-center py-6 bg-gray-50 dark:bg-gray-900 rounded-xl border border-dashed border-gray-300 dark:border-gray-600">
-                  <Users className="w-10 h-10 text-gray-400 mx-auto mb-2" />
-                  <p className="text-gray-500 dark:text-gray-400">
-                    No contacts found yet. Upload CSV to import.
-                  </p>
+              {/* ✅ CSV Upload Success Banner */}
+              {csvContactIds.length > 0 && (
+                <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-xl p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-green-100 dark:bg-green-900/40 rounded-lg">
+                        <Upload className="w-5 h-5 text-green-600 dark:text-green-400" />
+                      </div>
+                      <div>
+                        <p className="font-medium text-green-800 dark:text-green-200">
+                          {csvContactIds.length} contacts uploaded from CSV
+                        </p>
+                        <p className="text-sm text-green-600 dark:text-green-400">
+                          These contacts will be used for this campaign
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={clearCsvSelection}
+                      className="text-sm text-green-700 dark:text-green-300 hover:text-green-900 dark:hover:text-green-100 font-medium px-3 py-1.5 bg-green-100 dark:bg-green-900/40 rounded-lg hover:bg-green-200 dark:hover:bg-green-900/60 transition-colors"
+                    >
+                      Clear & Select Manually
+                    </button>
+                  </div>
                 </div>
               )}
 
+              {/* Show audience selector only if no CSV contacts */}
+              {csvContactIds.length === 0 && (
+                <>
+                  {contacts.length > 0 ? (
+                    <AudienceSelector
+                      audienceType={formData.audienceType}
+                      onTypeChange={(type) => setFormData({ ...formData, audienceType: type })}
+                      selectedTags={formData.selectedTags}
+                      onTagsChange={(tags) => setFormData({ ...formData, selectedTags: tags })}
+                      selectedContacts={formData.selectedContacts}
+                      onContactsChange={(c) => setFormData({ ...formData, selectedContacts: c })}
+                      availableTags={availableTags}
+                      contacts={contacts}
+                      totalSelected={totalRecipients}
+                    />
+                  ) : (
+                    <div className="text-center py-6 bg-gray-50 dark:bg-gray-900 rounded-xl border border-dashed border-gray-300 dark:border-gray-600">
+                      <Users className="w-10 h-10 text-gray-400 mx-auto mb-2" />
+                      <p className="text-gray-500 dark:text-gray-400">
+                        No contacts found yet. Upload CSV to import.
+                      </p>
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* CSV Uploader */}
               <CsvAudienceUploader onImported={handleCsvImported} />
+
+              {/* Recipient Count */}
+              {totalRecipients > 0 && (
+                <div className="flex items-center justify-between p-4 bg-blue-50 dark:bg-blue-900/20 rounded-xl border border-blue-200 dark:border-blue-800">
+                  <div className="flex items-center gap-3">
+                    <Users className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                    <span className="font-medium text-blue-800 dark:text-blue-200">
+                      Total Recipients
+                    </span>
+                  </div>
+                  <span className="text-2xl font-bold text-blue-600 dark:text-blue-400">
+                    {totalRecipients.toLocaleString()}
+                  </span>
+                </div>
+              )}
             </div>
           )}
 
@@ -705,6 +807,9 @@ const CreateCampaign: React.FC = () => {
                 <div className="text-center py-8 bg-green-50 dark:bg-green-900/20 rounded-xl border border-green-200 dark:border-green-800">
                   <Check className="w-10 h-10 text-green-500 dark:text-green-400 mx-auto mb-2" />
                   <p className="text-green-700 dark:text-green-300 font-medium">No Variables Required</p>
+                  <p className="text-sm text-green-600 dark:text-green-400 mt-1">
+                    This template doesn't have any variables to map.
+                  </p>
                 </div>
               )}
             </div>
@@ -730,6 +835,38 @@ const CreateCampaign: React.FC = () => {
                 onDateChange={(date) => setFormData({ ...formData, scheduledDate: date })}
                 onTimeChange={(time) => setFormData({ ...formData, scheduledTime: time })}
               />
+
+              {/* Campaign Summary */}
+              <div className="mt-6 p-4 bg-gray-50 dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700">
+                <h3 className="font-semibold text-gray-900 dark:text-white mb-3">Campaign Summary</h3>
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <span className="text-gray-500 dark:text-gray-400">Campaign Name:</span>
+                    <p className="font-medium text-gray-900 dark:text-white">{formData.name}</p>
+                  </div>
+                  <div>
+                    <span className="text-gray-500 dark:text-gray-400">Template:</span>
+                    <p className="font-medium text-gray-900 dark:text-white">
+                      {selectedTemplate?.name || "Not selected"}
+                    </p>
+                  </div>
+                  <div>
+                    <span className="text-gray-500 dark:text-gray-400">Recipients:</span>
+                    <p className="font-medium text-gray-900 dark:text-white">
+                      {totalRecipients.toLocaleString()} contacts
+                      {csvContactIds.length > 0 && " (from CSV)"}
+                    </p>
+                  </div>
+                  <div>
+                    <span className="text-gray-500 dark:text-gray-400">Schedule:</span>
+                    <p className="font-medium text-gray-900 dark:text-white">
+                      {formData.scheduleType === "now"
+                        ? "Send immediately"
+                        : `${formData.scheduledDate} at ${formData.scheduledTime}`}
+                    </p>
+                  </div>
+                </div>
+              </div>
             </div>
           )}
         </div>
@@ -739,7 +876,7 @@ const CreateCampaign: React.FC = () => {
           <button
             onClick={handleBack}
             disabled={currentStep === 1}
-            className="flex items-center space-x-2 px-5 py-2.5 text-gray-700 dark:text-gray-300 font-medium rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-50"
+            className="flex items-center space-x-2 px-5 py-2.5 text-gray-700 dark:text-gray-300 font-medium rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-50 transition-colors"
           >
             <ArrowLeft className="w-5 h-5" />
             <span>Back</span>
@@ -749,7 +886,7 @@ const CreateCampaign: React.FC = () => {
             <button
               onClick={handleNext}
               disabled={!validateStep(currentStep)}
-              className="flex items-center space-x-2 px-5 py-2.5 bg-primary-500 hover:bg-primary-600 text-white font-medium rounded-xl disabled:opacity-50"
+              className="flex items-center space-x-2 px-5 py-2.5 bg-primary-500 hover:bg-primary-600 text-white font-medium rounded-xl disabled:opacity-50 transition-colors"
             >
               <span>Continue</span>
               <ArrowRight className="w-5 h-5" />
@@ -758,7 +895,7 @@ const CreateCampaign: React.FC = () => {
             <button
               onClick={handleSend}
               disabled={sending || !validateStep(currentStep)}
-              className="flex items-center space-x-2 px-6 py-2.5 bg-primary-500 hover:bg-primary-600 text-white font-medium rounded-xl disabled:opacity-50"
+              className="flex items-center space-x-2 px-6 py-2.5 bg-primary-500 hover:bg-primary-600 text-white font-medium rounded-xl disabled:opacity-50 transition-colors"
             >
               {sending ? (
                 <>

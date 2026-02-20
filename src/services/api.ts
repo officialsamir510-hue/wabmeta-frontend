@@ -526,16 +526,65 @@ export const templates = {
 // ---------- CAMPAIGNS ----------
 export const campaigns = {
   getAll: (params?: any) => api.get<ApiResponse>('/campaigns', { params }),
+
   create: (data: any) => api.post<ApiResponse>('/campaigns', data),
+
+  // ✅ NEW: Upload CSV contacts
+  uploadContacts: (file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    return api.post<ApiResponse>('/campaigns/upload-contacts', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+  },
+
+  // ✅ NEW: Get CSV upload template
+  getUploadTemplate: () => api.get<ApiResponse>('/campaigns/upload-template'),
+
+  // ✅ NEW: Validate CSV file
+  validateCsv: (file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    return api.post<ApiResponse>('/campaigns/upload-validate', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+  },
+
   getById: (id: string) => api.get<ApiResponse>(`/campaigns/${id}`),
+
   update: (id: string, data: any) => api.put<ApiResponse>(`/campaigns/${id}`, data),
+
   delete: (id: string) => api.delete<ApiResponse>(`/campaigns/${id}`),
+
   start: (id: string) => api.post<ApiResponse>(`/campaigns/${id}/start`),
+
   pause: (id: string) => api.post<ApiResponse>(`/campaigns/${id}/pause`),
+
   resume: (id: string) => api.post<ApiResponse>(`/campaigns/${id}/resume`),
+
   cancel: (id: string) => api.post<ApiResponse>(`/campaigns/${id}/cancel`),
+
+  retry: (id: string, data?: { retryFailed?: boolean; retryPending?: boolean }) =>
+    api.post<ApiResponse>(`/campaigns/${id}/retry`, data),
+
+  duplicate: (id: string, name: string) =>
+    api.post<ApiResponse>(`/campaigns/${id}/duplicate`, { name }),
+
+  getContacts: (id: string, params?: any) =>
+    api.get<ApiResponse>(`/campaigns/${id}/contacts`, { params }),
+
+  getAnalytics: (id: string) =>
+    api.get<ApiResponse>(`/campaigns/${id}/analytics`),
+
   stats: () => api.get<ApiResponse>('/campaigns/stats'),
 };
+
 
 // ---------- WHATSAPP ----------
 export const whatsapp = {
