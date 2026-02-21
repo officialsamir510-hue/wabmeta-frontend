@@ -1,4 +1,4 @@
-// 📁 src/pages/CreateTemplate.tsx - FIXED VERSION
+// 📁 src/pages/CreateTemplate.tsx - FINAL FIXED VERSION
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
@@ -18,6 +18,7 @@ import {
   Plus,
   Trash2,
   MessageSquare,
+  RefreshCw,
 } from 'lucide-react';
 import api, { templates as templateApi } from '../services/api';
 import TemplatePreview from '../components/templates/TemplatePreview';
@@ -32,6 +33,8 @@ interface WhatsAppAccount {
   wabaId: string;
   isDefault: boolean;
   status: string;
+  qualityRating?: string;
+  source?: string;
 }
 
 // ============================================
@@ -53,6 +56,7 @@ const CreateTemplate: React.FC = () => {
   const [whatsappAccounts, setWhatsappAccounts] = useState<WhatsAppAccount[]>([]);
   const [selectedAccountId, setSelectedAccountId] = useState<string>('');
   const [loadingAccounts, setLoadingAccounts] = useState(true);
+  const [accountsError, setAccountsError] = useState<string | null>(null);
 
   // Form State - Initialize from duplicate if exists
   const [formData, setFormData] = useState<TemplateFormData>({
@@ -80,79 +84,154 @@ const CreateTemplate: React.FC = () => {
   }, [formData.body, formData.header]);
 
   // ==========================================
-  // ✅ FIXED: LOAD WHATSAPP ACCOUNTS
+  // ✅ ROBUST LOAD WHATSAPP ACCOUNTS
   // ==========================================
-  useEffect(() => {
-    const loadAccounts = async () => {
-      try {
-        setLoadingAccounts(true);
-        setApiError(null);
+  const loadAccounts = async () => {
+    try {
+      setLoadingAccounts(true);
+      setAccountsError(null);
+      setApiError(null);
 
-        // ✅ Get organization ID (try multiple sources)
-        const orgId =
-          localStorage.getItem('currentOrganizationId') ||
-          (() => {
-            try {
-              const o = JSON.parse(localStorage.getItem('wabmeta_org') || 'null');
-              return o?.id || null;
-            } catch {
-              return null;
+      // ✅ Get organization ID (try multiple sources)
+      const orgId =
+        localStorage.getItem('currentOrganizationId') ||
+        (() => {
+          try {
+            const stored = localStorage.getItem('wabmeta_org');
+            if (stored) {
+              const parsed = JSON.parse(stored);
+              return parsed?.id || null;
             }
-          })();
+            return null;
+          } catch {
+            return null;
+          }
+        })() ||
+        (() => {
+          try {
+            const user = JSON.parse(localStorage.getItem('wabmeta_user') || 'null');
+            return user?.organizationId || null;
+          } catch {
+            return null;
+          }
+        })();
 
-        if (!orgId) {
-          console.error('❌ No organization ID found');
-          setApiError('Organization not found. Please login again.');
-          setLoadingAccounts(false);
-          return;
-        }
-
-        console.log('📋 Loading accounts for organization:', orgId);
-
-        // ✅ Correct endpoint (org based)
-        const response = await api.get(`/meta/organizations/${orgId}/accounts`);
-
-        console.log('✅ API Response:', response.data);
-
-        // ✅ Correct response parsing (handle multiple formats)
-        const accountsData = response.data?.data || response.data?.accounts || response.data || [];
-        const accounts = (Array.isArray(accountsData) ? accountsData : []) as WhatsAppAccount[];
-
-        // ✅ Only show CONNECTED accounts for template creation
-        const connectedAccounts = accounts.filter((a) => a.status === 'CONNECTED');
-
-        console.log('✅ Connected accounts:', connectedAccounts.length);
-
-        setWhatsappAccounts(connectedAccounts);
-
-        // ✅ Select default among CONNECTED accounts
-        if (connectedAccounts.length > 0) {
-          const defaultAccount =
-            connectedAccounts.find((a) => a.isDefault) || connectedAccounts[0];
-          setSelectedAccountId(defaultAccount.id);
-          console.log('✅ Selected account:', defaultAccount.phoneNumber);
-        } else {
-          console.warn('⚠️ No connected WhatsApp accounts found');
-        }
-      } catch (error: any) {
-        console.error('❌ Failed to load WhatsApp accounts:', error);
-
-        let errorMessage = 'Failed to load WhatsApp accounts. ';
-
-        if (error.response?.status === 404) {
-          errorMessage += 'No accounts found.';
-        } else if (error.response?.status === 401) {
-          errorMessage += 'Please login again.';
-        } else {
-          errorMessage += error.response?.data?.message || error.message || 'Please try again.';
-        }
-
-        setApiError(errorMessage);
-      } finally {
+      if (!orgId) {
+        console.error('❌ No organization ID found');
+        setAccountsError('Organization not found. Please login again.');
         setLoadingAccounts(false);
+        return;
       }
-    };
 
+      console.log('📋 Loading accounts for organization:', orgId);
+
+      // ✅ Call API with correct endpoint
+      const response = await api.get(`/meta/organizations/${orgId}/accounts`);
+
+      console.log('✅ API Response RAW:', response.data);
+
+      // ✅ Robust response parsing (handles multiple formats)
+      let rawAccounts: any[] = [];
+
+      if (response.data?.data?.accounts && Array.isArray(response.data.data.accounts)) {
+        // Format: { success: true, data: { accounts: [...] } }
+        rawAccounts = response.data.data.accounts;
+      } else if (response.data?.accounts && Array.isArray(response.data.accounts)) {
+        // Format: { success: true, accounts: [...] }
+        rawAccounts = response.data.accounts;
+      } else if (Array.isArray(response.data?.data)) {
+        // Format: { success: true, data: [...] }
+        rawAccounts = response.data.data;
+      } else if (Array.isArray(response.data)) {
+        // Format: [...]
+        rawAccounts = response.data;
+      } else {
+        console.warn('⚠️ Unexpected response format:', response.data);
+        rawAccounts = [];
+      }
+
+      console.log('📊 Raw accounts extracted:', rawAccounts.length);
+
+      // ✅ Normalize accounts (handle different field names)
+      const normalizedAccounts: WhatsAppAccount[] = rawAccounts.map((account: any) => {
+        // Determine status
+        let status = 'DISCONNECTED';
+        if (account.status) {
+          status = String(account.status).toUpperCase();
+        } else if (account.isActive === true) {
+          status = 'CONNECTED';
+        } else if (account.isActive === false) {
+          status = 'DISCONNECTED';
+        }
+
+        // Determine isDefault
+        let isDefault = false;
+        if (typeof account.isDefault === 'boolean') {
+          isDefault = account.isDefault;
+        } else if (typeof account.isPrimary === 'boolean') {
+          isDefault = account.isPrimary;
+        }
+
+        return {
+          id: account.id,
+          phoneNumber: account.phoneNumber || account.phone_number || '',
+          phoneNumberId: account.phoneNumberId || account.phone_number_id || '',
+          wabaId: account.wabaId || account.waba_id || '',
+          displayName: account.displayName || account.display_name || account.verifiedName || account.verified_name || '',
+          businessName: account.businessName || account.business_name || '',
+          status,
+          isDefault,
+          qualityRating: account.qualityRating || account.quality_rating || '',
+          source: account.source || 'WhatsAppAccount',
+        };
+      });
+
+      console.log('📊 Normalized accounts:', normalizedAccounts);
+
+      // ✅ Filter connected accounts only
+      const connectedAccounts = normalizedAccounts.filter(
+        (account) => account.status === 'CONNECTED'
+      );
+
+      console.log('✅ Total accounts:', normalizedAccounts.length);
+      console.log('✅ Connected accounts:', connectedAccounts.length);
+
+      setWhatsappAccounts(connectedAccounts);
+
+      // ✅ Select default account
+      if (connectedAccounts.length > 0) {
+        const defaultAccount = connectedAccounts.find((a) => a.isDefault) || connectedAccounts[0];
+        setSelectedAccountId(defaultAccount.id);
+        console.log('✅ Selected account:', defaultAccount.phoneNumber, '(ID:', defaultAccount.id, ')');
+      } else {
+        console.warn('⚠️ No connected WhatsApp accounts found');
+        setSelectedAccountId('');
+      }
+    } catch (error: any) {
+      console.error('❌ Failed to load WhatsApp accounts:', error);
+
+      let errorMessage = 'Failed to load WhatsApp accounts. ';
+
+      if (error.response?.status === 404) {
+        errorMessage = 'No WhatsApp accounts found for this organization.';
+      } else if (error.response?.status === 401) {
+        errorMessage = 'Session expired. Please login again.';
+      } else if (error.response?.status === 403) {
+        errorMessage = 'You do not have access to this organization.';
+      } else {
+        errorMessage += error.response?.data?.message || error.message || 'Please try again.';
+      }
+
+      setAccountsError(errorMessage);
+      setWhatsappAccounts([]);
+      setSelectedAccountId('');
+    } finally {
+      setLoadingAccounts(false);
+    }
+  };
+
+  // Load accounts on mount
+  useEffect(() => {
     loadAccounts();
   }, []);
 
@@ -544,14 +623,23 @@ const CreateTemplate: React.FC = () => {
                 No WhatsApp Account Connected
               </h3>
               <p className="text-sm text-yellow-600 dark:text-yellow-400 mt-1">
-                You need to connect a WhatsApp Business Account before creating templates.
+                {accountsError || 'You need to connect a WhatsApp Business Account before creating templates.'}
               </p>
-              <Link
-                to="/dashboard/settings"
-                className="inline-flex items-center mt-2 text-sm font-medium text-yellow-700 dark:text-yellow-300 hover:text-yellow-800 dark:hover:text-yellow-200"
-              >
-                Go to Settings →
-              </Link>
+              <div className="flex items-center space-x-4 mt-2">
+                <Link
+                  to="/dashboard/settings"
+                  className="inline-flex items-center text-sm font-medium text-yellow-700 dark:text-yellow-300 hover:text-yellow-800 dark:hover:text-yellow-200"
+                >
+                  Go to Settings →
+                </Link>
+                <button
+                  onClick={loadAccounts}
+                  className="inline-flex items-center text-sm font-medium text-yellow-700 dark:text-yellow-300 hover:text-yellow-800 dark:hover:text-yellow-200"
+                >
+                  <RefreshCw className="w-4 h-4 mr-1" />
+                  Retry
+                </button>
+              </div>
             </div>
           </div>
         )}
@@ -969,9 +1057,9 @@ const CreateTemplate: React.FC = () => {
                         WhatsApp Business Account *
                       </label>
                       {loadingAccounts ? (
-                        <div className="flex items-center space-x-2 text-gray-500 dark:text-gray-400">
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                          <span>Loading accounts...</span>
+                        <div className="flex items-center space-x-2 text-gray-500 dark:text-gray-400 py-4">
+                          <Loader2 className="w-5 h-5 animate-spin" />
+                          <span>Loading WhatsApp accounts...</span>
                         </div>
                       ) : whatsappAccounts.length === 0 ? (
                         <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4">
@@ -982,15 +1070,24 @@ const CreateTemplate: React.FC = () => {
                             </p>
                           </div>
                           <p className="text-yellow-600 dark:text-yellow-400 text-sm mt-1">
-                            Please connect a WhatsApp Business Account in Settings.
+                            {accountsError || 'Please connect a WhatsApp Business Account in Settings.'}
                           </p>
-                          <Link
-                            to="/dashboard/settings"
-                            className="inline-flex items-center mt-2 text-sm font-medium text-yellow-700 dark:text-yellow-300 hover:text-yellow-800"
-                          >
-                            <MessageSquare className="w-4 h-4 mr-1" />
-                            Go to Settings
-                          </Link>
+                          <div className="flex items-center space-x-4 mt-3">
+                            <Link
+                              to="/dashboard/settings"
+                              className="inline-flex items-center text-sm font-medium text-yellow-700 dark:text-yellow-300 hover:text-yellow-800"
+                            >
+                              <MessageSquare className="w-4 h-4 mr-1" />
+                              Go to Settings
+                            </Link>
+                            <button
+                              onClick={loadAccounts}
+                              className="inline-flex items-center text-sm font-medium text-yellow-700 dark:text-yellow-300 hover:text-yellow-800"
+                            >
+                              <RefreshCw className="w-4 h-4 mr-1" />
+                              Refresh
+                            </button>
+                          </div>
                         </div>
                       ) : (
                         <>
@@ -1025,18 +1122,32 @@ const CreateTemplate: React.FC = () => {
                             </p>
                           )}
                           {selectedAccount && (
-                            <div className="mt-2 bg-gray-50 dark:bg-gray-700 rounded-lg p-3">
+                            <div className="mt-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-3">
                               <div className="flex items-center space-x-2">
                                 <CheckCircle className="w-4 h-4 text-green-500" />
-                                <span className="text-sm text-gray-700 dark:text-gray-300">
+                                <span className="text-sm font-medium text-green-800 dark:text-green-200">
                                   Selected: {getAccountDisplayName(selectedAccount)}
                                 </span>
                               </div>
-                              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                                Phone: {selectedAccount.phoneNumber}
-                              </p>
+                              <div className="mt-1 text-xs text-green-600 dark:text-green-400 space-y-0.5">
+                                <p>📱 Phone: {selectedAccount.phoneNumber}</p>
+                                {selectedAccount.wabaId && (
+                                  <p>🏢 WABA ID: {selectedAccount.wabaId}</p>
+                                )}
+                                {selectedAccount.qualityRating && (
+                                  <p>⭐ Quality: {selectedAccount.qualityRating}</p>
+                                )}
+                              </div>
                             </div>
                           )}
+                          <button
+                            type="button"
+                            onClick={loadAccounts}
+                            className="mt-2 inline-flex items-center text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
+                          >
+                            <RefreshCw className="w-3 h-3 mr-1" />
+                            Refresh accounts
+                          </button>
                         </>
                       )}
                     </div>
