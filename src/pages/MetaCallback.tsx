@@ -1,4 +1,4 @@
-// src/pages/MetaCallback.tsx
+// src/pages/MetaCallback.tsx - UPDATED FOR EMBEDDED SIGNUP v3
 
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -17,44 +17,27 @@ interface CallbackState {
   details?: string;
 }
 
-type DecodedState = {
-  organizationId?: string;
-  userId?: string;
-  timestamp?: number;
-  nonce?: string;
-} | null;
+interface ConnectionData {
+  wabaId?: string;
+  wabaName?: string;
+  phoneNumbers?: Array<{
+    id: string;
+    phoneNumber: string;
+    displayName: string;
+    qualityRating: string;
+  }>;
+  phoneNumberCount?: number;
+  account?: {
+    id: string;
+    phoneNumber: string;
+    displayName: string;
+    status: string;
+  };
+}
 
 // ============================================
-// HELPERS
+// COMPONENT
 // ============================================
-
-/**
- * Robust Base64/Base64URL decode for `state`.
- * Handles:
- * - base64url variants (-,_)
- * - spaces instead of +
- * - missing padding
- */
-const safeParseState = (stateParam: string | null): DecodedState => {
-  if (!stateParam) return null;
-
-  try {
-    // URLSearchParams / some environments may convert "+" to " "
-    let normalized = stateParam.replace(/ /g, '+');
-
-    // base64url => base64
-    normalized = normalized.replace(/-/g, '+').replace(/_/g, '/');
-
-    // fix padding
-    const pad = normalized.length % 4;
-    if (pad) normalized += '='.repeat(4 - pad);
-
-    const json = atob(normalized);
-    return JSON.parse(json);
-  } catch {
-    return null;
-  }
-};
 
 const MetaCallback: React.FC = () => {
   const navigate = useNavigate();
@@ -77,192 +60,310 @@ const MetaCallback: React.FC = () => {
   }, []);
 
   const handleCallback = async () => {
-    // URL parameters
+    // URL parameters from Meta OAuth callback
     const code = searchParams.get('code');
+    const state = searchParams.get('state');
     const error = searchParams.get('error');
     const errorReason = searchParams.get('error_reason');
     const errorDescription = searchParams.get('error_description');
-    const stateParam = searchParams.get('state');
 
     console.log('🔄 MetaCallback processing...', {
       hasCode: !!code,
       hasError: !!error,
-      hasState: !!stateParam,
+      hasState: !!state,
+      url: window.location.href,
     });
 
     // 1) OAuth error from Meta
     if (error) {
-      console.error('❌ OAuth error:', { error, errorReason, errorDescription });
+      console.error('❌ OAuth error from Meta:', {
+        error,
+        errorReason,
+        errorDescription
+      });
+
+      const errorMsg = errorDescription || errorReason || error || 'Connection cancelled';
+
       setUi({
         status: 'error',
-        message: errorReason || 'Connection cancelled',
-        details: errorDescription || 'Please try connecting again.',
+        message: 'Meta Authorization Failed',
+        details: errorMsg,
       });
+
+      // Notify parent window if in popup
+      notifyParent({
+        type: 'META_CALLBACK_ERROR',
+        error: errorMsg,
+      });
+
       return;
     }
 
     // 2) Missing code
     if (!code) {
+      console.error('❌ Missing authorization code');
+
       setUi({
         status: 'error',
         message: 'Missing authorization code',
-        details: 'Please try connecting again.',
+        details: 'The authorization process was incomplete. Please try again.',
       });
+
+      notifyParent({
+        type: 'META_CALLBACK_ERROR',
+        error: 'Missing authorization code',
+      });
+
       return;
     }
 
-    // 3) Decode state (optional but helpful)
-    const decoded = safeParseState(stateParam);
+    // 3) Missing state
+    if (!state) {
+      console.error('❌ Missing state parameter');
 
-    const orgFromState = decoded?.organizationId || null;
-    const orgFromStorage =
-      localStorage.getItem('meta_connection_org_id') ||
-      localStorage.getItem('currentOrganizationId') ||
-      null;
-
-    // If both exist and mismatch, STOP (prevents linking to wrong org)
-    if (orgFromState && orgFromStorage && orgFromState !== orgFromStorage) {
-      console.warn('⚠️ Organization mismatch between state and storage', {
-        orgFromState,
-        orgFromStorage,
-      });
       setUi({
         status: 'error',
-        message: 'Organization mismatch',
-        details: 'Please start the connection again from the correct organization.',
+        message: 'Missing state parameter',
+        details: 'Security validation failed. Please try again.',
       });
+
+      notifyParent({
+        type: 'META_CALLBACK_ERROR',
+        error: 'Missing state parameter',
+      });
+
       return;
     }
 
-    const organizationId = orgFromState || orgFromStorage;
-
-    console.log('📋 Organization ID resolved:', {
-      organizationId,
-      orgFromState,
-      orgFromStorage,
-    });
+    // 4) Extract organizationId from state
+    // State format: "organizationId:randomToken"
+    const organizationId = state.split(':')[0];
 
     if (!organizationId) {
+      console.error('❌ Invalid state format:', state);
+
       setUi({
         status: 'error',
-        message: 'Organization context lost',
-        details: 'Please go back and try connecting again.',
+        message: 'Invalid state format',
+        details: 'Organization context could not be determined. Please try again.',
       });
+
+      notifyParent({
+        type: 'META_CALLBACK_ERROR',
+        error: 'Invalid state format',
+      });
+
       return;
     }
 
-    // 4) State age check (increase to 1 hour)
-    // NOTE: Backend already verifies auth + org access. This is mainly UX.
-    if (decoded?.timestamp) {
-      const age = Date.now() - decoded.timestamp;
-      const maxAge = 60 * 60 * 1000; // ✅ 1 hour (was 10 minutes)
+    console.log('📋 Organization ID from state:', organizationId);
 
-      console.log('⏱️ State age(ms):', age, 'maxAge(ms):', maxAge);
+    // 5) Verify with stored organizationId (optional check)
+    const storedOrgId = localStorage.getItem('meta_connection_org_id');
+    const storedState = localStorage.getItem('meta_connection_state');
+
+    console.log('🔍 Verification:', {
+      storedOrgId,
+      extractedOrgId: organizationId,
+      storedState: storedState ? 'Present' : 'Missing',
+      receivedState: state,
+    });
+
+    // Optional: Verify state matches what we stored
+    if (storedState && storedState !== state) {
+      console.warn('⚠️ State mismatch - possible CSRF attack', {
+        stored: storedState,
+        received: state,
+      });
+
+      setUi({
+        status: 'error',
+        message: 'Security validation failed',
+        details: 'State parameter mismatch. This may be a security issue.',
+      });
+
+      notifyParent({
+        type: 'META_CALLBACK_ERROR',
+        error: 'State validation failed',
+      });
+
+      return;
+    }
+
+    // 6) Check timestamp (optional)
+    const storedTimestamp = localStorage.getItem('meta_connection_timestamp');
+    if (storedTimestamp) {
+      const age = Date.now() - parseInt(storedTimestamp, 10);
+      const maxAge = 60 * 60 * 1000; // 1 hour
+
+      console.log('⏱️ Connection age:', {
+        ageMs: age,
+        ageMin: Math.floor(age / 60000),
+        maxAgeMin: Math.floor(maxAge / 60000),
+      });
 
       if (age > maxAge) {
-        console.warn('⚠️ State expired:', { age, maxAge });
+        console.warn('⚠️ Connection attempt expired');
+
         setUi({
           status: 'error',
-          message: 'Authorization expired',
-          details: 'Please try connecting again (it took too long).',
+          message: 'Connection expired',
+          details: 'This authorization has expired. Please start the connection process again.',
         });
+
+        notifyParent({
+          type: 'META_CALLBACK_ERROR',
+          error: 'Connection expired',
+        });
+
         return;
       }
     }
 
-    // 5) Call backend to complete connection
+    // 7) Call backend to complete connection
     try {
       setUi({
         status: 'loading',
         message: 'Connecting your WhatsApp Business account...',
+        details: 'This may take a few moments...',
       });
 
-      console.log('🔄 Sending callback to server...', {
+      console.log('🔄 Sending callback to backend...', {
         organizationId,
-        codePreview: code.slice(0, 8) + '...',
+        codeLength: code.length,
+        stateLength: state.length,
       });
 
       const response = await api.post('/meta/callback', {
         code,
-        organizationId,
+        state,
       });
 
-      console.log('📥 Server response:', response.data);
+      console.log('📥 Backend response:', response.data);
 
       if (!response.data?.success) {
         throw new Error(response.data?.message || 'Connection failed');
       }
 
-      const account = response.data.data?.account;
+      const connectionData: ConnectionData = response.data.data;
+
+      // Determine success message
+      let successDetails = 'Your WhatsApp Business account is now connected.';
+
+      if (connectionData.wabaName) {
+        successDetails = `Connected: ${connectionData.wabaName}`;
+      } else if (connectionData.account?.displayName) {
+        successDetails = `Connected: ${connectionData.account.displayName}`;
+      } else if (connectionData.phoneNumbers && connectionData.phoneNumbers.length > 0) {
+        successDetails = `Connected ${connectionData.phoneNumbers.length} phone number(s)`;
+      }
+
+      console.log('✅ Connection successful:', connectionData);
 
       setUi({
         status: 'success',
-        message: 'WhatsApp Business connected successfully!',
-        details: account?.displayName || account?.phoneNumber || 'Account connected',
+        message: 'WhatsApp Business Connected!',
+        details: successDetails,
       });
 
-      // cleanup
+      // Cleanup localStorage
       localStorage.removeItem('meta_connection_org_id');
       localStorage.removeItem('meta_connection_timestamp');
+      localStorage.removeItem('meta_connection_state');
 
-      // If this is popup flow, notify opener
-      try {
-        if (window.opener && window.opener !== window) {
-          console.log('📤 Notifying opener window...');
-          window.opener.postMessage(
-            {
-              type: 'META_OAUTH_SUCCESS',
-              account,
-            },
-            window.location.origin
-          );
+      // Notify parent window if in popup
+      const notified = notifyParent({
+        type: 'META_CALLBACK_SUCCESS',
+        data: connectionData,
+      });
 
-          setTimeout(() => {
-            console.log('🔒 Closing popup...');
-            window.close();
-          }, 800);
-
-          return;
-        }
-      } catch (popupError) {
-        console.warn('Could not notify opener:', popupError);
+      // If in popup, close after delay
+      if (notified && window.opener) {
+        setTimeout(() => {
+          console.log('🔒 Closing popup...');
+          window.close();
+        }, 1500);
+        return;
       }
 
-      // fallback redirect
+      // Otherwise, redirect to dashboard
       setTimeout(() => {
         navigate('/dashboard', {
           replace: true,
           state: {
             metaConnected: true,
-            message: 'WhatsApp account connected successfully!',
+            connectionData,
+            message: 'WhatsApp Business account connected successfully!',
           },
         });
-      }, 1200);
+      }, 2000);
+
     } catch (err: any) {
       console.error('❌ Connection error:', err);
 
       const status = err?.response?.status;
+      const serverError = err?.response?.data?.error;
       const errorMessage =
         err?.response?.data?.message ||
         err?.message ||
         'Failed to complete connection';
 
-      // Special-case: if backend callback is protected and user is not logged in
+      console.error('Error details:', {
+        status,
+        serverError,
+        errorMessage,
+        fullError: err,
+      });
+
+      // Handle specific error cases
       if (status === 401) {
         setUi({
           status: 'error',
-          message: 'Session expired',
-          details: 'Please login again and retry connecting WhatsApp.',
+          message: 'Authentication Required',
+          details: 'Your session has expired. Please login again and retry.',
         });
-        return;
+      } else if (status === 403) {
+        setUi({
+          status: 'error',
+          message: 'Permission Denied',
+          details: 'You do not have permission to connect WhatsApp for this organization.',
+        });
+      } else if (status === 400 && errorMessage.includes('state')) {
+        setUi({
+          status: 'error',
+          message: 'Invalid or Expired Link',
+          details: 'This authorization link is invalid or has expired. Please try again.',
+        });
+      } else {
+        setUi({
+          status: 'error',
+          message: 'Connection Failed',
+          details: errorMessage,
+        });
       }
 
-      setUi({
-        status: 'error',
-        message: errorMessage,
-        details: 'Please try again or contact support.',
+      notifyParent({
+        type: 'META_CALLBACK_ERROR',
+        error: errorMessage,
       });
     }
+  };
+
+  // ============================================
+  // HELPER: Notify Parent Window
+  // ============================================
+
+  const notifyParent = (message: any): boolean => {
+    try {
+      if (window.opener && window.opener !== window) {
+        console.log('📤 Notifying parent window:', message);
+        window.opener.postMessage(message, window.location.origin);
+        return true;
+      }
+    } catch (err) {
+      console.warn('Could not notify parent window:', err);
+    }
+    return false;
   };
 
   // ============================================
@@ -280,7 +381,7 @@ const MetaCallback: React.FC = () => {
             </div>
           )}
           {ui.status === 'success' && (
-            <div className="mx-auto w-20 h-20 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center animate-pulse">
+            <div className="mx-auto w-20 h-20 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center animate-scale-in">
               <CheckCircle className="w-10 h-10 text-green-600 dark:text-green-400" />
             </div>
           )}
@@ -308,19 +409,21 @@ const MetaCallback: React.FC = () => {
 
         {/* Details */}
         {ui.details && (
-          <p
-            className={`text-sm mb-6 ${ui.status === 'success'
-                ? 'text-green-600 dark:text-green-400 font-medium'
-                : 'text-gray-500 dark:text-gray-400'
+          <div
+            className={`text-sm mb-6 p-3 rounded-lg ${ui.status === 'success'
+                ? 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300'
+                : ui.status === 'error'
+                  ? 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300'
+                  : 'bg-gray-50 dark:bg-gray-700 text-gray-600 dark:text-gray-300'
               }`}
           >
             {ui.details}
-          </p>
+          </div>
         )}
 
         {/* Loading indicator */}
         {ui.status === 'loading' && (
-          <div className="flex justify-center space-x-1">
+          <div className="flex justify-center space-x-1 mb-4">
             <div
               className="w-2 h-2 bg-green-500 rounded-full animate-bounce"
               style={{ animationDelay: '0ms' }}
@@ -339,7 +442,7 @@ const MetaCallback: React.FC = () => {
         {/* Success redirect message */}
         {ui.status === 'success' && (
           <p className="text-sm text-gray-500 dark:text-gray-400">
-            Redirecting to dashboard...
+            {window.opener ? 'Closing window...' : 'Redirecting to dashboard...'}
           </p>
         )}
 
@@ -347,18 +450,30 @@ const MetaCallback: React.FC = () => {
         {ui.status === 'error' && (
           <div className="space-y-3">
             <button
-              onClick={() =>
-                navigate('/dashboard/settings', { state: { tab: 'whatsapp' } })
-              }
+              onClick={() => {
+                if (window.opener) {
+                  window.close();
+                } else {
+                  navigate('/settings/integrations', {
+                    state: { tab: 'whatsapp' }
+                  });
+                }
+              }}
               className="w-full py-3 px-4 bg-green-600 hover:bg-green-700 text-white font-medium rounded-xl transition-colors"
             >
               Try Again
             </button>
             <button
-              onClick={() => navigate('/dashboard')}
+              onClick={() => {
+                if (window.opener) {
+                  window.close();
+                } else {
+                  navigate('/dashboard');
+                }
+              }}
               className="w-full py-3 px-4 text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 font-medium transition-colors"
             >
-              Return to Dashboard
+              {window.opener ? 'Close Window' : 'Return to Dashboard'}
             </button>
           </div>
         )}
@@ -371,6 +486,21 @@ const MetaCallback: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Add scale-in animation */}
+      <style>{`
+        @keyframes scale-in {
+          from {
+            transform: scale(0);
+          }
+          to {
+            transform: scale(1);
+          }
+        }
+        .animate-scale-in {
+          animation: scale-in 0.3s ease-out;
+        }
+      `}</style>
     </div>
   );
 };

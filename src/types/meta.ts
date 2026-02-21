@@ -19,7 +19,7 @@ export interface EmbeddedSignupConfig {
 }
 
 export interface ConnectionProgress {
-  step: 'INIT' | 'TOKEN_EXCHANGE' | 'COMPLETED';
+  step: 'INIT' | 'REDIRECTING' | 'TOKEN_EXCHANGE' | 'COMPLETED' | 'CANCELLED';
   status: 'in_progress' | 'completed' | 'error';
   message: string;
 }
