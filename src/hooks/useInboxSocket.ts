@@ -1,6 +1,6 @@
-// src/hooks/useInboxSocket.ts
+// src/hooks/useInboxSocket.ts - COMPLETE WORKING VERSION
 
-import { useEffect, useCallback, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { useSocket } from '../context/SocketContext';
 
 interface Message {
@@ -10,7 +10,9 @@ interface Message {
     direction: string;
     status: string;
     createdAt: string;
+    type: string;
     contact?: any;
+    message?: any;
 }
 
 interface ConversationUpdate {
@@ -18,73 +20,106 @@ interface ConversationUpdate {
     lastMessageAt: string;
     lastMessagePreview: string;
     unreadCount: number;
+    contact?: any;
+}
+
+interface MessageStatus {
+    messageId: string;
+    waMessageId?: string;
+    conversationId: string;
+    status: string;
+    timestamp: string;
 }
 
 export const useInboxSocket = (
     selectedConversationId: string | null,
     onNewMessage?: (message: Message) => void,
     onConversationUpdate?: (update: ConversationUpdate) => void,
-    onMessageStatus?: (status: any) => void
+    onMessageStatus?: (status: MessageStatus) => void
 ) => {
     const { socket, isConnected, joinConversation, leaveConversation } = useSocket();
-    const [lastMessage, setLastMessage] = useState<Message | null>(null);
+    const previousConversationId = useRef<string | null>(null);
 
-    // Join conversation room when selected
-    useEffect(() => {
-        if (!socket || !isConnected || !selectedConversationId) return;
-
-        console.log(`📥 Joining conversation room: ${selectedConversationId}`);
-        joinConversation(selectedConversationId);
-
-        return () => {
-            console.log(`📤 Leaving conversation room: ${selectedConversationId}`);
-            leaveConversation(selectedConversationId);
-        };
-    }, [socket, isConnected, selectedConversationId, joinConversation, leaveConversation]);
-
-    // Listen for events
+    // Join/leave conversation room
     useEffect(() => {
         if (!socket || !isConnected) return;
 
-        const handleNewMessage = (data: Message) => {
-            console.log('📩 [SOCKET] New message:', data);
-            setLastMessage(data);
+        // Leave previous conversation
+        if (previousConversationId.current && previousConversationId.current !== selectedConversationId) {
+            console.log(`📤 Leaving conversation room: ${previousConversationId.current}`);
+            leaveConversation(previousConversationId.current);
+        }
+
+        // Join new conversation
+        if (selectedConversationId) {
+            console.log(`📥 Joining conversation room: ${selectedConversationId}`);
+            joinConversation(selectedConversationId);
+            previousConversationId.current = selectedConversationId;
+        }
+
+        return () => {
+            if (selectedConversationId) {
+                console.log(`📤 Cleanup: Leaving conversation room: ${selectedConversationId}`);
+                leaveConversation(selectedConversationId);
+            }
+        };
+    }, [socket, isConnected, selectedConversationId, joinConversation, leaveConversation]);
+
+    // Listen for socket events
+    useEffect(() => {
+        if (!socket || !isConnected) {
+            console.warn('⚠️ Socket not connected, skipping event listeners');
+            return;
+        }
+
+        // Handle new message
+        const handleNewMessage = (data: any) => {
+            console.log('📩 [SOCKET] New message received:', data);
+
+            // Extract actual message from various response formats
+            const message: Message = data.message || data;
 
             if (onNewMessage) {
-                onNewMessage(data);
+                onNewMessage(message);
             }
         };
 
-        const handleConversationUpdate = (data: ConversationUpdate) => {
-            console.log('💬 [SOCKET] Conversation update:', data);
+        // Handle conversation update
+        const handleConversationUpdate = (data: any) => {
+            console.log('💬 [SOCKET] Conversation updated:', data);
 
             if (onConversationUpdate) {
                 onConversationUpdate(data);
             }
         };
 
+        // Handle message status update
         const handleMessageStatus = (data: any) => {
-            console.log('📊 [SOCKET] Message status:', data);
+            console.log('📊 [SOCKET] Message status update:', data);
 
             if (onMessageStatus) {
                 onMessageStatus(data);
             }
         };
 
+        // Register event listeners
         socket.on('message:new', handleNewMessage);
         socket.on('conversation:updated', handleConversationUpdate);
         socket.on('message:status', handleMessageStatus);
 
+        console.log('✅ [SOCKET] Event listeners registered');
+
+        // Cleanup
         return () => {
             socket.off('message:new', handleNewMessage);
             socket.off('conversation:updated', handleConversationUpdate);
             socket.off('message:status', handleMessageStatus);
+            console.log('🔌 [SOCKET] Event listeners removed');
         };
     }, [socket, isConnected, onNewMessage, onConversationUpdate, onMessageStatus]);
 
     return {
         isConnected,
-        lastMessage,
     };
 };
 
