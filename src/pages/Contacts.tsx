@@ -27,6 +27,7 @@ import {
   CheckSquare,
   Square,
   AlertTriangle,
+  Layers,
 } from 'lucide-react';
 
 import AddContactModal from '../components/contacts/AddContactModal';
@@ -64,6 +65,13 @@ interface ContactsMeta {
   limit: number;
   total: number;
   totalPages: number;
+}
+
+interface Group {
+  id: string;
+  name: string;
+  contactCount: number;
+  createdAt?: string;
 }
 
 interface ContactStatsApi {
@@ -322,6 +330,9 @@ const Contacts: React.FC = () => {
   const { refreshStats } = useApp();
 
   // State
+  const [activeTab, setActiveTab] = useState<'contacts' | 'groups'>('contacts');
+  const [groups, setGroups] = useState<Group[]>([]);
+  const [loadingGroups, setLoadingGroups] = useState(false);
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [meta, setMeta] = useState<ContactsMeta>({
     page: 1,
@@ -449,10 +460,28 @@ const Contacts: React.FC = () => {
     }
   }, [currentPage, searchQuery, statusFilter, whatsappFilter]);
 
+  const fetchGroups = useCallback(async () => {
+    setLoadingGroups(true);
+    try {
+      const res = await api.get('/contacts/groups/all');
+      const groupsData = res.data?.data || [];
+      setGroups(groupsData.map((g: any) => ({
+        id: g.id,
+        name: g.name,
+        contactCount: g.contactCount || g._count?.members || 0,
+        createdAt: g.createdAt,
+      })));
+    } catch (err) {
+      console.error('Failed to load groups:', err);
+    } finally {
+      setLoadingGroups(false);
+    }
+  }, []);
+
   const fetchAll = useCallback(async () => {
-    await Promise.allSettled([fetchStats(), fetchContacts()]);
+    await Promise.allSettled([fetchStats(), fetchContacts(), fetchGroups()]);
     refreshStats();
-  }, [fetchStats, fetchContacts, refreshStats]);
+  }, [fetchStats, fetchContacts, fetchGroups, refreshStats]);
 
   // Initial load
   useEffect(() => {
@@ -817,191 +846,259 @@ const Contacts: React.FC = () => {
         ))}
       </div>
 
-      {/* Filters */}
-      <div className="bg-white rounded-xl border border-gray-200 p-4">
-        <div className="flex flex-col md:flex-row md:items-center gap-4">
-          {/* Search */}
-          <div className="flex-1 relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search by name, phone, or email..."
-              className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500"
-            />
-          </div>
-
-          {/* Status Filter */}
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="px-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500"
-          >
-            <option value="all">All Status</option>
-            <option value="active">Active</option>
-            <option value="blocked">Blocked</option>
-            <option value="unsubscribed">Unsubscribed</option>
-          </select>
-
-          {/* WhatsApp Filter */}
-          <select
-            value={whatsappFilter}
-            onChange={(e) => setWhatsappFilter(e.target.value)}
-            className="px-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500"
-          >
-            <option value="all">All WhatsApp</option>
-            <option value="verified">Verified</option>
-            <option value="pending">Pending</option>
-          </select>
-        </div>
+      {/* Tabs */}
+      <div className="flex space-x-6 border-b border-gray-200 mt-2">
+        <button
+          onClick={() => setActiveTab('contacts')}
+          className={`pb-3 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 ${activeTab === 'contacts'
+            ? 'border-primary-500 text-primary-600'
+            : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            }`}
+        >
+          <Users className="w-4 h-4" />
+          <span>All Contacts</span>
+        </button>
+        <button
+          onClick={() => setActiveTab('groups')}
+          className={`pb-3 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 ${activeTab === 'groups'
+            ? 'border-primary-500 text-primary-600'
+            : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            }`}
+        >
+          <Layers className="w-4 h-4" />
+          <span>Groups</span>
+          <span className="bg-gray-100 text-gray-600 py-0.5 px-2 rounded-full text-xs">{groups.length}</span>
+        </button>
       </div>
 
-      {/* Bulk Actions */}
-      {selectedContacts.length > 0 && (
-        <div className="bg-primary-50 border border-primary-200 rounded-xl p-4 flex items-center justify-between">
-          <div className="flex items-center space-x-3">
-            <CheckSquare className="w-5 h-5 text-primary-600" />
-            <span className="font-medium text-primary-900">
-              {selectedContacts.length} contact(s) selected
-            </span>
-          </div>
-          <div className="flex items-center space-x-2">
-            <button
-              onClick={handleBulkRefreshProfiles}
-              className="px-3 py-1.5 bg-white border border-primary-300 text-primary-700 rounded-lg hover:bg-primary-100 text-sm font-medium transition-colors"
-            >
-              <RefreshCw className="w-4 h-4 inline mr-1" />
-              Verify WhatsApp
-            </button>
-            <button
-              onClick={() => handleBulkAction('delete')}
-              className="px-3 py-1.5 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 text-sm font-medium transition-colors"
-            >
-              <Trash2 className="w-4 h-4 inline mr-1" />
-              Delete
-            </button>
-            <button
-              onClick={() => setSelectedContacts([])}
-              className="px-3 py-1.5 text-gray-600 hover:text-gray-900 text-sm"
-            >
-              Clear
-            </button>
-          </div>
-        </div>
-      )}
+      {activeTab === 'contacts' ? (
+        <>
+          {/* Filters */}
+          <div className="bg-white rounded-xl border border-gray-200 p-4">
+            <div className="flex flex-col md:flex-row md:items-center gap-4">
+              {/* Search */}
+              <div className="flex-1 relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search by name, phone, or email..."
+                  className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500"
+                />
+              </div>
 
-      {/* Empty State */}
-      {meta.total === 0 && !error && !loading && (
-        <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
-          <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <Users className="w-8 h-8 text-gray-400" />
-          </div>
-          <h3 className="text-lg font-semibold text-gray-900">No Contacts Yet</h3>
-          <p className="text-gray-500 mt-2 mb-6">
-            Add your first contact to get started with WhatsApp messaging.
-          </p>
-          <div className="flex justify-center gap-3">
-            <button
-              onClick={() => setShowAddModal(true)}
-              className="px-4 py-2.5 bg-primary-500 text-white rounded-xl hover:bg-primary-600 transition-colors"
-            >
-              <Plus className="w-4 h-4 inline mr-1" />
-              Add Contact
-            </button>
-            <button
-              onClick={() => setShowImportModal(true)}
-              className="px-4 py-2.5 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 transition-colors"
-            >
-              <Upload className="w-4 h-4 inline mr-1" />
-              Import CSV
-            </button>
-          </div>
-        </div>
-      )}
+              {/* Status Filter */}
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                className="px-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500"
+              >
+                <option value="all">All Status</option>
+                <option value="active">Active</option>
+                <option value="blocked">Blocked</option>
+                <option value="unsubscribed">Unsubscribed</option>
+              </select>
 
-      {/* Contacts Table */}
-      {contacts.length > 0 && (
-        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50 border-b border-gray-200">
-                <tr>
-                  <th className="px-4 py-3 w-10">
-                    <button onClick={handleSelectAll}>
-                      {selectedContacts.length === contacts.length ? (
-                        <CheckSquare className="w-5 h-5 text-primary-600" />
-                      ) : (
-                        <Square className="w-5 h-5 text-gray-400" />
-                      )}
-                    </button>
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                    Contact
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                    Email
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                    WhatsApp
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                    Status
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                    Tags
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                    Last Contact
-                  </th>
-                  <th className="px-4 py-3 w-10"></th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {contacts.map((contact) => (
-                  <ContactRow
-                    key={contact.id}
-                    contact={contact}
-                    selected={selectedContacts.includes(contact.id)}
-                    onSelect={handleSelectContact}
-                    onEdit={(c) => {
-                      setEditingContact(c);
-                      setShowAddModal(true);
-                    }}
-                    onDelete={handleDeleteContact}
-                    onRefreshProfile={handleRefreshProfile}
-                  />
-                ))}
-              </tbody>
-            </table>
+              {/* WhatsApp Filter */}
+              <select
+                value={whatsappFilter}
+                onChange={(e) => setWhatsappFilter(e.target.value)}
+                className="px-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500"
+              >
+                <option value="all">All WhatsApp</option>
+                <option value="verified">Verified</option>
+                <option value="pending">Pending</option>
+              </select>
+            </div>
           </div>
-        </div>
-      )}
 
-      {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="flex justify-between items-center bg-white p-4 rounded-xl border border-gray-200">
-          <span className="text-sm text-gray-500">
-            Page {meta.page} of {totalPages} • {meta.total.toLocaleString()} total contacts
-          </span>
-          <div className="flex gap-2">
-            <button
-              disabled={meta.page === 1}
-              onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
-              className="flex items-center px-3 py-1.5 border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            >
-              <ChevronLeft className="w-4 h-4 mr-1" />
-              Previous
-            </button>
-            <button
-              disabled={meta.page === totalPages}
-              onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
-              className="flex items-center px-3 py-1.5 border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            >
-              Next
-              <ChevronRight className="w-4 h-4 ml-1" />
-            </button>
+          {/* Bulk Actions */}
+          {selectedContacts.length > 0 && (
+            <div className="bg-primary-50 border border-primary-200 rounded-xl p-4 flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <CheckSquare className="w-5 h-5 text-primary-600" />
+                <span className="font-medium text-primary-900">
+                  {selectedContacts.length} contact(s) selected
+                </span>
+              </div>
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={handleBulkRefreshProfiles}
+                  className="px-3 py-1.5 bg-white border border-primary-300 text-primary-700 rounded-lg hover:bg-primary-100 text-sm font-medium transition-colors"
+                >
+                  <RefreshCw className="w-4 h-4 inline mr-1" />
+                  Verify WhatsApp
+                </button>
+                <button
+                  onClick={() => handleBulkAction('delete')}
+                  className="px-3 py-1.5 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 text-sm font-medium transition-colors"
+                >
+                  <Trash2 className="w-4 h-4 inline mr-1" />
+                  Delete
+                </button>
+                <button
+                  onClick={() => setSelectedContacts([])}
+                  className="px-3 py-1.5 text-gray-600 hover:text-gray-900 text-sm"
+                >
+                  Clear
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Empty State */}
+          {meta.total === 0 && !error && !loading && (
+            <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
+              <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Users className="w-8 h-8 text-gray-400" />
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900">No Contacts Yet</h3>
+              <p className="text-gray-500 mt-2 mb-6">
+                Add your first contact to get started with WhatsApp messaging.
+              </p>
+              <div className="flex justify-center gap-3">
+                <button
+                  onClick={() => setShowAddModal(true)}
+                  className="px-4 py-2.5 bg-primary-500 text-white rounded-xl hover:bg-primary-600 transition-colors"
+                >
+                  <Plus className="w-4 h-4 inline mr-1" />
+                  Add Contact
+                </button>
+                <button
+                  onClick={() => setShowImportModal(true)}
+                  className="px-4 py-2.5 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 transition-colors"
+                >
+                  <Upload className="w-4 h-4 inline mr-1" />
+                  Import CSV
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Contacts Table */}
+          {contacts.length > 0 && (
+            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-gray-50 border-b border-gray-200">
+                    <tr>
+                      <th className="px-4 py-3 w-10">
+                        <button onClick={handleSelectAll}>
+                          {selectedContacts.length === contacts.length ? (
+                            <CheckSquare className="w-5 h-5 text-primary-600" />
+                          ) : (
+                            <Square className="w-5 h-5 text-gray-400" />
+                          )}
+                        </button>
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                        Contact
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                        Email
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                        WhatsApp
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                        Status
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                        Tags
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                        Last Contact
+                      </th>
+                      <th className="px-4 py-3 w-10"></th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {contacts.map((contact) => (
+                      <ContactRow
+                        key={contact.id}
+                        contact={contact}
+                        selected={selectedContacts.includes(contact.id)}
+                        onSelect={handleSelectContact}
+                        onEdit={(c) => {
+                          setEditingContact(c);
+                          setShowAddModal(true);
+                        }}
+                        onDelete={handleDeleteContact}
+                        onRefreshProfile={handleRefreshProfile}
+                      />
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="flex justify-between items-center bg-white p-4 rounded-xl border border-gray-200">
+              <span className="text-sm text-gray-500">
+                Page {meta.page} of {totalPages} • {meta.total.toLocaleString()} total contacts
+              </span>
+              <div className="flex gap-2">
+                <button
+                  disabled={meta.page === 1}
+                  onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+                  className="flex items-center px-3 py-1.5 border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  <ChevronLeft className="w-4 h-4 mr-1" />
+                  Previous
+                </button>
+                <button
+                  disabled={meta.page === totalPages}
+                  onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
+                  className="flex items-center px-3 py-1.5 border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  Next
+                  <ChevronRight className="w-4 h-4 ml-1" />
+                </button>
+              </div>
+            </div>
+          )}
+        </>
+      ) : (
+        <div className="space-y-4 animate-fade-in">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold text-gray-900">Your Groups</h2>
+            {/* Create Group functionality could be added here in the future */}
           </div>
+
+          {loadingGroups ? (
+            <div className="flex items-center justify-center h-40">
+              <Loader2 className="w-8 h-8 text-primary-500 animate-spin" />
+            </div>
+          ) : groups.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {groups.map((group) => (
+                <div key={group.id} className="bg-white border border-gray-200 rounded-xl p-5 hover:border-primary-300 hover:shadow-md transition-all relative group/card cursor-pointer">
+                  <div className="w-12 h-12 bg-primary-50 rounded-xl flex items-center justify-center mb-4 text-primary-600 group-hover/card:scale-110 transition-transform">
+                    <Layers className="w-6 h-6" />
+                  </div>
+                  <h3 className="font-semibold text-gray-900 text-lg mb-1">{group.name}</h3>
+                  <div className="flex items-center text-gray-500 space-x-2 text-sm">
+                    <Users className="w-4 h-4" />
+                    <span>{group.contactCount.toLocaleString()} {group.contactCount === 1 ? 'number' : 'numbers'}</span>
+                  </div>
+                  <button className="absolute top-4 right-4 p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg opacity-0 group-hover/card:opacity-100 transition-opacity">
+                    <MoreVertical className="w-4 h-4" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
+              <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Layers className="w-8 h-8 text-gray-400" />
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900">No Groups Found</h3>
+              <p className="text-gray-500 mt-2 mb-6 max-w-sm mx-auto">Groups you create during CSV imports will automatically appear here.</p>
+            </div>
+          )}
         </div>
       )}
 
