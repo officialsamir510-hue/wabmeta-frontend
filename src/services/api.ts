@@ -73,24 +73,15 @@ const getApiBaseUrl = (): string => {
   const envUrl = import.meta.env.VITE_API_URL;
 
   if (envUrl) {
-    const cleanUrl = envUrl.replace(/\/+$/, '');
-
-    if (cleanUrl.endsWith('/api/v1')) {
-      return cleanUrl;
-    }
-
-    if (cleanUrl.endsWith('/api')) {
-      return `${cleanUrl}/v1`;
-    }
-
-    return `${cleanUrl}/api/v1`;
+    // Remove trailing slashes and /v1 suffix
+    return envUrl.replace(/\/+$/, '').replace(/\/v1$/, '');
   }
 
   if (import.meta.env.PROD) {
-    return 'https://wabmeta-api.onrender.com/api/v1';
+    return 'https://wabmeta-api.onrender.com/api'; // ✅ NO /v1
   }
 
-  return 'http://localhost:10000/api/v1';
+  return 'http://localhost:10000/api'; // ✅ NO /v1
 };
 
 const API_BASE_URL = getApiBaseUrl();

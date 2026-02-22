@@ -1,8 +1,7 @@
-// src/hooks/useCampaignRealtime.ts
+// src/hooks/useCampaignRealtime.ts - COMPLETE
 
 import { useEffect, useState, useCallback } from 'react';
 import { useSocket } from '../context/SocketContext';
-import toast from 'react-hot-toast';
 
 interface CampaignProgress {
     sent: number;
@@ -12,7 +11,7 @@ interface CampaignProgress {
     status: string;
 }
 
-interface CampaignStats {
+interface CompletedStats {
     sentCount: number;
     failedCount: number;
     deliveredCount: number;
@@ -20,141 +19,130 @@ interface CampaignStats {
     totalRecipients: number;
 }
 
-interface ContactStatus {
+interface ContactUpdate {
     contactId: string;
     phone: string;
     status: string;
     messageId?: string;
     error?: string;
+    timestamp: string;
 }
 
-export function useCampaignRealtime(campaignId: string | null) {
+export const useCampaignRealtime = (campaignId: string | null) => {
     const { socket, isConnected } = useSocket();
+
     const [progress, setProgress] = useState<CampaignProgress | null>(null);
     const [isProcessing, setIsProcessing] = useState(false);
-    const [completedStats, setCompletedStats] = useState<CampaignStats | null>(null);
-    const [contactUpdates, setContactUpdates] = useState<ContactStatus[]>([]);
+    const [completedStats, setCompletedStats] = useState<CompletedStats | null>(null);
+    const [contactUpdates, setContactUpdates] = useState<ContactUpdate[]>([]);
 
-    // Join campaign room
+    // Join campaign room on mount
     useEffect(() => {
         if (!socket || !isConnected || !campaignId) return;
 
-        console.log(`📢 Joining campaign room: ${campaignId}`);
+        console.log(`🔌 [SOCKET] Joining campaign room: ${campaignId}`);
         socket.emit('campaign:join', campaignId);
 
         return () => {
-            console.log(`📢 Leaving campaign room: ${campaignId}`);
+            console.log(`🔌 [SOCKET] Leaving campaign room: ${campaignId}`);
             socket.emit('campaign:leave', campaignId);
         };
     }, [socket, isConnected, campaignId]);
 
     // Listen for campaign updates
     useEffect(() => {
-        if (!socket || !isConnected) return;
+        if (!socket || !campaignId) return;
 
-        // Campaign status update
-        const handleCampaignUpdate = (data: any) => {
+        const handleUpdate = (data: any) => {
             if (data.campaignId !== campaignId) return;
 
-            console.log('📢 Campaign update:', data);
+            console.log('📡 [REALTIME] Campaign update:', data);
 
             if (data.status === 'RUNNING') {
                 setIsProcessing(true);
-                toast.success(data.message || 'Campaign started');
-            } else if (data.status === 'PAUSED') {
+            } else if (['COMPLETED', 'FAILED', 'PAUSED'].includes(data.status)) {
                 setIsProcessing(false);
-                toast('Campaign paused', { icon: 'ℹ️' });
-            } else if (data.status === 'CANCELLED') {
-                setIsProcessing(false);
-                toast.error('Campaign cancelled');
             }
         };
 
-        // Campaign progress
-        const handleCampaignProgress = (data: CampaignProgress & { campaignId: string }) => {
+        const handleProgress = (data: any) => {
             if (data.campaignId !== campaignId) return;
 
-            console.log(`📊 Campaign progress: ${data.percentage}%`, data);
+            console.log('📊 [REALTIME] Campaign progress:', data);
 
             setProgress({
-                sent: data.sent,
-                failed: data.failed,
-                total: data.total,
-                percentage: data.percentage,
+                sent: data.sent || 0,
+                failed: data.failed || 0,
+                total: data.total || 0,
+                percentage: data.percentage || 0,
+                status: data.status || 'RUNNING',
+            });
+
+            setIsProcessing(true);
+        };
+
+        const handleContactStatus = (data: any) => {
+            if (data.campaignId !== campaignId) return;
+
+            console.log('👤 [REALTIME] Contact status:', data);
+
+            const newUpdate: ContactUpdate = {
+                contactId: data.contactId,
+                phone: data.phone,
                 status: data.status,
-            });
+                messageId: data.messageId,
+                error: data.error,
+                timestamp: data.timestamp || new Date().toISOString(),
+            };
 
-            setIsProcessing(data.status === 'RUNNING');
+            setContactUpdates((prev) => [...prev, newUpdate].slice(-100)); // Keep last 100
         };
 
-        // Contact status update
-        const handleContactStatus = (data: ContactStatus & { campaignId: string }) => {
+        const handleCompleted = (data: any) => {
             if (data.campaignId !== campaignId) return;
 
-            console.log('📱 Contact status:', data.phone, data.status);
+            console.log('🎉 [REALTIME] Campaign completed:', data);
 
-            setContactUpdates((prev) => [
-                ...prev.slice(-99), // Keep last 100
-                {
-                    contactId: data.contactId,
-                    phone: data.phone,
-                    status: data.status,
-                    messageId: data.messageId,
-                    error: data.error,
-                },
-            ]);
-        };
-
-        // Campaign completed
-        const handleCampaignCompleted = (data: CampaignStats & { campaignId: string }) => {
-            if (data.campaignId !== campaignId) return;
-
-            console.log('✅ Campaign completed:', data);
-
-            setIsProcessing(false);
             setCompletedStats({
-                sentCount: data.sentCount,
-                failedCount: data.failedCount,
-                deliveredCount: data.deliveredCount,
-                readCount: data.readCount,
-                totalRecipients: data.totalRecipients,
+                sentCount: data.sentCount || 0,
+                failedCount: data.failedCount || 0,
+                deliveredCount: data.deliveredCount || 0,
+                readCount: data.readCount || 0,
+                totalRecipients: data.totalRecipients || 0,
             });
 
-            toast.success(
-                `Campaign completed! Sent: ${data.sentCount}, Failed: ${data.failedCount}`,
-                { duration: 5000 }
-            );
-        };
-
-        // Campaign error
-        const handleCampaignError = (data: { campaignId: string; message: string; code?: string }) => {
-            if (data.campaignId !== campaignId) return;
-
-            console.error('❌ Campaign error:', data);
             setIsProcessing(false);
-            toast.error(`Campaign error: ${data.message}`);
         };
 
-        // Register listeners
-        socket.on('campaign:update', handleCampaignUpdate);
-        socket.on('campaign:progress', handleCampaignProgress);
+        // Register event listeners
+        socket.on('campaign:update', handleUpdate);
+        socket.on('campaign:progress', handleProgress);
+        socket.on('campaign:contact', handleContactStatus);
         socket.on('campaign:contact:status', handleContactStatus);
-        socket.on('campaign:completed', handleCampaignCompleted);
-        socket.on('campaign:error', handleCampaignError);
+        socket.on('campaign:completed', handleCompleted);
 
+        console.log(`✅ [SOCKET] Subscribed to campaign events: ${campaignId}`);
+
+        // Cleanup
         return () => {
-            socket.off('campaign:update', handleCampaignUpdate);
-            socket.off('campaign:progress', handleCampaignProgress);
+            socket.off('campaign:update', handleUpdate);
+            socket.off('campaign:progress', handleProgress);
+            socket.off('campaign:contact', handleContactStatus);
             socket.off('campaign:contact:status', handleContactStatus);
-            socket.off('campaign:completed', handleCampaignCompleted);
-            socket.off('campaign:error', handleCampaignError);
-        };
-    }, [socket, isConnected, campaignId]);
+            socket.off('campaign:completed', handleCompleted);
 
-    const reset = useCallback(() => {
+            console.log(`🔌 [SOCKET] Unsubscribed from campaign events: ${campaignId}`);
+        };
+    }, [socket, campaignId]);
+
+    const clearUpdates = useCallback(() => {
+        setContactUpdates([]);
+    }, []);
+
+    const resetStats = useCallback(() => {
         setProgress(null);
-        setIsProcessing(false);
         setCompletedStats(null);
+        setIsProcessing(false);
         setContactUpdates([]);
     }, []);
 
@@ -164,6 +152,9 @@ export function useCampaignRealtime(campaignId: string | null) {
         completedStats,
         contactUpdates,
         isConnected,
-        reset,
+        clearUpdates,
+        resetStats,
     };
-}
+};
+
+export default useCampaignRealtime;
