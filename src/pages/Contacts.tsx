@@ -612,28 +612,50 @@ const Contacts: React.FC = () => {
 
   const handleImport = async (contacts: any[], groupData?: { id?: string; name?: string }) => {
     try {
-      // Now sends group info along with contacts
-      const res = await api.post('/contacts/import', {
-        contacts,
-        groupId: groupData?.id,
-        groupName: groupData?.name,
-        skipDuplicates: true,
+      console.log('📤 Importing contacts payload:', {
+        contactsCount: contacts.length,
+        sample: contacts[0],
+        groupData
       });
+
+      const payload = {
+        contacts: contacts.map(c => ({
+          phone: String(c.phone).trim(), // Ensure string
+          firstName: c.firstName || undefined,
+          lastName: c.lastName || undefined,
+          email: c.email || undefined,
+          tags: c.tags || [],
+          customFields: c.customFields || {}
+        })),
+        groupId: groupData?.id || undefined,
+        // Note: Backend might not support groupName in import schema directly yet
+        // groupName: groupData?.name, 
+        skipDuplicates: true
+      };
+
+      // If you want to create group on fly, you might need separate API call or update backend schema
+      // Assuming backend logic handles groupName inside import:
+      if (groupData?.name) {
+        (payload as any).groupName = groupData.name;
+      }
+
+      const res = await api.post('/contacts/import', payload);
 
       const result = res.data?.data;
       alert(
         `✅ Import Complete!\n` +
         `Imported: ${result?.imported || 0}\n` +
-        `Duplicates Skipped: ${result?.skipped || 0}\n` +
-        `Added to Group: ${result?.addedToGroup || 0}`
+        `Skipped: ${result?.skipped || 0}\n` +
+        `Failed: ${result?.failed || 0}`
       );
 
       await fetchAll();
       setShowImportModal(false);
     } catch (err: any) {
+      console.error('Import failed:', err.response?.data); // Check console for exact validation error
       throw new Error(
         err.response?.data?.error ||
-        err.response?.data?.message ||
+        JSON.stringify(err.response?.data?.errors) || // Show validation details
         'Import failed'
       );
     }
