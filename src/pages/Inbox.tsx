@@ -18,7 +18,7 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
-import { useSocket } from '../context/SocketContext';
+import { useInboxSocket } from '../hooks/useInboxSocket';
 import { inbox as inboxApi, whatsapp as whatsappApi } from '../services/api';
 import toast from 'react-hot-toast';
 
@@ -38,6 +38,7 @@ interface Contact {
 
 interface Message {
   id: string;
+  waMessageId?: string;
   content: string;
   type: 'TEXT' | 'IMAGE' | 'VIDEO' | 'AUDIO' | 'DOCUMENT' | 'TEMPLATE';
   direction: 'INBOUND' | 'OUTBOUND';
@@ -69,7 +70,6 @@ interface Conversation {
 const Inbox: React.FC = () => {
   const { conversationId } = useParams();
   const navigate = useNavigate();
-  const { socket, isConnected } = useSocket();
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // State
@@ -368,49 +368,39 @@ const Inbox: React.FC = () => {
   // ============================================
   // SOCKET LISTENERS
   // ============================================
-  useEffect(() => {
-    if (!socket || !isConnected) return;
+  useInboxSocket(
+    selectedConversation?.id || null,
+    (newMessage: any) => {
+      console.log('📨 New message received via socket:', newMessage);
 
-    const handleNewMessage = (data: any) => {
-      console.log('📨 New message received:', data);
-
-      if (selectedConversation?.id === data.conversationId) {
+      if (selectedConversation?.id === newMessage.conversationId) {
         setMessages((prev) => {
-          if (prev.some((m) => m.id === data.message?.id || m.id === data.id)) {
+          if (prev.some((m) => m.id === newMessage.message?.id || m.id === newMessage.id)) {
             return prev;
           }
-          return [...prev, data.message || data];
+          return [...prev, newMessage.message || newMessage];
         });
         scrollToBottom();
       }
 
       fetchConversations();
-    };
-
-    const handleMessageStatus = (data: any) => {
-      console.log('📊 Message status update:', data);
+    },
+    (update: any) => {
+      console.log('💬 Conversation updated:', update);
+      fetchConversations();
+    },
+    (statusUpdate: any) => {
+      console.log('📊 Message status update:', statusUpdate);
 
       setMessages((prev) =>
         prev.map((msg) =>
-          msg.id === data.messageId || msg.id === data.waMessageId
-            ? { ...msg, status: data.status }
+          msg.id === statusUpdate.messageId || msg.id === statusUpdate.waMessageId || msg.waMessageId === statusUpdate.waMessageId
+            ? { ...msg, status: statusUpdate.status }
             : msg
         )
       );
-    };
-
-    socket.on('message:new', handleNewMessage);
-    socket.on('message:status', handleMessageStatus);
-    socket.on('newMessage', handleNewMessage);
-    socket.on('messageStatus', handleMessageStatus);
-
-    return () => {
-      socket.off('message:new', handleNewMessage);
-      socket.off('message:status', handleMessageStatus);
-      socket.off('newMessage', handleNewMessage);
-      socket.off('messageStatus', handleMessageStatus);
-    };
-  }, [socket, isConnected, selectedConversation, fetchConversations]);
+    }
+  );
 
   // ============================================
   // INITIAL LOAD - ✅ FIXED
