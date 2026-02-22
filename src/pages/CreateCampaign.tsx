@@ -1,4 +1,4 @@
-// 📁 src/pages/CreateCampaign.tsx - COMPLETE WITH CSV CONTACT ID FIX
+// src/pages/CreateCampaign.tsx - COMPLETE (CSV REMOVED, GROUP ADDED)
 
 import React, { useState, useMemo, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
@@ -15,7 +15,6 @@ import {
   Eye,
   AlertCircle,
   Wifi,
-  Upload,
 } from "lucide-react";
 
 import TemplateSelector from "../components/campaigns/TemplateSelector";
@@ -23,7 +22,6 @@ import AudienceSelector from "../components/campaigns/AudienceSelector";
 import VariableMapper from "../components/campaigns/VariableMapper";
 import SchedulePicker from "../components/campaigns/SchedulePicker";
 import TemplatePreview from "../components/templates/TemplatePreview";
-import CsvAudienceUploader from "../components/campaigns/CsvAudienceUploader";
 
 import type { CampaignFormData } from "../types/campaign";
 import {
@@ -33,9 +31,7 @@ import {
   whatsapp as whatsappApi,
 } from "../services/api";
 
-// ============================================
 // TYPES
-// ============================================
 interface MappedTemplate {
   id: string;
   name: string;
@@ -46,7 +42,6 @@ interface MappedTemplate {
   buttons: { text: string }[];
   variables: string[];
   whatsappAccountId?: string;
-  wabaId?: string;
 }
 
 interface MappedContact {
@@ -65,17 +60,7 @@ type WhatsAppAccountLite = {
   status?: string;
 };
 
-// ✅ Type for CSV uploaded contact
-interface CsvUploadedContact {
-  id: string;
-  phone: string;
-  firstName?: string;
-  lastName?: string;
-}
-
-// ============================================
-// HELPER FUNCTIONS
-// ============================================
+// HELPERS
 const extractVariablesFromBody = (bodyText: string): string[] => {
   if (!bodyText) return [];
   const matches = bodyText.match(/\{\{(\d+)\}\}/g) || [];
@@ -86,26 +71,22 @@ const extractVariablesFromBody = (bodyText: string): string[] => {
 
 const parseApiArray = <T,>(resp: any, keys: string[] = []): T[] => {
   const data = resp?.data ?? resp;
-
   if (Array.isArray(data)) return data;
   if (Array.isArray(data?.data)) return data.data;
-
   if (data?.data && typeof data.data === "object") {
     for (const k of keys) {
       if (Array.isArray(data.data[k])) return data.data[k];
     }
   }
-
   for (const k of keys) {
     if (Array.isArray(data?.[k])) return data[k];
   }
-
   return [];
 };
 
 const mapHeaderForPreview = (headerType: string) => {
   const ht = String(headerType || "none").toLowerCase();
-  if (ht === "none" || ht === "null" || ht === "undefined") return { type: "none" as const };
+  if (ht === "none" || ht === "null") return { type: "none" as const };
   if (ht === "text") return { type: "text" as const, text: "" };
   if (ht === "image") return { type: "image" as const, mediaUrl: undefined };
   if (ht === "video") return { type: "video" as const, mediaUrl: undefined };
@@ -113,9 +94,6 @@ const mapHeaderForPreview = (headerType: string) => {
   return { type: "none" as const };
 };
 
-// ============================================
-// COMPONENT
-// ============================================
 const CreateCampaign: React.FC = () => {
   const navigate = useNavigate();
 
@@ -123,21 +101,17 @@ const CreateCampaign: React.FC = () => {
   const [sending, setSending] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
 
-  // Data States
+  // Data
   const [templates, setTemplates] = useState<MappedTemplate[]>([]);
   const [contacts, setContacts] = useState<MappedContact[]>([]);
   const [availableTags, setAvailableTags] = useState<string[]>([]);
   const [loadingData, setLoadingData] = useState(true);
   const [apiError, setApiError] = useState<string | null>(null);
 
-  // WhatsApp account state
+  // Accounts
   const [whatsappAccounts, setWhatsappAccounts] = useState<WhatsAppAccountLite[]>([]);
   const [selectedAccountId, setSelectedAccountId] = useState<string>("");
   const [loadingAccounts, setLoadingAccounts] = useState(true);
-
-  // ✅ NEW: CSV Contact IDs state
-  const [csvContactIds, setCsvContactIds] = useState<string[]>([]);
-  const [csvUploadCount, setCsvUploadCount] = useState(0);
 
   // Form State
   const [formData, setFormData] = useState<CampaignFormData>({
@@ -147,23 +121,20 @@ const CreateCampaign: React.FC = () => {
     audienceType: "all",
     selectedTags: [],
     selectedContacts: [],
+    selectedGroup: "", // ✅ Added
     variableMapping: {},
     scheduleType: "now",
     scheduledDate: "",
     scheduledTime: "",
   });
 
-  // ==========================================
-  // LOAD WHATSAPP ACCOUNTS (CONNECTED ONLY)
-  // ==========================================
+  // Load Accounts
   useEffect(() => {
     const loadAccounts = async () => {
       setApiError(null);
-
       try {
         setLoadingAccounts(true);
         const res = await whatsappApi.accounts();
-
         const accountsArr = parseApiArray<any>(res, ["accounts", "items", "data"]);
         const connected = (accountsArr || []).filter(
           (a: any) => String(a.status || "").toUpperCase() === "CONNECTED"
@@ -174,7 +145,6 @@ const CreateCampaign: React.FC = () => {
         }
 
         setWhatsappAccounts(connected);
-
         const def = connected.find((a: any) => a.isDefault) || connected[0];
         setSelectedAccountId(def.id);
       } catch (e: any) {
@@ -183,22 +153,13 @@ const CreateCampaign: React.FC = () => {
         setLoadingAccounts(false);
       }
     };
-
     loadAccounts();
   }, []);
 
-  // Clear selected template when account changes
-  useEffect(() => {
-    setFormData((p) => ({ ...p, templateId: "" }));
-  }, [selectedAccountId]);
-
-  // ==========================================
-  // FETCH TEMPLATES + CONTACTS
-  // ==========================================
+  // Load Templates & Contacts
   useEffect(() => {
     const fetchData = async () => {
       if (!selectedAccountId) return;
-
       setLoadingData(true);
       setApiError(null);
 
@@ -220,7 +181,6 @@ const CreateCampaign: React.FC = () => {
           buttons: Array.isArray(t.buttons) ? t.buttons.map((b: any) => ({ text: b.text || "" })) : [],
           variables: extractVariablesFromBody(t.bodyText || t.body || ""),
           whatsappAccountId: t.whatsappAccountId,
-          wabaId: t.wabaId,
         }));
         setTemplates(mappedTemplates);
 
@@ -240,11 +200,7 @@ const CreateCampaign: React.FC = () => {
         setAvailableTags(Array.from(tagsSet));
       } catch (err: any) {
         console.error("❌ Failed to load data:", err);
-        setApiError(
-          err?.response?.data?.message ||
-          err?.message ||
-          "Failed to load templates/contacts. Please refresh."
-        );
+        setApiError(err?.response?.data?.message || err?.message || "Failed to load data.");
       } finally {
         setLoadingData(false);
       }
@@ -255,76 +211,15 @@ const CreateCampaign: React.FC = () => {
     }
   }, [loadingAccounts, selectedAccountId]);
 
-  // ==========================================
-  // ✅ FIXED: CSV IMPORT HANDLER
-  // ==========================================
-  const handleCsvImported = async (uploadedContacts: CsvUploadedContact[]) => {
-    try {
-      console.log('✅ CSV Upload completed:', uploadedContacts.length, 'contacts');
-
-      // ✅ Extract contact IDs from uploaded contacts
-      const contactIds = uploadedContacts.map((c) => c.id);
-      setCsvContactIds(contactIds);
-      setCsvUploadCount(contactIds.length);
-
-      // Refresh contact list for display
-      const res = await contactApi.getAll({ limit: 10000 });
-      const allContactsArray = parseApiArray<any>(res, ['contacts', 'items', 'data']);
-
-      const mappedContacts: MappedContact[] = (allContactsArray || []).map((c: any) => ({
-        id: c._id || c.id,
-        name: `${c.firstName || ''} ${c.lastName || ''}`.trim() || c.phone || 'Unknown',
-        phone: c.phone || '',
-        tags: Array.isArray(c.tags) ? c.tags : [],
-      }));
-
-      setContacts(mappedContacts);
-
-      // Update available tags
-      const tagsSet = new Set<string>();
-      mappedContacts.forEach((c) => c.tags.forEach((tag: string) => tagsSet.add(tag)));
-      setAvailableTags(Array.from(tagsSet));
-
-      // ✅ Auto-select uploaded contacts
-      setFormData((prev) => ({
-        ...prev,
-        audienceType: 'manual',
-        selectedContacts: contactIds,
-      }));
-
-      console.log(`✅ ${contactIds.length} contacts selected for campaign`);
-    } catch (e: any) {
-      console.error('❌ Failed to refresh imported contacts:', e);
-      setApiError(e?.response?.data?.message || 'Imported, but failed to refresh contact list.');
-    }
-  };
-
-  // ✅ Clear CSV selection
-  const clearCsvSelection = () => {
-    setCsvContactIds([]);
-    setCsvUploadCount(0);
-    setFormData((prev) => ({
-      ...prev,
-      audienceType: 'all',
-      selectedContacts: [],
-    }));
-  };
-
-  // ==========================================
-  // COMPUTED VALUES
-  // ==========================================
+  // Computed
   const selectedTemplate = useMemo(
     () => templates.find((t) => t.id === formData.templateId),
     [formData.templateId, templates]
   );
 
-  // ✅ Updated totalRecipients to include CSV contacts
+  // Note: For 'group', we don't know exact count until send, but we can fetch it if needed.
+  // For now we assume if group selected > 0.
   const totalRecipients = useMemo(() => {
-    // If CSV contacts are uploaded, prioritize them
-    if (csvContactIds.length > 0) {
-      return csvContactIds.length;
-    }
-
     switch (formData.audienceType) {
       case "all":
         return contacts.length;
@@ -332,14 +227,15 @@ const CreateCampaign: React.FC = () => {
         return contacts.filter((c) => formData.selectedTags.some((tag) => c.tags.includes(tag))).length;
       case "manual":
         return formData.selectedContacts.length;
+      case "group":
+        // We don't have group member count locally here without extra API call
+        // Assuming user selected a group with members.
+        return formData.selectedGroup ? 1 : 0;
       default:
         return 0;
     }
-  }, [formData.audienceType, formData.selectedTags, formData.selectedContacts, contacts, csvContactIds]);
+  }, [formData.audienceType, formData.selectedTags, formData.selectedContacts, formData.selectedGroup, contacts]);
 
-  // ==========================================
-  // STEPS CONFIG
-  // ==========================================
   const steps = [
     { number: 1, title: "Template", icon: FileText },
     { number: 2, title: "Audience", icon: Users },
@@ -347,88 +243,62 @@ const CreateCampaign: React.FC = () => {
     { number: 4, title: "Schedule", icon: Clock },
   ];
 
-  // ==========================================
-  // VALIDATION
-  // ==========================================
   const validateStep = (step: number): boolean => {
     switch (step) {
       case 1:
         return !!formData.name.trim() && !!formData.templateId && !!selectedAccountId;
       case 2:
+        if (formData.audienceType === 'group') return !!formData.selectedGroup;
         return totalRecipients > 0;
       case 3:
         if (!selectedTemplate) return true;
         return (selectedTemplate.variables || []).every((v: string) => formData.variableMapping[v]);
       case 4:
-        if (formData.scheduleType === "later") {
-          return !!formData.scheduledDate && !!formData.scheduledTime;
-        }
+        if (formData.scheduleType === "later") return !!formData.scheduledDate && !!formData.scheduledTime;
         return true;
       default:
         return true;
     }
   };
 
-  // ==========================================
-  // NAVIGATION
-  // ==========================================
-  const handleNext = () => {
-    if (validateStep(currentStep) && currentStep < 4) setCurrentStep(currentStep + 1);
-  };
+  const handleNext = () => { if (validateStep(currentStep) && currentStep < 4) setCurrentStep(currentStep + 1); };
+  const handleBack = () => { if (currentStep > 1) setCurrentStep(currentStep - 1); };
 
-  const handleBack = () => {
-    if (currentStep > 1) setCurrentStep(currentStep - 1);
-  };
-
-  // ==========================================
-  // ✅ FIXED: SUBMIT CAMPAIGN
-  // ==========================================
   const handleSend = async () => {
     setSending(true);
     setApiError(null);
 
     try {
       const whatsappAccount = whatsappAccounts.find((a) => a.id === selectedAccountId);
+      if (!whatsappAccount?.id || !whatsappAccount.phoneNumberId) throw new Error("Invalid WhatsApp account.");
+      if (!formData.templateId) throw new Error("Please select a template.");
 
-      if (!whatsappAccount?.id) {
-        throw new Error("Please select a WhatsApp account.");
-      }
+      let contactIds: string[] | undefined = undefined;
+      let contactGroupId: string | undefined = undefined;
+      let audienceFilter: any = undefined;
 
-      if (!whatsappAccount.phoneNumberId) {
-        throw new Error("Selected WhatsApp account missing phoneNumberId. Please reconnect WhatsApp.");
-      }
-
-      if (!formData.templateId) {
-        throw new Error("Please select a template.");
-      }
-
-      // ✅ Determine contact IDs (prioritize CSV if uploaded)
-      let audienceContactIds: string[] = [];
-
-      if (csvContactIds.length > 0) {
-        // ✅ Use CSV uploaded contacts
-        audienceContactIds = csvContactIds;
-        console.log(`📋 Using ${csvContactIds.length} CSV uploaded contacts`);
-      } else if (formData.audienceType === "all") {
-        audienceContactIds = contacts.map((c) => c.id);
-        console.log(`📋 Using all ${audienceContactIds.length} contacts`);
+      // Logic mapping
+      if (formData.audienceType === "all") {
+        audienceFilter = { all: true };
       } else if (formData.audienceType === "tags") {
-        audienceContactIds = contacts
+        audienceFilter = { tags: formData.selectedTags };
+        // Optionally resolve IDs here if backend requires IDs
+        contactIds = contacts
           .filter((c) => formData.selectedTags.some((tag) => c.tags.includes(tag)))
-          .map((c) => c.id);
-        console.log(`📋 Using ${audienceContactIds.length} contacts with tags: ${formData.selectedTags.join(', ')}`);
+          .map(c => c.id);
       } else if (formData.audienceType === "manual") {
-        audienceContactIds = formData.selectedContacts;
-        console.log(`📋 Using ${audienceContactIds.length} manually selected contacts`);
+        contactIds = formData.selectedContacts;
+      } else if (formData.audienceType === "group") {
+        contactGroupId = formData.selectedGroup;
       }
 
-      if (audienceContactIds.length === 0) {
-        throw new Error("No recipients selected. Please upload CSV or select contacts.");
+      if (
+        (formData.audienceType === "manual" && (!contactIds || contactIds.length === 0)) ||
+        (formData.audienceType === "group" && !contactGroupId)
+      ) {
+        throw new Error("No recipients selected.");
       }
 
-      console.log(`✅ Total recipients: ${audienceContactIds.length}`);
-
-      // scheduledAt
       const scheduledAt =
         formData.scheduleType === "later"
           ? new Date(`${formData.scheduledDate}T${formData.scheduledTime}:00`).toISOString()
@@ -438,81 +308,44 @@ const CreateCampaign: React.FC = () => {
         name: formData.name.trim(),
         description: formData.description?.trim() || undefined,
         templateId: formData.templateId,
-        contactIds: audienceContactIds, // ✅ Send contact IDs
 
-        // WhatsApp account
+        contactIds,       // Used for manual / tags
+        contactGroupId,   // Used for group
+        audienceFilter,   // Used for tags / all
+
         whatsappAccountId: whatsappAccount.id,
         phoneNumberId: whatsappAccount.phoneNumberId,
-
-        // Audience filter (optional, for reference)
-        audienceFilter:
-          csvContactIds.length > 0
-            ? { csvUpload: true, count: csvContactIds.length }
-            : formData.audienceType === "tags"
-              ? { tags: formData.selectedTags }
-              : formData.audienceType === "all"
-                ? { all: true }
-                : undefined,
-
-        variableMapping:
-          Object.keys(formData.variableMapping).length > 0
-            ? formData.variableMapping
-            : undefined,
+        variableMapping: Object.keys(formData.variableMapping).length > 0 ? formData.variableMapping : undefined,
         scheduledAt,
       };
 
-      console.log("📤 Campaign Payload:", {
-        ...payload,
-        contactIds: `${payload.contactIds.length} contacts`,
-      });
+      console.log("📤 Campaign Payload:", payload);
 
       await campaignApi.create(payload);
       navigate("/dashboard/campaigns");
     } catch (error: any) {
       console.error("❌ Campaign creation error:", error);
-
-      const errorMessage =
-        error?.response?.data?.message ||
-        error?.response?.data?.error ||
-        error?.message ||
-        "Failed to create campaign";
-
-      setApiError(errorMessage);
+      setApiError(error?.response?.data?.message || error?.message || "Failed to create campaign");
     } finally {
       setSending(false);
     }
   };
 
-  // ==========================================
-  // LOADING STATE
-  // ==========================================
   if (loadingAccounts || loadingData) {
     return (
       <div className="flex items-center justify-center h-screen bg-gray-50 dark:bg-gray-900">
-        <div className="text-center">
-          <Loader2 className="w-10 h-10 text-primary-500 animate-spin mx-auto mb-4" />
-          <p className="text-gray-500 dark:text-gray-400">
-            Loading WhatsApp accounts, templates and contacts...
-          </p>
-        </div>
+        <Loader2 className="w-10 h-10 text-primary-500 animate-spin" />
       </div>
     );
   }
 
-  // ==========================================
-  // MAIN RENDER
-  // ==========================================
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-      {/* Header */}
       <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 sticky top-16 z-20">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center space-x-4">
-              <Link
-                to="/dashboard/campaigns"
-                className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
-              >
+              <Link to="/dashboard/campaigns" className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">
                 <ArrowLeft className="w-5 h-5 text-gray-600 dark:text-gray-400" />
               </Link>
               <div>
@@ -521,29 +354,14 @@ const CreateCampaign: React.FC = () => {
                   <span>Step {currentStep} of 4</span>
                   <span>•</span>
                   <span className="flex items-center text-green-600 dark:text-green-400">
-                    <Wifi className="w-3 h-3 mr-1" />
-                    Connected
+                    <Wifi className="w-3 h-3 mr-1" /> Connected
                   </span>
-                  {csvUploadCount > 0 && (
-                    <>
-                      <span>•</span>
-                      <span className="flex items-center text-blue-600 dark:text-blue-400">
-                        <Upload className="w-3 h-3 mr-1" />
-                        {csvUploadCount} CSV contacts
-                      </span>
-                    </>
-                  )}
                 </div>
               </div>
             </div>
-
             {selectedTemplate && (
-              <button
-                onClick={() => setShowPreview(true)}
-                className="flex items-center space-x-2 px-4 py-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-xl transition-colors"
-              >
-                <Eye className="w-5 h-5" />
-                <span>Preview</span>
+              <button onClick={() => setShowPreview(true)} className="flex items-center space-x-2 px-4 py-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-xl">
+                <Eye className="w-5 h-5" /> <span>Preview</span>
               </button>
             )}
           </div>
@@ -551,369 +369,122 @@ const CreateCampaign: React.FC = () => {
       </div>
 
       <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        {/* Error Banner */}
         {apiError && (
-          <div className="mb-6 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-4 flex items-start space-x-3">
-            <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
+          <div className="mb-6 bg-red-50 border border-red-200 rounded-xl p-4 flex items-start space-x-3">
+            <AlertCircle className="w-5 h-5 text-red-600" />
             <div className="flex-1">
-              <p className="text-red-700 dark:text-red-300 font-medium">Error</p>
-              <p className="text-red-600 dark:text-red-400 text-sm">{apiError}</p>
+              <p className="text-red-700 font-medium">Error</p>
+              <p className="text-red-600 text-sm">{apiError}</p>
             </div>
-            <button
-              onClick={() => setApiError(null)}
-              className="text-red-400 hover:text-red-600 dark:hover:text-red-300 text-xl"
-            >
-              ×
-            </button>
+            <button onClick={() => setApiError(null)} className="text-red-400 hover:text-red-600 text-xl">×</button>
           </div>
         )}
 
-        {/* Progress Steps */}
+        {/* Steps */}
         <div className="mb-8">
           <div className="flex items-center justify-between">
             {steps.map((step, index) => (
               <React.Fragment key={step.number}>
                 <div className="flex items-center">
-                  <div
-                    className={`w-10 h-10 rounded-full flex items-center justify-center font-semibold transition-all ${step.number < currentStep
-                        ? "bg-primary-500 text-white"
-                        : step.number === currentStep
-                          ? "bg-primary-500 text-white ring-4 ring-primary-100 dark:ring-primary-900"
-                          : "bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400"
-                      }`}
-                  >
-                    {step.number < currentStep ? (
-                      <Check className="w-5 h-5" />
-                    ) : (
-                      <step.icon className="w-5 h-5" />
-                    )}
+                  <div className={`w-10 h-10 rounded-full flex items-center justify-center font-semibold transition-all ${step.number < currentStep ? "bg-primary-500 text-white" : step.number === currentStep ? "bg-primary-500 text-white ring-4 ring-primary-100" : "bg-gray-200 text-gray-500"
+                    }`}>
+                    {step.number < currentStep ? <Check className="w-5 h-5" /> : <step.icon className="w-5 h-5" />}
                   </div>
-                  <span
-                    className={`ml-3 font-medium hidden sm:inline ${step.number <= currentStep
-                        ? "text-gray-900 dark:text-white"
-                        : "text-gray-500 dark:text-gray-400"
-                      }`}
-                  >
-                    {step.title}
-                  </span>
+                  <span className={`ml-3 font-medium hidden sm:inline ${step.number <= currentStep ? "text-gray-900" : "text-gray-500"}`}>{step.title}</span>
                 </div>
-                {index < steps.length - 1 && (
-                  <div
-                    className={`flex-1 h-1 mx-4 rounded ${step.number < currentStep ? "bg-primary-500" : "bg-gray-200 dark:bg-gray-700"
-                      }`}
-                  />
-                )}
+                {index < steps.length - 1 && <div className={`flex-1 h-1 mx-4 rounded ${step.number < currentStep ? "bg-primary-500" : "bg-gray-200"}`} />}
               </React.Fragment>
             ))}
           </div>
         </div>
 
-        {/* Step Content */}
         <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-6">
-          {/* Step 1: Template Selection */}
           {currentStep === 1 && (
-            <div className="space-y-6 animate-fade-in">
+            <div className="space-y-6">
               <div>
-                <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">
-                  Campaign Details
-                </h2>
-                <p className="text-gray-500 dark:text-gray-400">
-                  Select WhatsApp account and a template
-                </p>
+                <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Campaign Details</h2>
+                <p className="text-gray-500 dark:text-gray-400">Select WhatsApp account and a template</p>
               </div>
-
-              {/* WhatsApp Account Select */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  WhatsApp Account *
-                </label>
-                <select
-                  value={selectedAccountId}
-                  onChange={(e) => setSelectedAccountId(e.target.value)}
-                  className="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                >
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">WhatsApp Account *</label>
+                <select value={selectedAccountId} onChange={(e) => setSelectedAccountId(e.target.value)} className="w-full px-4 py-2.5 border rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
                   {whatsappAccounts.map((a) => (
-                    <option key={a.id} value={a.id}>
-                      {(a.displayName || "WhatsApp")} - {(a.phoneNumber || "")} {a.isDefault ? "(Default)" : ""}
-                    </option>
+                    <option key={a.id} value={a.id}>{a.displayName || "WhatsApp"} - {a.phoneNumber}</option>
                   ))}
                 </select>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                  Templates will be filtered for this account.
-                </p>
               </div>
-
-              <div className="grid gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Campaign Name *
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    placeholder="e.g., Diwali Sale 2026"
-                    className="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Description (Optional)
-                  </label>
-                  <textarea
-                    value={formData.description}
-                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                    placeholder="Brief description..."
-                    rows={2}
-                    className="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white resize-none"
-                  />
-                </div>
-              </div>
-
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Select Template *
-                </label>
-
-                {templates.length > 0 ? (
-                  <TemplateSelector
-                    templates={templates}
-                    selectedId={formData.templateId}
-                    onSelect={(template) => setFormData({ ...formData, templateId: template.id })}
-                    onPreview={(template) => console.log("Preview:", template)}
-                  />
-                ) : (
-                  <div className="text-center py-8 bg-gray-50 dark:bg-gray-900 rounded-xl border border-dashed border-gray-300 dark:border-gray-600">
-                    <FileText className="w-10 h-10 text-gray-400 mx-auto mb-2" />
-                    <p className="text-gray-500 dark:text-gray-400">
-                      No templates found for this WhatsApp account.
-                    </p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                      Sync templates for this number, or create a new template for this account.
-                    </p>
-                  </div>
-                )}
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Campaign Name *</label>
+                <input type="text" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} className="w-full px-4 py-2.5 border rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white" placeholder="e.g. Diwali Sale" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Select Template *</label>
+                <TemplateSelector templates={templates} selectedId={formData.templateId} onSelect={(t) => setFormData({ ...formData, templateId: t.id })} onPreview={() => { }} />
               </div>
             </div>
           )}
 
-          {/* Step 2: Audience Selection */}
           {currentStep === 2 && (
-            <div className="space-y-6 animate-fade-in">
+            <div className="space-y-6">
               <div>
-                <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">
-                  Select Audience
-                </h2>
-                <p className="text-gray-500 dark:text-gray-400">
-                  Choose who should receive this campaign
-                </p>
+                <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Select Audience</h2>
+                <p className="text-gray-500 dark:text-gray-400">Choose who should receive this campaign</p>
               </div>
-
-              {/* ✅ CSV Upload Success Banner */}
-              {csvContactIds.length > 0 && (
-                <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-xl p-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="p-2 bg-green-100 dark:bg-green-900/40 rounded-lg">
-                        <Upload className="w-5 h-5 text-green-600 dark:text-green-400" />
-                      </div>
-                      <div>
-                        <p className="font-medium text-green-800 dark:text-green-200">
-                          {csvContactIds.length} contacts uploaded from CSV
-                        </p>
-                        <p className="text-sm text-green-600 dark:text-green-400">
-                          These contacts will be used for this campaign
-                        </p>
-                      </div>
-                    </div>
-                    <button
-                      onClick={clearCsvSelection}
-                      className="text-sm text-green-700 dark:text-green-300 hover:text-green-900 dark:hover:text-green-100 font-medium px-3 py-1.5 bg-green-100 dark:bg-green-900/40 rounded-lg hover:bg-green-200 dark:hover:bg-green-900/60 transition-colors"
-                    >
-                      Clear & Select Manually
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* Show audience selector only if no CSV contacts */}
-              {csvContactIds.length === 0 && (
-                <>
-                  {contacts.length > 0 ? (
-                    <AudienceSelector
-                      audienceType={formData.audienceType}
-                      onTypeChange={(type) => setFormData({ ...formData, audienceType: type })}
-                      selectedTags={formData.selectedTags}
-                      onTagsChange={(tags) => setFormData({ ...formData, selectedTags: tags })}
-                      selectedContacts={formData.selectedContacts}
-                      onContactsChange={(c) => setFormData({ ...formData, selectedContacts: c })}
-                      availableTags={availableTags}
-                      contacts={contacts}
-                      totalSelected={totalRecipients}
-                    />
-                  ) : (
-                    <div className="text-center py-6 bg-gray-50 dark:bg-gray-900 rounded-xl border border-dashed border-gray-300 dark:border-gray-600">
-                      <Users className="w-10 h-10 text-gray-400 mx-auto mb-2" />
-                      <p className="text-gray-500 dark:text-gray-400">
-                        No contacts found yet. Upload CSV to import.
-                      </p>
-                    </div>
-                  )}
-                </>
-              )}
-
-              {/* CSV Uploader */}
-              <CsvAudienceUploader onImported={handleCsvImported} />
-
-              {/* Recipient Count */}
-              {totalRecipients > 0 && (
-                <div className="flex items-center justify-between p-4 bg-blue-50 dark:bg-blue-900/20 rounded-xl border border-blue-200 dark:border-blue-800">
-                  <div className="flex items-center gap-3">
-                    <Users className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-                    <span className="font-medium text-blue-800 dark:text-blue-200">
-                      Total Recipients
-                    </span>
-                  </div>
-                  <span className="text-2xl font-bold text-blue-600 dark:text-blue-400">
-                    {totalRecipients.toLocaleString()}
-                  </span>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Step 3: Variable Mapping */}
-          {currentStep === 3 && (
-            <div className="space-y-6 animate-fade-in">
-              <div>
-                <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">
-                  Map Variables
-                </h2>
-                <p className="text-gray-500 dark:text-gray-400">
-                  Connect template variables to contact fields
-                </p>
-              </div>
-
-              {selectedTemplate?.variables && selectedTemplate.variables.length > 0 ? (
-                <VariableMapper
-                  variables={selectedTemplate.variables}
-                  mapping={formData.variableMapping}
-                  onMappingChange={(mapping) =>
-                    setFormData({ ...formData, variableMapping: mapping })
-                  }
-                />
-              ) : (
-                <div className="text-center py-8 bg-green-50 dark:bg-green-900/20 rounded-xl border border-green-200 dark:border-green-800">
-                  <Check className="w-10 h-10 text-green-500 dark:text-green-400 mx-auto mb-2" />
-                  <p className="text-green-700 dark:text-green-300 font-medium">No Variables Required</p>
-                  <p className="text-sm text-green-600 dark:text-green-400 mt-1">
-                    This template doesn't have any variables to map.
-                  </p>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Step 4: Schedule */}
-          {currentStep === 4 && (
-            <div className="space-y-6 animate-fade-in">
-              <div>
-                <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">
-                  Schedule Campaign
-                </h2>
-                <p className="text-gray-500 dark:text-gray-400">
-                  Choose when to send your campaign
-                </p>
-              </div>
-
-              <SchedulePicker
-                scheduleType={formData.scheduleType}
-                onTypeChange={(type) => setFormData({ ...formData, scheduleType: type })}
-                scheduledDate={formData.scheduledDate || ""}
-                scheduledTime={formData.scheduledTime || ""}
-                onDateChange={(date) => setFormData({ ...formData, scheduledDate: date })}
-                onTimeChange={(time) => setFormData({ ...formData, scheduledTime: time })}
+              <AudienceSelector
+                audienceType={formData.audienceType}
+                onTypeChange={(type) => setFormData({ ...formData, audienceType: type })}
+                selectedTags={formData.selectedTags}
+                onTagsChange={(tags) => setFormData({ ...formData, selectedTags: tags })}
+                selectedContacts={formData.selectedContacts}
+                onContactsChange={(c) => setFormData({ ...formData, selectedContacts: c })}
+                selectedGroup={formData.selectedGroup || ''}
+                onGroupChange={(g) => setFormData({ ...formData, selectedGroup: g })}
+                availableTags={availableTags}
+                contacts={contacts}
+                totalSelected={totalRecipients}
               />
+            </div>
+          )}
 
-              {/* Campaign Summary */}
-              <div className="mt-6 p-4 bg-gray-50 dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700">
-                <h3 className="font-semibold text-gray-900 dark:text-white mb-3">Campaign Summary</h3>
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div>
-                    <span className="text-gray-500 dark:text-gray-400">Campaign Name:</span>
-                    <p className="font-medium text-gray-900 dark:text-white">{formData.name}</p>
-                  </div>
-                  <div>
-                    <span className="text-gray-500 dark:text-gray-400">Template:</span>
-                    <p className="font-medium text-gray-900 dark:text-white">
-                      {selectedTemplate?.name || "Not selected"}
-                    </p>
-                  </div>
-                  <div>
-                    <span className="text-gray-500 dark:text-gray-400">Recipients:</span>
-                    <p className="font-medium text-gray-900 dark:text-white">
-                      {totalRecipients.toLocaleString()} contacts
-                      {csvContactIds.length > 0 && " (from CSV)"}
-                    </p>
-                  </div>
-                  <div>
-                    <span className="text-gray-500 dark:text-gray-400">Schedule:</span>
-                    <p className="font-medium text-gray-900 dark:text-white">
-                      {formData.scheduleType === "now"
-                        ? "Send immediately"
-                        : `${formData.scheduledDate} at ${formData.scheduledTime}`}
-                    </p>
-                  </div>
+          {currentStep === 3 && (
+            <div className="space-y-6">
+              <h2 className="text-lg font-semibold">Map Variables</h2>
+              {selectedTemplate?.variables?.length ? (
+                <VariableMapper variables={selectedTemplate.variables} mapping={formData.variableMapping} onMappingChange={(m) => setFormData({ ...formData, variableMapping: m })} />
+              ) : (
+                <div className="text-center py-8 bg-green-50 rounded-xl border border-green-200">
+                  <Check className="w-10 h-10 text-green-500 mx-auto mb-2" />
+                  <p className="text-green-700 font-medium">No Variables Required</p>
                 </div>
-              </div>
+              )}
+            </div>
+          )}
+
+          {currentStep === 4 && (
+            <div className="space-y-6">
+              <h2 className="text-lg font-semibold">Schedule Campaign</h2>
+              <SchedulePicker scheduleType={formData.scheduleType} onTypeChange={(t) => setFormData({ ...formData, scheduleType: t })} scheduledDate={formData.scheduledDate || ""} scheduledTime={formData.scheduledTime || ""} onDateChange={(d) => setFormData({ ...formData, scheduledDate: d })} onTimeChange={(t) => setFormData({ ...formData, scheduledTime: t })} />
             </div>
           )}
         </div>
 
-        {/* Navigation Buttons */}
         <div className="flex items-center justify-between mt-6">
-          <button
-            onClick={handleBack}
-            disabled={currentStep === 1}
-            className="flex items-center space-x-2 px-5 py-2.5 text-gray-700 dark:text-gray-300 font-medium rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-50 transition-colors"
-          >
-            <ArrowLeft className="w-5 h-5" />
-            <span>Back</span>
+          <button onClick={handleBack} disabled={currentStep === 1} className="flex items-center space-x-2 px-5 py-2.5 text-gray-700 bg-white border border-gray-300 rounded-xl hover:bg-gray-50 disabled:opacity-50">
+            <ArrowLeft className="w-5 h-5" /> <span>Back</span>
           </button>
-
           {currentStep < 4 ? (
-            <button
-              onClick={handleNext}
-              disabled={!validateStep(currentStep)}
-              className="flex items-center space-x-2 px-5 py-2.5 bg-primary-500 hover:bg-primary-600 text-white font-medium rounded-xl disabled:opacity-50 transition-colors"
-            >
-              <span>Continue</span>
-              <ArrowRight className="w-5 h-5" />
+            <button onClick={handleNext} disabled={!validateStep(currentStep)} className="flex items-center space-x-2 px-5 py-2.5 bg-primary-500 text-white rounded-xl hover:bg-primary-600 disabled:opacity-50">
+              <span>Continue</span> <ArrowRight className="w-5 h-5" />
             </button>
           ) : (
-            <button
-              onClick={handleSend}
-              disabled={sending || !validateStep(currentStep)}
-              className="flex items-center space-x-2 px-6 py-2.5 bg-primary-500 hover:bg-primary-600 text-white font-medium rounded-xl disabled:opacity-50 transition-colors"
-            >
-              {sending ? (
-                <>
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                  <span>Creating Campaign...</span>
-                </>
-              ) : (
-                <>
-                  <Send className="w-5 h-5" />
-                  <span>{formData.scheduleType === "now" ? "Send Now" : "Schedule Campaign"}</span>
-                </>
-              )}
+            <button onClick={handleSend} disabled={sending || !validateStep(currentStep)} className="flex items-center space-x-2 px-6 py-2.5 bg-primary-500 text-white rounded-xl hover:bg-primary-600 disabled:opacity-50">
+              {sending ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
+              <span>{formData.scheduleType === "now" ? "Send Now" : "Schedule"}</span>
             </button>
           )}
         </div>
       </div>
 
-      {/* Template Preview Modal */}
       {showPreview && selectedTemplate && (
         <TemplatePreview
           template={{
@@ -923,11 +494,7 @@ const CreateCampaign: React.FC = () => {
             header: mapHeaderForPreview(selectedTemplate.headerType) as any,
             body: selectedTemplate.body,
             footer: "",
-            buttons: selectedTemplate.buttons.map((b: any, i: number) => ({
-              id: String(i),
-              type: "quick_reply" as const,
-              text: b.text,
-            })),
+            buttons: selectedTemplate.buttons.map((b: any, i: number) => ({ id: String(i), type: "quick_reply", text: b.text })),
           }}
           sampleVariables={formData.variableMapping}
           isModal

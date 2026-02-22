@@ -1,13 +1,19 @@
-import React, { useState } from 'react';
+// src/components/campaigns/AudienceSelector.tsx - COMPLETE (Group added, CSV removed)
+
+import React, { useState, useEffect } from 'react';
 import {
   Users,
   Tag,
-  Upload,
   UserPlus,
   Search,
-  Check
+  Check,
+  Layers,
+  Loader2,
 } from 'lucide-react';
-import type { AudienceType } from '../../types/campaign';
+import api from '../../services/api';
+
+// Types
+export type AudienceType = 'all' | 'tags' | 'manual' | 'group';
 
 interface Contact {
   id: string;
@@ -16,13 +22,25 @@ interface Contact {
   tags: string[];
 }
 
+interface Group {
+  id: string;
+  name: string;
+  count: number;
+}
+
 interface AudienceSelectorProps {
   audienceType: AudienceType;
   onTypeChange: (type: AudienceType) => void;
+  // Tags
   selectedTags: string[];
   onTagsChange: (tags: string[]) => void;
+  // Manual
   selectedContacts: string[];
   onContactsChange: (contacts: string[]) => void;
+  // Group
+  selectedGroup: string;
+  onGroupChange: (groupId: string) => void;
+  // Data
   availableTags: string[];
   contacts: Contact[];
   totalSelected: number;
@@ -35,39 +53,59 @@ const AudienceSelector: React.FC<AudienceSelectorProps> = ({
   onTagsChange,
   selectedContacts,
   onContactsChange,
+  selectedGroup,
+  onGroupChange,
   availableTags,
   contacts,
   totalSelected
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
+  const [groups, setGroups] = useState<Group[]>([]);
+  const [loadingGroups, setLoadingGroups] = useState(false);
+
+  // Load groups on mount
+  useEffect(() => {
+    setLoadingGroups(true);
+    api.get('/contacts/groups/all')
+      .then((res) => {
+        const groupsData = res.data?.data || [];
+        setGroups(groupsData.map((g: any) => ({
+          id: g.id,
+          name: g.name,
+          count: g.contactCount || g._count?.members || 0,
+        })));
+      })
+      .catch((err) => console.error('Failed to load groups', err))
+      .finally(() => setLoadingGroups(false));
+  }, []);
 
   const audienceTypes = [
-    { 
-      value: 'all' as AudienceType, 
-      label: 'All Contacts', 
+    {
+      value: 'all' as AudienceType,
+      label: 'All Contacts',
       description: 'Send to all your contacts',
       icon: Users,
       count: contacts.length
     },
-    { 
-      value: 'tags' as AudienceType, 
-      label: 'By Tags', 
+    {
+      value: 'group' as AudienceType,
+      label: 'By Group',
+      description: 'Select a contact group',
+      icon: Layers, // Group icon
+      count: groups.length
+    },
+    {
+      value: 'tags' as AudienceType,
+      label: 'By Tags',
       description: 'Select contacts by tags',
       icon: Tag,
       count: null
     },
-    { 
-      value: 'manual' as AudienceType, 
-      label: 'Select Manually', 
+    {
+      value: 'manual' as AudienceType,
+      label: 'Select Manually',
       description: 'Choose specific contacts',
       icon: UserPlus,
-      count: null
-    },
-    { 
-      value: 'csv' as AudienceType, 
-      label: 'Upload CSV', 
-      description: 'Import from file',
-      icon: Upload,
       count: null
     },
   ];
@@ -114,19 +152,16 @@ const AudienceSelector: React.FC<AudienceSelectorProps> = ({
           <button
             key={type.value}
             onClick={() => onTypeChange(type.value)}
-            className={`p-4 rounded-xl border-2 text-left transition-all ${
-              audienceType === type.value
+            className={`p-4 rounded-xl border-2 text-left transition-all ${audienceType === type.value
                 ? 'border-primary-500 bg-primary-50'
                 : 'border-gray-200 hover:border-gray-300'
-            }`}
+              }`}
           >
             <div className="flex items-start space-x-3">
-              <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
-                audienceType === type.value ? 'bg-primary-100' : 'bg-gray-100'
-              }`}>
-                <type.icon className={`w-5 h-5 ${
-                  audienceType === type.value ? 'text-primary-600' : 'text-gray-500'
-                }`} />
+              <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${audienceType === type.value ? 'bg-primary-100' : 'bg-gray-100'
+                }`}>
+                <type.icon className={`w-5 h-5 ${audienceType === type.value ? 'text-primary-600' : 'text-gray-500'
+                  }`} />
               </div>
               <div className="flex-1">
                 <div className="flex items-center justify-between">
@@ -142,6 +177,42 @@ const AudienceSelector: React.FC<AudienceSelectorProps> = ({
         ))}
       </div>
 
+      {/* Group Selection */}
+      {audienceType === 'group' && (
+        <div className="bg-gray-50 rounded-xl p-4 space-y-4 border border-gray-200">
+          <div className="flex items-center justify-between">
+            <h4 className="font-medium text-gray-900">Select Group</h4>
+            {loadingGroups && <Loader2 className="w-4 h-4 animate-spin text-primary-500" />}
+          </div>
+
+          <select
+            value={selectedGroup}
+            onChange={(e) => onGroupChange(e.target.value)}
+            className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white"
+          >
+            <option value="">-- Select a Group --</option>
+            {groups.map((group) => (
+              <option key={group.id} value={group.id}>
+                {group.name} ({group.count} contacts)
+              </option>
+            ))}
+          </select>
+
+          {selectedGroup && (
+            <p className="text-sm text-green-600 flex items-center gap-1">
+              <Check className="w-4 h-4" />
+              Group selected.
+            </p>
+          )}
+
+          {groups.length === 0 && !loadingGroups && (
+            <p className="text-sm text-gray-500">
+              No groups found. Create groups in Contacts section first.
+            </p>
+          )}
+        </div>
+      )}
+
       {/* Tags Selection */}
       {audienceType === 'tags' && (
         <div className="bg-gray-50 rounded-xl p-4 space-y-4">
@@ -156,11 +227,10 @@ const AudienceSelector: React.FC<AudienceSelectorProps> = ({
               <button
                 key={tag}
                 onClick={() => toggleTag(tag)}
-                className={`px-4 py-2 rounded-full text-sm font-medium transition-all ${
-                  selectedTags.includes(tag)
+                className={`px-4 py-2 rounded-full text-sm font-medium transition-all ${selectedTags.includes(tag)
                     ? 'bg-primary-500 text-white'
                     : 'bg-white border border-gray-200 text-gray-700 hover:border-primary-300'
-                }`}
+                  }`}
               >
                 {selectedTags.includes(tag) && <Check className="w-3 h-3 inline mr-1" />}
                 {tag}
@@ -201,11 +271,10 @@ const AudienceSelector: React.FC<AudienceSelectorProps> = ({
             {filteredContacts.map((contact) => (
               <label
                 key={contact.id}
-                className={`flex items-center space-x-3 p-3 rounded-lg cursor-pointer transition-colors ${
-                  selectedContacts.includes(contact.id)
+                className={`flex items-center space-x-3 p-3 rounded-lg cursor-pointer transition-colors ${selectedContacts.includes(contact.id)
                     ? 'bg-primary-50 border border-primary-200'
                     : 'bg-white border border-gray-200 hover:bg-gray-50'
-                }`}
+                  }`}
               >
                 <input
                   type="checkbox"
@@ -233,30 +302,6 @@ const AudienceSelector: React.FC<AudienceSelectorProps> = ({
           <p className="text-sm text-gray-500 text-center">
             {selectedContacts.length} of {contacts.length} contacts selected
           </p>
-        </div>
-      )}
-
-      {/* CSV Upload */}
-      {audienceType === 'csv' && (
-        <div className="border-2 border-dashed border-gray-300 rounded-xl p-8 text-center">
-          <Upload className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-          <h4 className="font-medium text-gray-900 mb-2">Upload CSV File</h4>
-          <p className="text-sm text-gray-500 mb-4">
-            Upload a CSV file with phone numbers to send messages
-          </p>
-          <input
-            type="file"
-            accept=".csv"
-            className="hidden"
-            id="csv-upload"
-          />
-          <label
-            htmlFor="csv-upload"
-            className="inline-flex items-center space-x-2 px-4 py-2 bg-primary-500 hover:bg-primary-600 text-white font-medium rounded-xl cursor-pointer transition-colors"
-          >
-            <Upload className="w-4 h-4" />
-            <span>Choose File</span>
-          </label>
         </div>
       )}
 

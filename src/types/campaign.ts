@@ -1,5 +1,5 @@
 export type CampaignStatus = 'draft' | 'scheduled' | 'running' | 'completed' | 'paused' | 'failed';
-export type AudienceType = 'all' | 'tags' | 'segment' | 'csv' | 'manual';
+export type AudienceType = 'all' | 'tags' | 'manual' | 'group';
 
 export interface CampaignAudience {
   type: AudienceType;
@@ -44,6 +44,7 @@ export interface CampaignFormData {
   audienceType: AudienceType;
   selectedTags: string[];
   selectedContacts: string[];
+  selectedGroup?: string;
   variableMapping: Record<string, string>;
   scheduleType: 'now' | 'later';
   scheduledDate?: string;
