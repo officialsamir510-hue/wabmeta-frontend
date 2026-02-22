@@ -171,7 +171,7 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
   // ============================================
 
   /**
-   * Handle form submission
+   * Handle form submission - FIXED
    */
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -184,19 +184,40 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
     setFetchingProfile(true);
 
     try {
-      // Normalize phone to +91XXXXXXXXXX format
-      const normalizedPhone = phoneValidation?.normalized || formData.phone;
+      // ✅ CRITICAL FIX: Extract ONLY 10 digits (remove +91)
+      let cleanPhone = formData.phone.replace(/[\s\-\(\)]/g, ''); // Remove spaces/hyphens
 
-      // Prepare payload
+      // Remove country code if present
+      if (cleanPhone.startsWith('+91')) {
+        cleanPhone = cleanPhone.substring(3); // "9876543210"
+      } else if (cleanPhone.startsWith('91') && cleanPhone.length === 12) {
+        cleanPhone = cleanPhone.substring(2); // "9876543210"
+      }
+
+      // Validate it's exactly 10 digits
+      if (!/^\d{10}$/.test(cleanPhone)) {
+        throw new Error('Phone number must be exactly 10 digits');
+      }
+
+      console.log('📤 Sending contact payload:', {
+        phone: cleanPhone,
+        firstName: formData.firstName.trim(),
+        lastName: formData.lastName.trim() || undefined,
+      });
+
+      // ✅ FIXED PAYLOAD - phone WITHOUT country code
       const payload = {
-        phone: normalizedPhone,
+        phone: cleanPhone,                          // ✅ "9876543210"
+        countryCode: '+91',                         // ✅ Separate field
         firstName: formData.firstName.trim(),
         lastName: formData.lastName.trim() || undefined,
         email: formData.email.trim() || undefined,
-        company: formData.company.trim() || undefined,
-        address: formData.address.trim() || undefined,
         tags: formData.tags,
-        notes: formData.notes.trim() || undefined,
+        customFields: {
+          company: formData.company.trim() || undefined,
+          address: formData.address.trim() || undefined,
+          notes: formData.notes.trim() || undefined,
+        },
       };
 
       await onSave(payload);
@@ -204,7 +225,8 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
       // Close modal after successful save
       onClose();
     } catch (error: any) {
-      console.error('Error saving contact:', error);
+      console.error('❌ Error saving contact:', error);
+      console.error('❌ Full error:', error.response?.data);
       // Error will be handled by parent component
     } finally {
       setLoading(false);
