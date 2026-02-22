@@ -1,176 +1,139 @@
-// src/context/SocketProvider.tsx - COMPLETE FIXED VERSION
+// src/context/SocketProvider.tsx - COMPLETE FINAL
 
-import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
+import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { useAuth } from './AuthContext';
+import { SocketContext } from './SocketContext';
 
-interface SocketContextType {
-    socket: Socket | null;
-    isConnected: boolean;
-    joinConversation: (conversationId: string) => void;
-    leaveConversation: (conversationId: string) => void;
-    emitTyping: (conversationId: string, isTyping: boolean) => void;
-}
+const TOKEN_KEYS = {
+    ACCESS: 'accessToken',
+    LEGACY_TOKEN: 'token',
+    LEGACY_WABMETA: 'wabmeta_token',
+    ORG: 'wabmeta_org',
+    ORG_ID: 'currentOrganizationId',
+} as const;
 
-const SocketContext = createContext<SocketContextType>({
-    socket: null,
-    isConnected: false,
-    joinConversation: () => { },
-    leaveConversation: () => { },
-    emitTyping: () => { },
-});
+const isValidJWT = (token: string): boolean => token?.split('.').length === 3;
 
-export const useSocket = () => {
-    const context = useContext(SocketContext);
-    if (!context) {
-        throw new Error('useSocket must be used within SocketProvider');
-    }
-    return context;
+const getAccessToken = (): string | null => {
+    let t =
+        localStorage.getItem(TOKEN_KEYS.ACCESS) ||
+        localStorage.getItem(TOKEN_KEYS.LEGACY_TOKEN) ||
+        localStorage.getItem(TOKEN_KEYS.LEGACY_WABMETA);
+
+    return t && isValidJWT(t) ? t : null;
 };
 
-interface SocketProviderProps {
-    children: React.ReactNode;
-}
+const getOrgId = (): string | null => {
+    try {
+        const orgRaw = localStorage.getItem(TOKEN_KEYS.ORG);
+        if (orgRaw) {
+            const org = JSON.parse(orgRaw);
+            if (org?.id) return org.id;
+        }
+    } catch { }
+    return localStorage.getItem(TOKEN_KEYS.ORG_ID);
+};
 
-export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
-    const { isAuthenticated, user } = useAuth();
+const getSocketUrl = (): string => {
+    const apiUrl = import.meta.env.VITE_API_URL || 'https://wabmeta-api.onrender.com/api';
+    return String(apiUrl).replace(/\/api.*$/i, '').replace(/\/+$/, '');
+};
+
+export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+    const { isAuthenticated } = useAuth();
     const [socket, setSocket] = useState<Socket | null>(null);
     const [isConnected, setIsConnected] = useState(false);
-    const reconnectAttempts = useRef(0);
-    const maxReconnectAttempts = 5;
+
+    const SOCKET_URL = useMemo(() => getSocketUrl(), []);
 
     useEffect(() => {
         if (!isAuthenticated) {
-            if (socket) {
-                console.log('🔌 [SOCKET] Disconnecting (user logged out)');
-                socket.disconnect();
-                setSocket(null);
-                setIsConnected(false);
-            }
+            if (socket) socket.disconnect();
+            setSocket(null);
+            setIsConnected(false);
             return;
         }
 
-        const token = localStorage.getItem('accessToken');
+        const token = getAccessToken();
+        const organizationId = getOrgId();
+
         if (!token) {
-            console.warn('⚠️ [SOCKET] No access token found');
+            console.warn('⚠️ [SOCKET] No valid token. Socket will not connect.');
             return;
         }
-
-        // Get socket URL from environment
-        const apiUrl = import.meta.env.VITE_API_URL || 'https://wabmeta-api.onrender.com/api';
-        const SOCKET_URL = apiUrl.replace(/\/api.*$/, ''); // Remove /api suffix
 
         console.log('🔌 [SOCKET] Connecting to:', SOCKET_URL);
 
-        const newSocket = io(SOCKET_URL, {
-            auth: { token },
-            transports: ['websocket', 'polling'],
+        const s = io(SOCKET_URL, {
+            path: '/socket.io',
+            transports: ['polling', 'websocket'], // ✅ polling first reduces early ws error
+            auth: { token, organizationId },      // ✅ important
+            withCredentials: true,
             reconnection: true,
-            reconnectionAttempts: maxReconnectAttempts,
+            reconnectionAttempts: 10,
             reconnectionDelay: 1000,
-            reconnectionDelayMax: 5000,
             timeout: 10000,
         });
 
-        // Connection handlers
-        newSocket.on('connect', () => {
-            console.log('✅ [SOCKET] Connected:', newSocket.id);
+        s.on('connect', () => {
+            console.log('✅ [SOCKET] Connected:', s.id);
             setIsConnected(true);
-            reconnectAttempts.current = 0;
+
+            // ✅ fallback join
+            if (organizationId) {
+                s.emit('org:join', organizationId);
+            }
         });
 
-        newSocket.on('connected', (data) => {
-            console.log('📡 [SOCKET] Handshake complete:', data);
-        });
-
-        newSocket.on('disconnect', (reason) => {
+        s.on('disconnect', (reason) => {
             console.log('🔌 [SOCKET] Disconnected:', reason);
             setIsConnected(false);
-
-            if (reason === 'io server disconnect') {
-                // Server forcefully disconnected - try to reconnect
-                setTimeout(() => {
-                    newSocket.connect();
-                }, 1000);
-            }
         });
 
-        newSocket.on('connect_error', (error) => {
-            reconnectAttempts.current++;
-            console.error(
-                `❌ [SOCKET] Connection error (attempt ${reconnectAttempts.current}/${maxReconnectAttempts}):`,
-                error.message
-            );
+        s.on('connect_error', (err: any) => {
+            console.error('❌ [SOCKET] connect_error:', err?.message || err);
             setIsConnected(false);
-
-            if (reconnectAttempts.current >= maxReconnectAttempts) {
-                console.error('❌ [SOCKET] Max reconnection attempts reached');
-            }
         });
 
-        newSocket.on('error', (error) => {
-            console.error('❌ [SOCKET] Error:', error);
-        });
+        setSocket(s);
 
-        // Keep-alive ping
-        const pingInterval = setInterval(() => {
-            if (newSocket.connected) {
-                newSocket.emit('ping');
-            }
-        }, 30000);
-
-        setSocket(newSocket);
-
-        // Cleanup
         return () => {
-            console.log('🔌 [SOCKET] Cleaning up connection');
-            clearInterval(pingInterval);
-            newSocket.disconnect();
+            s.disconnect();
             setSocket(null);
             setIsConnected(false);
         };
-    }, [isAuthenticated, user]);
+    }, [SOCKET_URL, isAuthenticated]);
 
-    // Conversation helpers
     const joinConversation = useCallback(
         (conversationId: string) => {
-            if (socket && isConnected) {
-                socket.emit('join:conversation', conversationId);
-                console.log(`📥 [SOCKET] Joined conversation: ${conversationId}`);
-            }
+            if (!socket) return;
+            socket.emit('join:conversation', conversationId);
         },
-        [socket, isConnected]
+        [socket]
     );
 
     const leaveConversation = useCallback(
         (conversationId: string) => {
-            if (socket && isConnected) {
-                socket.emit('leave:conversation', conversationId);
-                console.log(`📤 [SOCKET] Left conversation: ${conversationId}`);
-            }
+            if (!socket) return;
+            socket.emit('leave:conversation', conversationId);
         },
-        [socket, isConnected]
+        [socket]
     );
 
     const emitTyping = useCallback(
         (conversationId: string, isTyping: boolean) => {
-            if (socket && isConnected) {
-                socket.emit(isTyping ? 'typing:start' : 'typing:stop', { conversationId });
-            }
+            if (!socket) return;
+            socket.emit(isTyping ? 'typing:start' : 'typing:stop', { conversationId });
         },
-        [socket, isConnected]
+        [socket]
     );
 
-    const value: SocketContextType = {
-        socket,
-        isConnected,
-        joinConversation,
-        leaveConversation,
-        emitTyping,
-    };
-
-    return <SocketContext.Provider value={value}>{children}</SocketContext.Provider>;
+    return (
+        <SocketContext.Provider value={{ socket, isConnected, joinConversation, leaveConversation, emitTyping }}>
+            {children}
+        </SocketContext.Provider>
+    );
 };
 
-export { SocketContext };
 export default SocketProvider;
