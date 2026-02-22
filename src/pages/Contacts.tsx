@@ -28,6 +28,7 @@ import {
   Square,
   AlertTriangle,
   Layers,
+  ArrowLeft,
 } from 'lucide-react';
 
 import AddContactModal from '../components/contacts/AddContactModal';
@@ -331,6 +332,7 @@ const Contacts: React.FC = () => {
 
   // State
   const [activeTab, setActiveTab] = useState<'contacts' | 'groups'>('contacts');
+  const [activeGroup, setActiveGroup] = useState<Group | null>(null);
   const [groups, setGroups] = useState<Group[]>([]);
   const [loadingGroups, setLoadingGroups] = useState(false);
   const [contacts, setContacts] = useState<Contact[]>([]);
@@ -391,6 +393,9 @@ const Contacts: React.FC = () => {
       if (statusFilter !== 'all') params.status = statusFilter.toUpperCase();
       if (whatsappFilter !== 'all') {
         params.whatsappProfileFetched = whatsappFilter === 'verified';
+      }
+      if (activeGroup?.id) {
+        params.groupId = activeGroup.id;
       }
 
       const res = await api.get('/contacts', { params });
@@ -458,7 +463,7 @@ const Contacts: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [currentPage, searchQuery, statusFilter, whatsappFilter]);
+  }, [currentPage, searchQuery, statusFilter, whatsappFilter, activeGroup?.id]);
 
   const fetchGroups = useCallback(async () => {
     setLoadingGroups(true);
@@ -501,12 +506,12 @@ const Contacts: React.FC = () => {
   // Refetch on filter changes
   useEffect(() => {
     fetchContacts();
-  }, [currentPage, searchQuery, statusFilter, whatsappFilter, fetchContacts]);
+  }, [currentPage, searchQuery, statusFilter, whatsappFilter, activeGroup?.id, fetchContacts]);
 
   // Reset page on filter change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, statusFilter, whatsappFilter]);
+  }, [searchQuery, statusFilter, whatsappFilter, activeGroup?.id]);
 
   // ============================================
   // HANDLERS
@@ -871,8 +876,19 @@ const Contacts: React.FC = () => {
         </button>
       </div>
 
-      {activeTab === 'contacts' ? (
+      {activeTab === 'contacts' || (activeTab === 'groups' && activeGroup) ? (
         <>
+          {activeTab === 'groups' && activeGroup && (
+            <div className="flex items-center space-x-4 mb-4 bg-white rounded-xl p-4 border border-gray-200">
+              <button onClick={() => { setActiveGroup(null); setCurrentPage(1); }} className="p-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-gray-700 transition-colors">
+                <ArrowLeft className="w-5 h-5" />
+              </button>
+              <div>
+                <h2 className="text-xl font-bold text-gray-900">{activeGroup.name}</h2>
+                <p className="text-sm text-gray-500">Viewing {activeGroup.contactCount.toLocaleString()} numbers in this group</p>
+              </div>
+            </div>
+          )}
           {/* Filters */}
           <div className="bg-white rounded-xl border border-gray-200 p-4">
             <div className="flex flex-col md:flex-row md:items-center gap-4">
@@ -1075,7 +1091,7 @@ const Contacts: React.FC = () => {
           ) : groups.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {groups.map((group) => (
-                <div key={group.id} className="bg-white border border-gray-200 rounded-xl p-5 hover:border-primary-300 hover:shadow-md transition-all relative group/card cursor-pointer">
+                <div key={group.id} onClick={() => { setActiveGroup(group); setCurrentPage(1); }} className="bg-white border border-gray-200 rounded-xl p-5 hover:border-primary-300 hover:shadow-md transition-all relative group/card cursor-pointer">
                   <div className="w-12 h-12 bg-primary-50 rounded-xl flex items-center justify-center mb-4 text-primary-600 group-hover/card:scale-110 transition-transform">
                     <Layers className="w-6 h-6" />
                   </div>
