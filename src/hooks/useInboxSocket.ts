@@ -65,10 +65,21 @@ export const useInboxSocket = (
         };
     }, [socket, isConnected, selectedConversationId, joinConversation, leaveConversation]);
 
+    // Store latest callbacks in refs so we don't need to re-attach listeners on every render
+    const onNewMessageRef = useRef(onNewMessage);
+    const onConversationUpdateRef = useRef(onConversationUpdate);
+    const onMessageStatusRef = useRef(onMessageStatus);
+
+    useEffect(() => {
+        onNewMessageRef.current = onNewMessage;
+        onConversationUpdateRef.current = onConversationUpdate;
+        onMessageStatusRef.current = onMessageStatus;
+    });
+
     // Listen for socket events
     useEffect(() => {
-        if (!socket || !isConnected) {
-            console.warn('⚠️ Socket not connected, skipping event listeners');
+        if (!socket) {
+            console.warn('⚠️ Socket not initialized, skipping event listeners');
             return;
         }
 
@@ -79,8 +90,8 @@ export const useInboxSocket = (
             // Extract actual message from various response formats
             const message: Message = data.message || data;
 
-            if (onNewMessage) {
-                onNewMessage(message);
+            if (onNewMessageRef.current) {
+                onNewMessageRef.current(message);
             }
         };
 
@@ -88,8 +99,8 @@ export const useInboxSocket = (
         const handleConversationUpdate = (data: any) => {
             console.log('💬 [SOCKET] Conversation updated:', data);
 
-            if (onConversationUpdate) {
-                onConversationUpdate(data);
+            if (onConversationUpdateRef.current) {
+                onConversationUpdateRef.current(data);
             }
         };
 
@@ -97,8 +108,8 @@ export const useInboxSocket = (
         const handleMessageStatus = (data: any) => {
             console.log('📊 [SOCKET] Message status update:', data);
 
-            if (onMessageStatus) {
-                onMessageStatus(data);
+            if (onMessageStatusRef.current) {
+                onMessageStatusRef.current(data);
             }
         };
 
@@ -116,7 +127,7 @@ export const useInboxSocket = (
             socket.off('message:status', handleMessageStatus);
             console.log('🔌 [SOCKET] Event listeners removed');
         };
-    }, [socket, isConnected, onNewMessage, onConversationUpdate, onMessageStatus]);
+    }, [socket]);
 
     return {
         isConnected,
