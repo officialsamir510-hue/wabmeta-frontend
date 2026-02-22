@@ -610,10 +610,13 @@ const Contacts: React.FC = () => {
     }
   };
 
-  const handleImport = async (contacts: any[]) => {
+  const handleImport = async (contacts: any[], groupData?: { id?: string; name?: string }) => {
     try {
+      // Now sends group info along with contacts
       const res = await api.post('/contacts/import', {
         contacts,
+        groupId: groupData?.id,
+        groupName: groupData?.name,
         skipDuplicates: true,
         validateWhatsApp: true,
       });
@@ -622,8 +625,8 @@ const Contacts: React.FC = () => {
       alert(
         `✅ Import Complete!\n` +
         `Imported: ${result?.imported || 0}\n` +
-        `Duplicates: ${result?.duplicates || 0}\n` +
-        `Failed: ${result?.failed || 0}`
+        `Duplicates Skipped: ${result?.skipped || 0}\n` +
+        `Added to Group: ${result?.addedToGroup || 0}`
       );
 
       await fetchAll();
