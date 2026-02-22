@@ -618,7 +618,6 @@ const Contacts: React.FC = () => {
         groupId: groupData?.id,
         groupName: groupData?.name,
         skipDuplicates: true,
-        validateWhatsApp: true,
       });
 
       const result = res.data?.data;
