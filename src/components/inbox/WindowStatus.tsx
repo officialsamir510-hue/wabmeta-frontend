@@ -1,7 +1,7 @@
 // src/components/inbox/WindowStatus.tsx
 
 import React from 'react';
-import { Clock, AlertTriangle } from 'lucide-react';
+import { Clock, AlertTriangle, CheckCircle } from 'lucide-react';
 
 interface WindowStatusProps {
     windowExpiresAt: string | Date | null;
@@ -25,46 +25,47 @@ const WindowStatus: React.FC<WindowStatusProps> = ({
         const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
 
         if (hours > 0) {
-            return `${hours}h ${minutes}m remaining`;
+            return `${hours}h ${minutes}m`;
         }
-        return `${minutes}m remaining`;
+        return `${minutes}m`;
     };
 
     const timeRemaining = getTimeRemaining();
-    const windowOpen = isWindowOpen && timeRemaining;
+    // Force closed if no time remaining, even if isWindowOpen is true
+    const isOpen = isWindowOpen && !!timeRemaining;
 
-    if (windowOpen) {
-        // Window is open - show green indicator
+    // Debugging (remove later if needed)
+    console.log('Window Status:', { isOpen, timeRemaining, expires: windowExpiresAt });
+
+    if (isOpen) {
         return (
-            <div className="flex items-center justify-center py-2 px-4 bg-green-50 dark:bg-green-900/20 border-b border-green-100 dark:border-green-800">
-                <div className="flex items-center text-sm">
-                    <div className="relative mr-2">
-                        <Clock className="w-4 h-4 text-green-600" />
-                        <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+            <div className="w-full bg-emerald-50 dark:bg-emerald-900/30 border-b border-emerald-100 dark:border-emerald-800 px-4 py-2 flex items-center justify-center shadow-sm z-10 relative">
+                <div className="flex items-center space-x-2">
+                    <div className="relative">
+                        <Clock className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                        <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-emerald-500 rounded-full animate-pulse ring-2 ring-emerald-50 dark:ring-emerald-900" />
                     </div>
-                    <span className="text-green-700 dark:text-green-400 font-medium">
-                        24h Window Open
+                    <span className="text-sm font-semibold text-emerald-800 dark:text-emerald-200">
+                        24h Window Active
                     </span>
-                    <span className="mx-2 text-green-400 dark:text-green-600">•</span>
-                    <span className="text-green-600 dark:text-green-500">
-                        {timeRemaining}
+                    <span className="text-xs font-medium bg-emerald-100 dark:bg-emerald-800 text-emerald-700 dark:text-emerald-300 px-2 py-0.5 rounded-full">
+                        {timeRemaining} left
                     </span>
                 </div>
             </div>
         );
     }
 
-    // Window is closed - show warning
+    // Window Closed State
     return (
-        <div className="flex items-center justify-center py-2 px-4 bg-yellow-50 dark:bg-yellow-900/20 border-b border-yellow-100 dark:border-yellow-800">
-            <div className="flex items-center text-sm">
-                <AlertTriangle className="w-4 h-4 text-yellow-600 mr-2" />
-                <span className="text-yellow-700 dark:text-yellow-400 font-medium">
+        <div className="w-full bg-amber-50 dark:bg-amber-900/20 border-b border-amber-100 dark:border-amber-800 px-4 py-2 flex items-center justify-center shadow-sm z-10 relative">
+            <div className="flex items-center space-x-2">
+                <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-500" />
+                <span className="text-sm font-semibold text-amber-800 dark:text-amber-200">
                     24h Window Closed
                 </span>
-                <span className="mx-2 text-yellow-400 dark:text-yellow-600">•</span>
-                <span className="text-yellow-600 dark:text-yellow-500 text-xs">
-                    Only template messages allowed
+                <span className="text-xs text-amber-600 dark:text-amber-400">
+                    • Use templates to message
                 </span>
             </div>
         </div>

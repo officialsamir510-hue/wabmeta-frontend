@@ -87,27 +87,28 @@ const ChatInput: React.FC<ChatInputProps> = ({
   // If window is closed, show template message prompt
   if (!windowOpen) {
     return (
-      <div className="border-t border-gray-200 dark:border-gray-700 bg-yellow-50 dark:bg-yellow-900/20 p-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center">
-            <div className="w-10 h-10 bg-yellow-100 dark:bg-yellow-900/30 rounded-full flex items-center justify-center mr-3">
-              <Clock className="w-5 h-5 text-yellow-600" />
+      <div className="bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 p-4">
+        <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="flex items-center text-center sm:text-left">
+            <div className="w-10 h-10 bg-amber-100 dark:bg-amber-900/40 rounded-full flex items-center justify-center mr-3 flex-shrink-0">
+              <Clock className="w-5 h-5 text-amber-600 dark:text-amber-500" />
             </div>
             <div>
-              <p className="text-sm font-medium text-yellow-800 dark:text-yellow-200">
-                24-Hour Window Expired
+              <p className="text-sm font-bold text-gray-900 dark:text-white">
+                24-Hour Session Expired
               </p>
-              <p className="text-xs text-yellow-700 dark:text-yellow-300">
-                Send a template message to restart the conversation
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                Start a new session with a template message.
               </p>
             </div>
           </div>
+
           <button
             onClick={onOpenTemplateModal}
-            className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center font-medium"
+            className="w-full sm:w-auto px-6 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium flex items-center justify-center transition-colors shadow-sm"
           >
             <FileText className="w-4 h-4 mr-2" />
-            Send Template
+            Browse Templates
           </button>
         </div>
       </div>
