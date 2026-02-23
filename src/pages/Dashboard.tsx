@@ -6,16 +6,13 @@ import {
   MessageSquare,
   Send,
   CheckCircle,
-  Eye,
   XCircle,
   TrendingUp,
   TrendingDown,
-  Clock,
   Zap,
   RefreshCw,
   Loader2,
   ArrowUpRight,
-  ArrowDownRight,
   Mail,
   FileText,
   BarChart3,
@@ -481,12 +478,12 @@ const Dashboard: React.FC = () => {
                       <td className="py-3">
                         <span
                           className={`px-2 py-1 text-xs rounded-full font-medium ${campaign.status === 'COMPLETED'
-                              ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-                              : campaign.status === 'RUNNING'
-                                ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
-                                : campaign.status === 'FAILED'
-                                  ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
-                                  : 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-400'
+                            ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                            : campaign.status === 'RUNNING'
+                              ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                              : campaign.status === 'FAILED'
+                                ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                                : 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-400'
                             }`}
                         >
                           {campaign.status}
@@ -498,10 +495,10 @@ const Dashboard: React.FC = () => {
                       <td className="py-3 text-right">
                         <span
                           className={`text-sm font-medium ${campaign.deliveryRate >= 90
-                              ? 'text-green-600'
-                              : campaign.deliveryRate >= 70
-                                ? 'text-yellow-600'
-                                : 'text-red-600'
+                            ? 'text-green-600'
+                            : campaign.deliveryRate >= 70
+                              ? 'text-yellow-600'
+                              : 'text-red-600'
                             }`}
                         >
                           {campaign.deliveryRate}%
