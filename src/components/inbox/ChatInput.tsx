@@ -1,47 +1,46 @@
+// src/components/inbox/ChatInput.tsx
+
 import React, { useState, useRef, useEffect } from 'react';
 import {
-  Smile,
-  Paperclip,
-  Mic,
   Send,
-  X,
-  Image,
-  Camera,
+  Paperclip,
+  Smile,
   FileText,
-  User,
-  MapPin,
-  StopCircle
+  Loader2,
+  Clock,
 } from 'lucide-react';
-import type { Message } from '../../types/chat';
 
 interface ChatInputProps {
-  onSend: (content: string, type: 'text' | 'image' | 'document') => void;
-  replyTo?: Message | null;
-  onCancelReply?: () => void;
+  onSendMessage: (message: string, type?: string) => Promise<void>;
+  onOpenTemplateModal: () => void;
   disabled?: boolean;
+  isWindowOpen: boolean;
+  windowExpiresAt?: string | Date | null;
+  placeholder?: string;
 }
 
 const ChatInput: React.FC<ChatInputProps> = ({
-  onSend,
-  replyTo,
-  onCancelReply,
-  disabled = false
+  onSendMessage,
+  onOpenTemplateModal,
+  disabled = false,
+  isWindowOpen,
+  windowExpiresAt,
+  placeholder = 'Type a message...',
 }) => {
   const [message, setMessage] = useState('');
-  const [showAttachMenu, setShowAttachMenu] = useState(false);
-  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
-  const [isRecording, setIsRecording] = useState(false);
+  const [sending, setSending] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  const emojis = ['😀', '😂', '❤️', '👍', '🎉', '🔥', '✨', '💯', '🙏', '👋', '😊', '🤔', '👏', '💪', '🎁', '📱'];
+  // Check if window is actually open
+  const checkWindowOpen = () => {
+    if (!isWindowOpen) return false;
+    if (!windowExpiresAt) return false;
 
-  const attachmentOptions = [
-    { icon: Image, label: 'Photo & Video', color: 'bg-purple-500', accept: 'image/*,video/*' },
-    { icon: Camera, label: 'Camera', color: 'bg-pink-500', accept: 'image/*' },
-    { icon: FileText, label: 'Document', color: 'bg-blue-500', accept: '.pdf,.doc,.docx,.xls,.xlsx' },
-    { icon: User, label: 'Contact', color: 'bg-green-500', accept: '' },
-    { icon: MapPin, label: 'Location', color: 'bg-orange-500', accept: '' },
-  ];
+    const expiresAt = new Date(windowExpiresAt);
+    return expiresAt > new Date();
+  };
+
+  const windowOpen = checkWindowOpen();
 
   // Auto-resize textarea
   useEffect(() => {
@@ -51,184 +50,131 @@ const ChatInput: React.FC<ChatInputProps> = ({
     }
   }, [message]);
 
-  const handleSend = () => {
-    if (message.trim() && !disabled) {
-      onSend(message.trim(), 'text');
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!message.trim() || sending || disabled) return;
+
+    // Check if window is open for free-form messages
+    if (!windowOpen) {
+      onOpenTemplateModal();
+      return;
+    }
+
+    try {
+      setSending(true);
+      await onSendMessage(message.trim());
       setMessage('');
+
+      // Reset textarea height
+      if (textareaRef.current) {
+        textareaRef.current.style.height = 'auto';
+      }
+    } catch (error) {
+      console.error('Send message error:', error);
+    } finally {
+      setSending(false);
     }
   };
 
-  const handleKeyPress = (e: React.KeyboardEvent) => {
+  const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      handleSend();
+      handleSubmit(e);
     }
   };
 
-  const handleEmojiClick = (emoji: string) => {
-    setMessage(prev => prev + emoji);
-    textareaRef.current?.focus();
-  };
-
-  const handleFileSelect = (type: string) => {
-    // In real app, handle file upload
-    console.log('File type:', type);
-    setShowAttachMenu(false);
-  };
-
-  return (
-    <div className="border-t border-gray-200 bg-white">
-      {/* Reply Preview */}
-      {replyTo && (
-        <div className="flex items-center justify-between px-4 py-2 bg-gray-50 border-b border-gray-200 animate-fade-in">
-          <div className="flex items-center space-x-3">
-            <div className="w-1 h-10 bg-primary-500 rounded-full"></div>
+  // If window is closed, show template message prompt
+  if (!windowOpen) {
+    return (
+      <div className="border-t border-gray-200 dark:border-gray-700 bg-yellow-50 dark:bg-yellow-900/20 p-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center">
+            <div className="w-10 h-10 bg-yellow-100 dark:bg-yellow-900/30 rounded-full flex items-center justify-center mr-3">
+              <Clock className="w-5 h-5 text-yellow-600" />
+            </div>
             <div>
-              <p className="text-sm font-medium text-primary-600">
-                Replying to {replyTo.isOutgoing ? 'yourself' : 'contact'}
+              <p className="text-sm font-medium text-yellow-800 dark:text-yellow-200">
+                24-Hour Window Expired
               </p>
-              <p className="text-sm text-gray-500 truncate max-w-75">
-                {replyTo.content}
+              <p className="text-xs text-yellow-700 dark:text-yellow-300">
+                Send a template message to restart the conversation
               </p>
             </div>
           </div>
           <button
-            onClick={onCancelReply}
-            className="p-1 hover:bg-gray-200 rounded-full transition-colors"
+            onClick={onOpenTemplateModal}
+            className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center font-medium"
           >
-            <X className="w-5 h-5 text-gray-500" />
+            <FileText className="w-4 h-4 mr-2" />
+            Send Template
           </button>
         </div>
-      )}
+      </div>
+    );
+  }
 
-      <div className="p-4">
-        <div className="flex items-end space-x-3">
-          {/* Emoji Button */}
-          <div className="relative">
-            <button
-              onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-              className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-full transition-colors"
-            >
-              <Smile className="w-6 h-6" />
-            </button>
+  // Normal input when window is open
+  return (
+    <form onSubmit={handleSubmit} className="border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4">
+      <div className="flex items-end gap-3">
+        {/* Attachment Button */}
+        <button
+          type="button"
+          className="p-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full"
+          title="Attach file"
+        >
+          <Paperclip className="w-5 h-5" />
+        </button>
 
-            {/* Emoji Picker */}
-            {showEmojiPicker && (
-              <>
-                <div 
-                  className="fixed inset-0 z-10"
-                  onClick={() => setShowEmojiPicker(false)}
-                ></div>
-                <div className="absolute bottom-full left-0 mb-2 p-3 bg-white rounded-xl shadow-lg border border-gray-200 z-20 animate-fade-in">
-                  <div className="grid grid-cols-8 gap-1">
-                    {emojis.map((emoji, index) => (
-                      <button
-                        key={index}
-                        onClick={() => handleEmojiClick(emoji)}
-                        className="w-8 h-8 flex items-center justify-center text-xl hover:bg-gray-100 rounded transition-colors"
-                      >
-                        {emoji}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </>
-            )}
-          </div>
-
-          {/* Attachment Button */}
-          <div className="relative">
-            <button
-              onClick={() => setShowAttachMenu(!showAttachMenu)}
-              className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-full transition-colors"
-            >
-              <Paperclip className="w-6 h-6" />
-            </button>
-
-            {/* Attachment Menu */}
-            {showAttachMenu && (
-              <>
-                <div 
-                  className="fixed inset-0 z-10"
-                  onClick={() => setShowAttachMenu(false)}
-                ></div>
-                <div className="absolute bottom-full left-0 mb-2 p-2 bg-white rounded-xl shadow-lg border border-gray-200 z-20 animate-fade-in">
-                  <div className="flex flex-col space-y-1">
-                    {attachmentOptions.map((option, index) => (
-                      <button
-                        key={index}
-                        onClick={() => handleFileSelect(option.label)}
-                        className="flex items-center space-x-3 px-3 py-2 hover:bg-gray-50 rounded-lg transition-colors"
-                      >
-                        <div className={`w-10 h-10 ${option.color} rounded-full flex items-center justify-center`}>
-                          <option.icon className="w-5 h-5 text-white" />
-                        </div>
-                        <span className="text-sm font-medium text-gray-700">{option.label}</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </>
-            )}
-          </div>
-
-          {/* Input Field */}
-          <div className="flex-1 relative">
-            <textarea
-              ref={textareaRef}
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
-              onKeyPress={handleKeyPress}
-              placeholder="Type a message..."
-              disabled={disabled || isRecording}
-              rows={1}
-              className="w-full px-4 py-3 bg-gray-100 rounded-2xl resize-none focus:outline-none focus:ring-2 focus:ring-primary-500 focus:bg-white transition-all disabled:opacity-50"
-              style={{ maxHeight: '120px' }}
-            />
-          </div>
-
-          {/* Send / Voice Button */}
-          {message.trim() ? (
-            <button
-              onClick={handleSend}
-              disabled={disabled}
-              className="p-3 bg-primary-500 hover:bg-primary-600 text-white rounded-full transition-colors disabled:opacity-50"
-            >
-              <Send className="w-5 h-5" />
-            </button>
-          ) : (
-            <button
-              onClick={() => setIsRecording(!isRecording)}
-              className={`p-3 rounded-full transition-colors ${
-                isRecording 
-                  ? 'bg-red-500 hover:bg-red-600 text-white animate-pulse' 
-                  : 'bg-gray-100 hover:bg-gray-200 text-gray-600'
-              }`}
-            >
-              {isRecording ? (
-                <StopCircle className="w-5 h-5" />
-              ) : (
-                <Mic className="w-5 h-5" />
-              )}
-            </button>
-          )}
+        {/* Text Input */}
+        <div className="flex-1 relative">
+          <textarea
+            ref={textareaRef}
+            value={message}
+            onChange={(e) => setMessage(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder={placeholder}
+            disabled={disabled || sending}
+            rows={1}
+            className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-2xl focus:ring-2 focus:ring-green-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white resize-none disabled:opacity-50 disabled:cursor-not-allowed"
+            style={{ minHeight: '48px', maxHeight: '120px' }}
+          />
         </div>
 
-        {/* Recording Indicator */}
-        {isRecording && (
-          <div className="flex items-center justify-center space-x-3 mt-3 text-red-600 animate-fade-in">
-            <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
-            <span className="text-sm font-medium">Recording... 0:05</span>
-            <button
-              onClick={() => setIsRecording(false)}
-              className="text-sm underline"
-            >
-              Cancel
-            </button>
-          </div>
-        )}
+        {/* Emoji Button */}
+        <button
+          type="button"
+          className="p-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full"
+          title="Add emoji"
+        >
+          <Smile className="w-5 h-5" />
+        </button>
+
+        {/* Send Button */}
+        <button
+          type="submit"
+          disabled={!message.trim() || sending || disabled}
+          className="p-3 bg-green-600 text-white rounded-full hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+        >
+          {sending ? (
+            <Loader2 className="w-5 h-5 animate-spin" />
+          ) : (
+            <Send className="w-5 h-5" />
+          )}
+        </button>
       </div>
-    </div>
+
+      {/* Character count or hint */}
+      {message.length > 0 && (
+        <div className="flex justify-end mt-2">
+          <span className={`text-xs ${message.length > 4000 ? 'text-red-500' : 'text-gray-400'
+            }`}>
+            {message.length}/4096
+          </span>
+        </div>
+      )}
+    </form>
   );
 };
 
