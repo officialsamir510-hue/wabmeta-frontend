@@ -772,6 +772,44 @@ export const admin = {
   updateSubscription: (id: string, data: any) =>
     api.put<ApiResponse>(`/admin/organizations/${id}/subscription`, data),
 
+  // ============================================
+  // SUBSCRIPTION MANAGEMENT
+  // ============================================
+
+  // Get all subscriptions
+  getSubscriptions: (params?: {
+    page?: number;
+    limit?: number;
+    status?: string;
+    planType?: string;
+    search?: string;
+  }) => api.get<ApiResponse>('/admin/subscriptions', { params }),
+
+  // Get subscription stats
+  getSubscriptionStats: () =>
+    api.get<ApiResponse>('/admin/subscriptions/stats'),
+
+  // Assign plan to organization
+  assignPlan: (data: {
+    organizationId: string;
+    planSlug: string;
+    validityDays?: number;
+    customEndDate?: string;
+    reason?: string;
+  }) => api.post<ApiResponse>('/admin/subscriptions/assign', data),
+
+  // Extend subscription
+  extendSubscription: (organizationId: string, data: {
+    additionalDays: number;
+    reason?: string;
+  }) => api.post<ApiResponse>(`/admin/subscriptions/${organizationId}/extend`, data),
+
+  // Revoke subscription
+  revokeSubscription: (organizationId: string, data: {
+    reason?: string;
+    immediate?: boolean;
+  }) => api.post<ApiResponse>(`/admin/subscriptions/${organizationId}/revoke`, data),
+
   // Plans
   getPlans: () => api.get<ApiResponse>('/admin/plans'),
 

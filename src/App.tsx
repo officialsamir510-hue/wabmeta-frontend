@@ -71,7 +71,7 @@ const NotFound = lazy(() => import('./pages/NotFound'));
 const AdminLogin = lazy(() => import('./pages/admin/AdminLogin'));
 const AdminDashboard = lazy(() => import('./pages/admin/AdminDashboard'));
 const UserManagement = lazy(() => import('./pages/admin/UserManagement'));
-const Subscriptions = lazy(() => import('./pages/admin/Subscriptions'));
+const SubscriptionManagement = lazy(() => import('./pages/admin/SubscriptionManagement'));
 const SystemSettings = lazy(() => import('./pages/admin/SystemSettings'));
 
 // ============================================
@@ -409,7 +409,7 @@ const AppRoutes: React.FC = () => {
           <Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />
           <Route path="/admin/dashboard" element={<AdminDashboard />} />
           <Route path="/admin/users" element={<UserManagement />} />
-          <Route path="/admin/subscriptions" element={<Subscriptions />} />
+          <Route path="/admin/subscriptions" element={<SubscriptionManagement />} />
           <Route path="/admin/settings" element={<SystemSettings />} />
         </Route>
 
