@@ -1,6 +1,6 @@
 // src/App.tsx
 
-import React, { Suspense, lazy, useEffect } from 'react';
+import React, { Suspense, lazy, useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 
@@ -13,6 +13,7 @@ import { SocketProvider } from './context/SocketProvider';
 // Components
 import LoadingScreen from './components/common/LoadingScreen';
 import ErrorBoundary from './components/common/ErrorBoundary';
+import UpgradeModal from './components/common/UpgradeModal';
 
 // Layouts
 import DashboardLayout from './components/dashboard/DashboardLayout';
@@ -434,6 +435,33 @@ const AppRoutes: React.FC = () => {
 // ============================================
 
 const App: React.FC = () => {
+  const [upgradeModal, setUpgradeModal] = useState({
+    isOpen: false,
+    limitType: '',
+    used: 0,
+    limit: 0,
+    message: '',
+  });
+
+  useEffect(() => {
+    const handleLimitExceeded = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      setUpgradeModal({
+        isOpen: true,
+        limitType: customEvent.detail?.limitType || 'resource',
+        used: customEvent.detail?.used || 0,
+        limit: customEvent.detail?.limit || 0,
+        message: customEvent.detail?.message || '',
+      });
+    };
+
+    window.addEventListener('planLimitExceeded', handleLimitExceeded);
+
+    return () => {
+      window.removeEventListener('planLimitExceeded', handleLimitExceeded);
+    };
+  }, []);
+
   return (
     <ErrorBoundary>
       <BrowserRouter>
@@ -494,6 +522,15 @@ const App: React.FC = () => {
               />
               {/* App Routes */}
               <AppRoutes />
+
+              <UpgradeModal
+                isOpen={upgradeModal.isOpen}
+                onClose={() => setUpgradeModal(prev => ({ ...prev, isOpen: false }))}
+                limitType={upgradeModal.limitType as any}
+                used={upgradeModal.used}
+                limit={upgradeModal.limit}
+                message={upgradeModal.message}
+              />
             </SocketProvider>
           </AuthProvider>
         </ThemeProvider>

@@ -285,6 +285,27 @@ api.interceptors.response.use(
       });
     }
 
+    // Handle payment required (plan limit exceeded)
+    if (status === 402) {
+      const errorData = error.response?.data as any;
+
+      // Dispatch custom event for upgrade modal
+      window.dispatchEvent(new CustomEvent('planLimitExceeded', {
+        detail: {
+          limitType: errorData?.data?.limitType,
+          used: errorData?.data?.used,
+          limit: errorData?.data?.limit,
+          message: errorData?.message,
+        }
+      }));
+
+      return Promise.reject({
+        ...error,
+        isLimitExceeded: true,
+        limitData: errorData?.data,
+      });
+    }
+
     if (status === 401 && originalRequest && !originalRequest._retry) {
       const isAdminRoute = url.includes('/admin');
 
