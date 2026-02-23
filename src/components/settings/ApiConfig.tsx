@@ -1,177 +1,110 @@
+// src/components/settings/ApiConfig.tsx
+
 import React, { useState } from 'react';
-import { Eye, EyeOff, Copy, CheckCircle2, RefreshCw, AlertTriangle } from 'lucide-react';
-import type { ApiConfiguration } from '../../types/settings';
+import { Code, Key, Webhook, Copy, Eye, EyeOff, Plus } from 'lucide-react';
+import toast from 'react-hot-toast';
 
 const ApiConfig: React.FC = () => {
-  const [showToken, setShowToken] = useState(false);
-  const [config, setConfig] = useState<ApiConfiguration>({
-    wabaId: '109876543210987',
-    phoneNumberId: '123456789012345',
-    accessToken: 'EAAG...',
-    webhookUrl: 'https://api.wabmeta.com/webhook/wh_12345',
-    verifyToken: 'wabmeta_verify_123'
-  });
+  const [showSecret, setShowSecret] = useState(false);
 
-  const handleCopy = (text: string) => {
+  const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
-    // Add toast notification logic here
+    toast.success('Copied to clipboard');
   };
 
   return (
     <div className="space-y-6">
-      <div className="bg-white border border-gray-200 rounded-xl p-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Meta API Credentials</h3>
-        
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              WhatsApp Business Account ID
-            </label>
-            <div className="flex">
-              <input
-                type="text"
-                value={config.wabaId}
-                readOnly
-                className="flex-1 px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-l-xl focus:outline-none text-gray-600 font-mono text-sm"
-              />
-              <button
-                onClick={() => handleCopy(config.wabaId)}
-                className="px-4 border border-l-0 border-gray-200 rounded-r-xl hover:bg-gray-50 transition-colors"
-              >
-                <Copy className="w-4 h-4 text-gray-500" />
-              </button>
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Phone Number ID
-            </label>
-            <div className="flex">
-              <input
-                type="text"
-                value={config.phoneNumberId}
-                readOnly
-                className="flex-1 px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-l-xl focus:outline-none text-gray-600 font-mono text-sm"
-              />
-              <button
-                onClick={() => handleCopy(config.phoneNumberId)}
-                className="px-4 border border-l-0 border-gray-200 rounded-r-xl hover:bg-gray-50 transition-colors"
-              >
-                <Copy className="w-4 h-4 text-gray-500" />
-              </button>
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Permanent Access Token
-            </label>
-            <div className="flex">
-              <input
-                type={showToken ? 'text' : 'password'}
-                value={config.accessToken}
-                readOnly
-                className="flex-1 px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-l-xl focus:outline-none text-gray-600 font-mono text-sm"
-              />
-              <button
-                onClick={() => setShowToken(!showToken)}
-                className="px-3 border-y border-gray-200 hover:bg-gray-50 transition-colors"
-              >
-                {showToken ? (
-                  <EyeOff className="w-4 h-4 text-gray-500" />
-                ) : (
-                  <Eye className="w-4 h-4 text-gray-500" />
-                )}
-              </button>
-              <button
-                onClick={() => handleCopy(config.accessToken)}
-                className="px-4 border border-l-0 border-gray-200 rounded-r-xl hover:bg-gray-50 transition-colors"
-              >
-                <Copy className="w-4 h-4 text-gray-500" />
-              </button>
-            </div>
-            <p className="text-xs text-gray-500 mt-1">
-              Used to authenticate requests to the WhatsApp Business API.
-            </p>
-          </div>
-        </div>
+      <div>
+        <h2 className="text-xl font-semibold text-gray-900 dark:text-white flex items-center">
+          <Code className="w-6 h-6 mr-2 text-blue-600" />
+          API & Webhooks
+        </h2>
+        <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+          Manage your API keys and webhook configuration
+        </p>
       </div>
 
-      <div className="bg-white border border-gray-200 rounded-xl p-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Webhook Configuration</h3>
-        
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Callback URL
-            </label>
-            <div className="flex">
-              <input
-                type="text"
-                value={config.webhookUrl}
-                readOnly
-                className="flex-1 px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-l-xl focus:outline-none text-gray-600 font-mono text-sm"
-              />
-              <button
-                onClick={() => handleCopy(config.webhookUrl)}
-                className="px-4 border border-l-0 border-gray-200 rounded-r-xl hover:bg-gray-50 transition-colors"
-              >
-                <Copy className="w-4 h-4 text-gray-500" />
-              </button>
-            </div>
-          </div>
+      {/* API Keys Section */}
+      <div>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="font-medium text-gray-900 dark:text-white">API Keys</h3>
+          <button className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm flex items-center">
+            <Plus className="w-4 h-4 mr-2" />
+            Generate New Key
+          </button>
+        </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Verify Token
-            </label>
-            <div className="flex">
-              <input
-                type="text"
-                value={config.verifyToken}
-                readOnly
-                className="flex-1 px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-l-xl focus:outline-none text-gray-600 font-mono text-sm"
-              />
-              <button
-                onClick={() => {
-                  // Generate new token logic
-                  setConfig({ ...config, verifyToken: 'new_token_' + Date.now() });
-                }}
-                className="px-3 border-y border-gray-200 hover:bg-gray-50 transition-colors"
-                title="Regenerate Token"
-              >
-                <RefreshCw className="w-4 h-4 text-gray-500" />
-              </button>
-              <button
-                onClick={() => handleCopy(config.verifyToken)}
-                className="px-4 border border-l-0 border-gray-200 rounded-r-xl hover:bg-gray-50 transition-colors"
-              >
-                <Copy className="w-4 h-4 text-gray-500" />
-              </button>
-            </div>
-          </div>
-
-          <div className="bg-green-50 border border-green-200 rounded-lg p-4 flex items-start space-x-3">
-            <CheckCircle2 className="w-5 h-5 text-green-600 mt-0.5" />
+        <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4">
+          <div className="flex items-center justify-between">
             <div>
-              <h4 className="font-medium text-green-900 text-sm">Webhook Active</h4>
-              <p className="text-green-700 text-sm mt-1">
-                Last event received: 2 minutes ago
-              </p>
+              <p className="font-medium text-gray-900 dark:text-white">Production API Key</p>
+              <div className="flex items-center mt-1">
+                <code className="text-sm text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded">
+                  {showSecret ? 'wm_live_sk_xxxxxxxxxxxxx' : 'wm_live_sk_••••••••••••'}
+                </code>
+                <button
+                  onClick={() => setShowSecret(!showSecret)}
+                  className="ml-2 p-1 text-gray-500 hover:text-gray-700"
+                >
+                  {showSecret ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+                <button
+                  onClick={() => copyToClipboard('wm_live_sk_xxxxxxxxxxxxx')}
+                  className="ml-2 p-1 text-gray-500 hover:text-gray-700"
+                >
+                  <Copy className="w-4 h-4" />
+                </button>
+              </div>
             </div>
           </div>
         </div>
       </div>
 
-      <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 flex items-start space-x-3">
-        <AlertTriangle className="w-5 h-5 text-yellow-600 mt-0.5" />
-        <div>
-          <h4 className="font-medium text-yellow-900">Important Security Note</h4>
-          <p className="text-sm text-yellow-800 mt-1">
-            Keep your Access Token and App Secret secure. Do not share them in public repositories or client-side code.
-          </p>
+      {/* Webhook Configuration */}
+      <div>
+        <h3 className="font-medium text-gray-900 dark:text-white mb-4">Webhook Configuration</h3>
+
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Webhook URL
+            </label>
+            <input
+              type="url"
+              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-green-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+              placeholder="https://your-server.com/webhook"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Webhook Secret
+            </label>
+            <input
+              type="text"
+              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-green-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+              placeholder="Your webhook secret"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Events to Subscribe
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+              {['message.received', 'message.sent', 'message.delivered', 'message.read'].map((event) => (
+                <label key={event} className="flex items-center">
+                  <input type="checkbox" className="rounded text-green-600 mr-2" defaultChecked />
+                  <span className="text-sm text-gray-700 dark:text-gray-300">{event}</span>
+                </label>
+              ))}
+            </div>
+          </div>
         </div>
+
+        <button className="mt-4 px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">
+          Save Webhook Settings
+        </button>
       </div>
     </div>
   );
