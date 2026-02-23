@@ -1,885 +1,694 @@
-// src/pages/Dashboard.tsx
+// src/pages/Dashboard.tsx - COMPLETE WITH WORKING CHARTS
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import React, { useState, useEffect } from 'react';
 import {
-  Send,
-  MessageSquare,
   Users,
-  CheckCircle2,
-  AlertTriangle,
+  MessageSquare,
+  Send,
+  CheckCircle,
+  Eye,
+  XCircle,
+  TrendingUp,
+  TrendingDown,
+  Clock,
   Zap,
-  Loader2,
   RefreshCw,
-} from "lucide-react";
-import toast from "react-hot-toast";
-
-import api from "../services/api";
-import StatsCard from "../components/dashboard/StatsCard";
-import QuickActions from "../components/dashboard/QuickActions";
-import RecentActivity from "../components/dashboard/RecentActivity";
-import ChartCard from "../components/dashboard/ChartCard";
-import ConnectionStatus from "../components/dashboard/ConnectionStatus";
-import MetaConnectModal from "../components/dashboard/MetaConnectModal";
-import {
-  campaigns,
-  contacts,
-  inbox,
-  billing,
-  dashboard,
-} from "../services/api";
+  Loader2,
+  ArrowUpRight,
+  ArrowDownRight,
+  Mail,
+  FileText,
+  BarChart3,
+} from 'lucide-react';
+import { dashboard } from '../services/api';
+import { useAuth } from '../context/AuthContext';
+import toast from 'react-hot-toast';
+import { Link } from 'react-router-dom';
 
 // ============================================
-// TYPES
+// SIMPLE BAR CHART COMPONENT
 // ============================================
 
-type StatsData = {
-  contacts: number;
-  messagesSent: number;
-  deliveryRate: number;
-  responseRate: number;
+interface BarChartProps {
+  data: any[];
+  bars: { key: string; color: string; label: string }[];
+  height?: number;
+}
+
+const SimpleBarChart: React.FC<BarChartProps> = ({ data, bars, height = 200 }) => {
+  if (!data || data.length === 0) {
+    return (
+      <div className="flex items-center justify-center text-gray-400" style={{ height }}>
+        No data available
+      </div>
+    );
+  }
+
+  const maxValue = Math.max(
+    ...data.flatMap((d) => bars.map((bar) => d[bar.key] || 0)),
+    1
+  );
+
+  return (
+    <div className="w-full" style={{ height }}>
+      {/* Legend */}
+      <div className="flex items-center justify-center gap-4 mb-4">
+        {bars.map((bar) => (
+          <div key={bar.key} className="flex items-center text-xs">
+            <div
+              className="w-3 h-3 rounded-sm mr-1"
+              style={{ backgroundColor: bar.color }}
+            />
+            <span className="text-gray-600 dark:text-gray-400">{bar.label}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* Chart */}
+      <div className="flex items-end justify-between gap-1 h-32">
+        {data.map((item, index) => (
+          <div key={index} className="flex-1 flex flex-col items-center">
+            <div className="flex items-end gap-0.5 h-28">
+              {bars.map((bar) => {
+                const value = item[bar.key] || 0;
+                const heightPercent = (value / maxValue) * 100;
+                return (
+                  <div
+                    key={bar.key}
+                    className="w-2 rounded-t transition-all hover:opacity-80 cursor-pointer"
+                    style={{
+                      height: `${Math.max(heightPercent, 2)}%`,
+                      backgroundColor: bar.color,
+                    }}
+                    title={`${bar.label}: ${value}`}
+                  />
+                );
+              })}
+            </div>
+            <span className="text-[10px] text-gray-400 mt-1 truncate w-full text-center">
+              {new Date(item.date).toLocaleDateString('en-US', { weekday: 'short' })}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 };
 
-type WidgetsResponse = {
-  days: number;
-  messagesOverview: Array<{
-    date: string;
-    label: string;
-    sent: number;
-    received: number;
-    total: number;
-  }>;
-  deliveryByDay: Array<{ label: string; deliveryRate: number }>;
-  recentActivity: any[];
+// ============================================
+// DONUT CHART COMPONENT
+// ============================================
+
+interface DonutChartProps {
+  data: { name: string; value: number; color: string }[];
+  size?: number;
+}
+
+const SimpleDonutChart: React.FC<DonutChartProps> = ({ data, size = 150 }) => {
+  const total = data.reduce((sum, item) => sum + item.value, 0);
+
+  if (total === 0) {
+    return (
+      <div
+        className="flex items-center justify-center text-gray-400"
+        style={{ width: size, height: size }}
+      >
+        No data
+      </div>
+    );
+  }
+
+  let currentAngle = -90; // Start from top
+
+  return (
+    <div className="flex items-center gap-6">
+      <svg width={size} height={size} viewBox="0 0 100 100">
+        {data.map((item, index) => {
+          const percentage = (item.value / total) * 100;
+          const angle = (percentage / 100) * 360;
+
+          const startAngle = currentAngle;
+          const endAngle = currentAngle + angle;
+          currentAngle = endAngle;
+
+          const startRad = (startAngle * Math.PI) / 180;
+          const endRad = (endAngle * Math.PI) / 180;
+
+          const x1 = 50 + 40 * Math.cos(startRad);
+          const y1 = 50 + 40 * Math.sin(startRad);
+          const x2 = 50 + 40 * Math.cos(endRad);
+          const y2 = 50 + 40 * Math.sin(endRad);
+
+          const largeArc = angle > 180 ? 1 : 0;
+
+          const pathD = `M 50 50 L ${x1} ${y1} A 40 40 0 ${largeArc} 1 ${x2} ${y2} Z`;
+
+          return (
+            <path
+              key={index}
+              d={pathD}
+              fill={item.color}
+              className="hover:opacity-80 transition-opacity cursor-pointer"
+            />
+          );
+        })}
+        {/* Inner circle for donut effect */}
+        <circle cx="50" cy="50" r="25" fill="white" className="dark:fill-gray-800" />
+        <text
+          x="50"
+          y="50"
+          textAnchor="middle"
+          dominantBaseline="middle"
+          className="text-lg font-bold fill-gray-900 dark:fill-white"
+        >
+          {total}
+        </text>
+      </svg>
+
+      {/* Legend */}
+      <div className="space-y-2">
+        {data.map((item, index) => (
+          <div key={index} className="flex items-center text-sm">
+            <div
+              className="w-3 h-3 rounded-full mr-2"
+              style={{ backgroundColor: item.color }}
+            />
+            <span className="text-gray-600 dark:text-gray-400 mr-2">{item.name}:</span>
+            <span className="font-medium text-gray-900 dark:text-white">{item.value}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 };
 
-type WhatsAppAccount = {
-  id: string;
-  phoneNumber: string;
-  displayName: string;
-  status: string;
-  isDefault: boolean;
-  wabaId?: string;
-  phoneNumberId?: string;
-  qualityRating?: string;
-};
-
 // ============================================
-// CONSTANTS
-// ============================================
-
-const CACHE_KEY = "wabmeta_dashboard_cache_v3";
-const META_CONNECTION_CACHE_KEY = "wabmeta_meta_connection";
-const WHATSAPP_ACCOUNTS_CACHE_KEY = "wabmeta_whatsapp_accounts";
-
-// ============================================
-// COMPONENT
+// MAIN DASHBOARD COMPONENT
 // ============================================
 
 const Dashboard: React.FC = () => {
-  // ============================================
-  // STATE
-  // ============================================
-
-  // Dashboard data
-  const [statsData, setStatsData] = useState<StatsData>({
-    contacts: 0,
-    messagesSent: 0,
-    deliveryRate: 0,
-    responseRate: 0,
-  });
-  const [billingUsage, setBillingUsage] = useState<any>(null);
-  const [widgets, setWidgets] = useState<WidgetsResponse | null>(null);
-  const [chartPeriod, setChartPeriod] = useState<"7" | "30" | "90">("7");
-
-  // WhatsApp accounts
-  const [whatsappAccounts, setWhatsappAccounts] = useState<WhatsAppAccount[]>([]);
-
-  // Connection status
-  const [metaConnected, setMetaConnected] = useState<boolean>(false);
-  const [organizationId, setOrganizationId] = useState<string>("");
-
-  // Loading states
+  const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [disconnecting, setDisconnecting] = useState(false);
-  const [showConnectModal, setShowConnectModal] = useState(false);
-
-  // Refs
-  const hasCacheRef = useRef(false);
-  const initialLoadDone = useRef(false);
-
-  // ============================================
-  // CACHE MANAGEMENT HELPERS
-  // ============================================
-
-  /**
-   * Clear all dashboard-related caches
-   */
-  const clearAllCaches = useCallback(() => {
-    console.log("🗑️ Clearing all dashboard caches...");
-
-    // Clear dashboard cache
-    localStorage.removeItem(CACHE_KEY);
-
-    // Clear meta connection cache
-    localStorage.removeItem(META_CONNECTION_CACHE_KEY);
-
-    // Clear WhatsApp accounts cache
-    localStorage.removeItem(WHATSAPP_ACCOUNTS_CACHE_KEY);
-
-    // Clear any other related caches
-    const keysToRemove: string[] = [];
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
-      if (key && (
-        key.startsWith('wabmeta_meta_') ||
-        key.startsWith('wabmeta_whatsapp_') ||
-        key.includes('_connection_') ||
-        key.includes('_account_')
-      )) {
-        keysToRemove.push(key);
-      }
-    }
-
-    keysToRemove.forEach(key => {
-      localStorage.removeItem(key);
-      console.log(`  Removed: ${key}`);
-    });
-
-    // Reset cache ref
-    hasCacheRef.current = false;
-
-    console.log("✅ All caches cleared");
-  }, []);
-
-  // ============================================
-  // LOAD ORGANIZATION ID ON MOUNT
-  // ============================================
+  const [stats, setStats] = useState<any>(null);
+  const [widgets, setWidgets] = useState<any>(null);
+  const [dateRange, setDateRange] = useState<7 | 14 | 30>(7);
 
   useEffect(() => {
+    fetchDashboardData();
+  }, [dateRange]);
+
+  const fetchDashboardData = async (isRefresh = false) => {
     try {
-      // Load from cache
-      const cachedRaw = localStorage.getItem(CACHE_KEY);
-      if (cachedRaw) {
-        const cached = JSON.parse(cachedRaw);
-        if (cached?.statsData) setStatsData(cached.statsData);
-        if (cached?.billingUsage !== undefined) setBillingUsage(cached.billingUsage);
-        if (cached?.widgets) setWidgets(cached.widgets);
-        if (cached?.chartPeriod) setChartPeriod(cached.chartPeriod);
-        hasCacheRef.current = true;
-        setLoading(false);
-        console.log("📦 Loaded from cache");
-      }
-
-      // Load organization ID
-      const storedOrg = localStorage.getItem("wabmeta_org");
-      if (storedOrg) {
-        const org = JSON.parse(storedOrg);
-        if (org?.id) {
-          setOrganizationId(org.id);
-          console.log("🏢 Organization ID:", org.id);
-        }
-      }
-    } catch (e) {
-      console.error("❌ Cache/Org read error:", e);
-    }
-  }, []);
-
-  // ============================================
-  // META CONNECTION CHECK
-  // ============================================
-
-  const checkMetaConnection = useCallback(async (): Promise<boolean> => {
-    if (!organizationId) {
-      console.log("⚠️ No organization ID, skipping meta check");
-      return false;
-    }
-
-    try {
-      console.log("🔗 Checking Meta connection status...");
-
-      // Use organization-specific status endpoint
-      const response = await api.get(`/meta/organizations/${organizationId}/status`);
-
-      if (response.data?.success && response.data?.data) {
-        const { status, connectedCount } = response.data.data;
-        const isConnected = status === "CONNECTED";
-
-        console.log("✅ Meta connection status:", {
-          isConnected,
-          status,
-          connectedCount
-        });
-
-        setMetaConnected(isConnected);
-
-        if (!isConnected) {
-          setWhatsappAccounts([]);
-        }
-
-        return isConnected;
-      }
-
-      setMetaConnected(false);
-      return false;
-    } catch (error: any) {
-      console.error("❌ Meta status check failed:", error);
-
-      // 404 means not connected yet
-      if (error.response?.status === 404) {
-        console.log("ℹ️ No Meta connection found (404)");
-      }
-
-      setMetaConnected(false);
-      setWhatsappAccounts([]);
-      return false;
-    }
-  }, [organizationId]);
-
-  // ============================================
-  // WHATSAPP ACCOUNTS
-  // ============================================
-
-  const fetchWhatsAppAccounts = useCallback(
-    async (forceCheck = false) => {
-      if (!organizationId) {
-        console.log("⚠️ No organization ID, skipping accounts fetch");
-        return;
-      }
-
-      try {
-        let isConnected = metaConnected;
-
-        // Check connection status if needed
-        if (forceCheck || !initialLoadDone.current) {
-          isConnected = await checkMetaConnection();
-        }
-
-        // Only fetch if connected
-        if (!isConnected) {
-          console.log("⏭️ Skipping WhatsApp accounts fetch - not connected");
-          setWhatsappAccounts([]);
-          return;
-        }
-
-        console.log("📱 Fetching WhatsApp accounts...");
-
-        // Use Meta accounts endpoint
-        const response = await api.get(
-          `/meta/organizations/${organizationId}/accounts`
-        );
-
-        if (response.data?.success) {
-          const accounts = response.data.data?.accounts || response.data.data || [];
-          const accountsArray = Array.isArray(accounts) ? accounts : [];
-
-          // Filter only connected accounts
-          const connectedAccounts = accountsArray.filter(
-            (acc: WhatsAppAccount) => acc.status === "CONNECTED"
-          );
-
-          setWhatsappAccounts(connectedAccounts);
-          console.log("✅ WhatsApp accounts loaded:", connectedAccounts.length);
-        }
-      } catch (error: any) {
-        console.error("❌ WhatsApp accounts fetch failed:", error);
-
-        // Clear accounts on auth errors
-        if (error.response?.status === 401 || error.response?.status === 404) {
-          setWhatsappAccounts([]);
-          setMetaConnected(false);
-          console.log("⚠️ Cleared accounts due to error");
-        }
-      }
-    },
-    [organizationId, metaConnected, checkMetaConnection]
-  );
-
-  // ============================================
-  // DASHBOARD DATA
-  // ============================================
-
-  const fetchDashboardData = useCallback(
-    async (opts?: { showFullLoader?: boolean }) => {
-      const showFullLoader = opts?.showFullLoader ?? !hasCacheRef.current;
-
-      if (showFullLoader) {
-        setLoading(true);
-      } else {
+      if (isRefresh) {
         setRefreshing(true);
+      } else {
+        setLoading(true);
       }
 
-      try {
-        console.log("📊 Fetching dashboard data...");
+      const [statsRes, widgetsRes] = await Promise.all([
+        dashboard.getStats(),
+        dashboard.getWidgets(dateRange),
+      ]);
 
-        // Widgets promise with type safety
-        const widgetsPromise =
-          "getWidgets" in dashboard
-            ? (
-              dashboard as {
-                getWidgets: (
-                  days: number
-                ) => Promise<{ data: { data: WidgetsResponse | null } }>;
-              }
-            ).getWidgets(Number(chartPeriod))
-            : Promise.resolve({ data: { data: null } });
-
-        // Fetch all data in parallel
-        const results = await Promise.allSettled([
-          contacts.stats(),
-          campaigns.stats(),
-          inbox.stats(),
-          billing.getUsage(),
-          widgetsPromise,
-        ]);
-
-        const [contactsRes, campaignsRes, inboxRes, billingRes, widgetsRes] =
-          results;
-
-        // Extract data
-        const cData =
-          contactsRes.status === "fulfilled"
-            ? contactsRes.value.data?.data
-            : null;
-        const campData =
-          campaignsRes.status === "fulfilled"
-            ? campaignsRes.value.data?.data
-            : null;
-        const inData =
-          inboxRes.status === "fulfilled" ? inboxRes.value.data?.data : null;
-        const billData =
-          billingRes.status === "fulfilled"
-            ? billingRes.value.data?.data
-            : null;
-        const wData =
-          widgetsRes.status === "fulfilled"
-            ? widgetsRes.value.data?.data
-            : null;
-
-        // Calculate metrics
-        const totalSent = campData?.totalMessagesSent || 0;
-        const totalDelivered = campData?.totalMessagesDelivered || 0;
-        const deliveryRate =
-          totalSent > 0 ? Math.round((totalDelivered / totalSent) * 100) : 0;
-
-        const nextStats: StatsData = {
-          contacts: cData?.total || 0,
-          messagesSent: totalSent,
-          deliveryRate,
-          responseRate: inData?.responseRate || 0,
-        };
-
-        // Update state
-        setStatsData(nextStats);
-        setBillingUsage(billData);
-        setWidgets(wData);
-
-        // Save to cache
-        localStorage.setItem(
-          CACHE_KEY,
-          JSON.stringify({
-            statsData: nextStats,
-            billingUsage: billData,
-            widgets: wData,
-            chartPeriod,
-            ts: Date.now(),
-          })
-        );
-
-        hasCacheRef.current = true;
-        console.log("✅ Dashboard data loaded");
-      } catch (error) {
-        console.error("❌ Dashboard data fetch error:", error);
-      } finally {
-        setLoading(false);
-        setRefreshing(false);
-      }
-    },
-    [chartPeriod]
-  );
-
-  // ============================================
-  // CONNECTION HELPERS
-  // ============================================
-
-
-
-  // Connection object for UI components
-  const connection = useMemo(
-    () => ({
-      isConnected: metaConnected,
-      status: metaConnected ? "CONNECTED" : "DISCONNECTED",
-      accounts: whatsappAccounts,
-    }),
-    [metaConnected, whatsappAccounts]
-  );
-
-  // ============================================
-  // INITIAL LOAD
-  // ============================================
-
-  useEffect(() => {
-    if (initialLoadDone.current) return;
-    if (!organizationId) return; // Wait for org ID
-
-    const initializeDashboard = async () => {
-      console.log("🚀 Initializing dashboard...");
-
-      // 1. Check Meta connection
-      const isConnected = await checkMetaConnection();
-
-      // 2. Fetch WhatsApp accounts if connected
-      if (isConnected) {
-        await fetchWhatsAppAccounts(false);
+      if (statsRes.data.success) {
+        setStats(statsRes.data.data);
       }
 
-      // 3. Fetch dashboard data
-      await fetchDashboardData();
-
-      initialLoadDone.current = true;
-      console.log("✅ Dashboard initialized");
-    };
-
-    initializeDashboard();
-  }, [
-    organizationId,
-    checkMetaConnection,
-    fetchWhatsAppAccounts,
-    fetchDashboardData,
-  ]);
-
-  // ============================================
-  // LISTEN FOR META CONNECTION EVENTS
-  // ============================================
-
-  useEffect(() => {
-    const handleMessage = (event: MessageEvent) => {
-      if (event.origin !== window.location.origin) return;
-
-      const messageTypes = [
-        "META_CONNECTED",
-        "META_OAUTH_SUCCESS",
-        "META_SUCCESS",
-      ];
-
-      if (messageTypes.includes(event.data?.type)) {
-        console.log("✅ Meta connected via popup:", event.data.type);
-
-        // Refresh everything
-        setMetaConnected(true);
-        checkMetaConnection();
-        fetchWhatsAppAccounts(true);
-        fetchDashboardData({ showFullLoader: false });
-      }
-    };
-
-    window.addEventListener("message", handleMessage);
-    return () => window.removeEventListener("message", handleMessage);
-  }, [checkMetaConnection, fetchWhatsAppAccounts, fetchDashboardData]);
-
-  // ============================================
-  // REFETCH ON PERIOD CHANGE
-  // ============================================
-
-  useEffect(() => {
-    if (!initialLoadDone.current) return;
-
-    fetchDashboardData({ showFullLoader: false });
-  }, [chartPeriod, fetchDashboardData]);
-
-  // ============================================
-  // ACTIONS
-  // ============================================
-
-  const handleSync = async () => {
-    try {
-      setRefreshing(true);
-      console.log("🔄 Manual refresh triggered");
-
-      // Check connection
-      const isConnected = await checkMetaConnection();
-
-      if (isConnected) {
-        await fetchWhatsAppAccounts(true);
+      if (widgetsRes.data.success) {
+        setWidgets(widgetsRes.data.data);
       }
 
-      await fetchDashboardData({ showFullLoader: false });
-
-      console.log("✅ Refresh complete");
-      toast.success("Dashboard refreshed");
-    } catch (error) {
-      console.error("❌ Refresh failed:", error);
-      toast.error("Failed to refresh dashboard");
+      if (isRefresh) {
+        toast.success('Dashboard refreshed');
+      }
+    } catch (error: any) {
+      console.error('Dashboard fetch error:', error);
+      toast.error('Failed to load dashboard');
     } finally {
+      setLoading(false);
       setRefreshing(false);
     }
   };
 
-  /**
-   * Disconnect WhatsApp account - FIXED VERSION
-   */
-  const handleDisconnect = async () => {
-    // Confirm before disconnecting
-    if (!window.confirm("Are you sure you want to disconnect your WhatsApp account? This action cannot be undone.")) {
-      return;
-    }
-
-    // Validate prerequisites
-    if (!organizationId) {
-      toast.error("Organization not found");
-      return;
-    }
-
-    if (whatsappAccounts.length === 0) {
-      toast.error("No accounts to disconnect");
-      return;
-    }
-
-    try {
-      setDisconnecting(true);
-      console.log("🔌 Starting disconnect process...");
-
-      // Get account to disconnect (default or first available)
-      const accountToDisconnect = whatsappAccounts.find((a) => a.isDefault) || whatsappAccounts[0];
-
-      if (!accountToDisconnect?.id) {
-        throw new Error("No valid account found to disconnect");
-      }
-
-      console.log(`📱 Disconnecting account: ${accountToDisconnect.id} (${accountToDisconnect.phoneNumber})`);
-
-      // 1. Call disconnect API
-      const response = await api.delete(
-        `/meta/organizations/${organizationId}/accounts/${accountToDisconnect.id}`
-      );
-
-      if (!response.data?.success) {
-        throw new Error(response.data?.message || "Disconnect API failed");
-      }
-
-      console.log("✅ API disconnect successful");
-
-      // 2. Clear all local state immediately
-      setMetaConnected(false);
-      setWhatsappAccounts([]);
-
-      // 3. Clear all caches
-      clearAllCaches();
-
-      // 4. Reset stats to show disconnected state
-      setStatsData({
-        contacts: 0,
-        messagesSent: 0,
-        deliveryRate: 0,
-        responseRate: 0,
-      });
-
-      // 5. Verify disconnect with fresh API check
-      console.log("🔍 Verifying disconnect status...");
-      const isStillConnected = await checkMetaConnection();
-
-      if (isStillConnected) {
-        console.warn("⚠️ Server still shows connected, forcing UI update");
-        setMetaConnected(false);
-        setWhatsappAccounts([]);
-      }
-
-      // 6. Refresh dashboard data
-      await fetchDashboardData({ showFullLoader: false });
-
-      console.log("✅ Disconnect completed successfully");
-      toast.success("WhatsApp account disconnected successfully");
-
-    } catch (error: any) {
-      console.error("❌ Disconnect failed:", error);
-
-      // Extract error message
-      const errorMessage = error.response?.data?.message
-        || error.message
-        || "Failed to disconnect account";
-
-      toast.error(errorMessage);
-
-      // Still try to refresh state even on error
-      try {
-        await checkMetaConnection();
-        await fetchWhatsAppAccounts(true);
-      } catch (refreshError) {
-        console.error("❌ State refresh after error failed:", refreshError);
-      }
-    } finally {
-      setDisconnecting(false);
-    }
-  };
-
-
-
-  const handleConnectSuccess = async () => {
-    console.log("🎉 Connection successful, refreshing...");
-
-    setShowConnectModal(false);
-    setMetaConnected(true);
-
-    // Clear old cache before fetching new data
-    clearAllCaches();
-
-    await Promise.all([
-      checkMetaConnection(),
-      fetchWhatsAppAccounts(true),
-    ]);
-
-    await fetchDashboardData({ showFullLoader: false });
-
-    toast.success("WhatsApp account connected successfully!");
-  };
-
-  // ============================================
-  // COMPUTED VALUES
-  // ============================================
-
-  const messageChartData = useMemo(() => {
-    const rows = widgets?.messagesOverview || [];
-    return rows.map((r) => ({
-      name: r.label,
-      messages: r.sent,
-    }));
-  }, [widgets]);
-
-  const deliveryChartData = useMemo(() => {
-    const rows = widgets?.deliveryByDay || [];
-    return rows.map((r) => ({
-      name: r.label,
-      delivered: r.deliveryRate || 0,
-    }));
-  }, [widgets]);
-
-  const lowCredits = useMemo(() => {
-    const msg = billingUsage?.messages;
-    if (!msg || !msg.limit || msg.limit <= 0) return { show: false, remaining: 0 };
-    if (msg.unlimited) return { show: false, remaining: 0 };
-
-    const remaining = Math.max(Number(msg.limit) - Number(msg.used || 0), 0);
-    return { show: remaining <= 20, remaining };
-  }, [billingUsage]);
-
-  const isConnected = metaConnected;
-
-  // Stats cards configuration
-  const statsCards = [
-    {
-      title: "Messages Sent",
-      value: (statsData.messagesSent || 0).toLocaleString(),
-      icon: Send,
-      iconColor: "text-blue-600",
-      iconBg: "bg-blue-100",
-      change: 0,
-    },
-    {
-      title: "Delivery Rate",
-      value: `${statsData.deliveryRate || 0}%`,
-      icon: CheckCircle2,
-      iconColor: "text-green-600",
-      iconBg: "bg-green-100",
-      change: 0,
-    },
-    {
-      title: "Active Contacts",
-      value: (statsData.contacts || 0).toLocaleString(),
-      icon: Users,
-      iconColor: "text-purple-600",
-      iconBg: "bg-purple-100",
-      change: 0,
-    },
-    {
-      title: "Response Rate",
-      value: `${statsData.responseRate || 0}%`,
-      icon: MessageSquare,
-      iconColor: "text-orange-600",
-      iconBg: "bg-orange-100",
-      change: 0,
-    },
-  ];
-
-  // ============================================
-  // LOADING STATE
-  // ============================================
-
-  if (loading && !hasCacheRef.current) {
+  if (loading) {
     return (
-      <div className="flex items-center justify-center h-screen">
+      <div className="flex items-center justify-center min-h-[60vh]">
         <div className="text-center">
-          <Loader2 className="w-10 h-10 text-primary-500 animate-spin mx-auto mb-4" />
-          <p className="text-gray-500 dark:text-gray-400">
-            Loading dashboard...
-          </p>
+          <Loader2 className="w-10 h-10 animate-spin text-green-600 mx-auto" />
+          <p className="mt-4 text-gray-600 dark:text-gray-400">Loading dashboard...</p>
         </div>
       </div>
     );
   }
 
-  // ============================================
-  // RENDER
-  // ============================================
-
   return (
-    <div className="space-y-6">
+    <div className="max-w-7xl mx-auto px-4 py-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-            Good morning!
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
+            Welcome back, {user?.firstName || 'User'}! 👋
           </h1>
-          <p className="text-gray-500 dark:text-gray-400 mt-1">
-            Here's what's happening with your business today.
+          <p className="mt-1 text-gray-600 dark:text-gray-400">
+            Here's what's happening with your WhatsApp business
           </p>
         </div>
 
-        <div className="flex items-center space-x-3">
-          <button
-            onClick={handleSync}
-            className="p-2 bg-white dark:bg-slate-800 border border-gray-200 dark:border-gray-700 rounded-xl hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            disabled={refreshing}
-            title="Refresh data"
+        <div className="flex items-center gap-3">
+          {/* Date Range Selector */}
+          <select
+            value={dateRange}
+            onChange={(e) => setDateRange(parseInt(e.target.value) as 7 | 14 | 30)}
+            className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-green-500"
           >
-            <RefreshCw
-              className={`w-5 h-5 text-gray-600 dark:text-gray-400 ${refreshing ? "animate-spin" : ""
-                }`}
-            />
-          </button>
+            <option value={7}>Last 7 days</option>
+            <option value={14}>Last 14 days</option>
+            <option value={30}>Last 30 days</option>
+          </select>
 
-          <Link
-            to="/dashboard/campaigns/create"
-            className="inline-flex items-center space-x-2 px-4 py-2.5 bg-primary-500 hover:bg-primary-600 text-white font-medium rounded-xl transition-colors"
+          {/* Refresh Button */}
+          <button
+            onClick={() => fetchDashboardData(true)}
+            disabled={refreshing}
+            className="p-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
           >
-            <Send className="w-4 h-4" />
-            <span>New Campaign</span>
-          </Link>
+            <RefreshCw className={`w-5 h-5 ${refreshing ? 'animate-spin' : ''}`} />
+          </button>
         </div>
       </div>
-
-      {/* Connection Status or Connect Banner */}
-      {isConnected ? (
-        <ConnectionStatus
-          connection={connection}
-          onDisconnect={handleDisconnect}
-          disconnectLoading={disconnecting}
-        />
-      ) : (
-        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 border border-blue-200 dark:border-blue-800 rounded-2xl p-6 shadow-sm">
-          <div className="flex flex-col md:flex-row items-center justify-between gap-6">
-            <div className="flex items-center space-x-4">
-              <div className="w-16 h-16 bg-blue-100 dark:bg-blue-900/50 rounded-2xl flex items-center justify-center shrink-0 shadow-sm">
-                <Zap className="w-8 h-8 text-blue-600 dark:text-blue-400" />
-              </div>
-              <div>
-                <h3 className="text-xl font-bold text-gray-900 dark:text-white">
-                  Connect WhatsApp Business
-                </h3>
-                <p className="text-gray-600 dark:text-gray-400 max-w-lg mt-1 text-sm md:text-base">
-                  Link your account to start sending campaigns and messages.
-                </p>
-              </div>
-            </div>
-
-            <button
-              onClick={() => setShowConnectModal(true)}
-              className="px-6 py-3 bg-[#1877F2] hover:bg-[#1565D8] text-white font-semibold rounded-xl shadow-lg transition-all hover:scale-105 flex items-center gap-2"
-            >
-              <svg
-                className="w-5 h-5"
-                fill="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
-              </svg>
-              Connect with Meta
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Low Credits Warning */}
-      {lowCredits.show && (
-        <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-2xl p-4 flex justify-between items-center">
-          <div className="flex items-center space-x-3">
-            <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400" />
-            <p className="text-amber-800 dark:text-amber-200 font-medium">
-              Low message credits: {lowCredits.remaining} remaining
-            </p>
-          </div>
-          <Link
-            to="/dashboard/settings/billing"
-            className="text-amber-700 dark:text-amber-300 underline text-sm hover:no-underline"
-          >
-            Recharge
-          </Link>
-        </div>
-      )}
-
-      {/* Connected Accounts Summary */}
-      {isConnected && whatsappAccounts.length > 0 && (
-        <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-xl p-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <CheckCircle2 className="w-5 h-5 text-green-600 dark:text-green-400" />
-              <span className="text-green-800 dark:text-green-200 font-medium">
-                {whatsappAccounts.length} WhatsApp account
-                {whatsappAccounts.length > 1 ? "s" : ""} connected
-              </span>
-            </div>
-            <div className="text-sm text-green-600 dark:text-green-400">
-              {whatsappAccounts.find((a) => a.isDefault)?.phoneNumber ||
-                whatsappAccounts[0]?.phoneNumber}
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6">
-        {statsCards.map((stat) => (
-          <StatsCard key={stat.title} {...stat} />
-        ))}
-      </div>
-
-      {/* Charts */}
-      <div className="grid lg:grid-cols-2 gap-6">
-        <ChartCard
-          title="Messages Overview"
-          subtitle="Total messages sent"
-          type="area"
-          data={messageChartData}
-          dataKey="messages"
-          period={chartPeriod}
-          onPeriodChange={setChartPeriod}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <StatCard
+          title="Total Contacts"
+          value={stats?.contacts?.total || 0}
+          change={stats?.contacts?.growth || 0}
+          subValue={`+${stats?.contacts?.thisMonth || 0} this month`}
+          icon={Users}
+          color="blue"
         />
-        <ChartCard
-          title="Delivery Performance"
-          subtitle="Message delivery rate (%)"
-          type="bar"
-          data={deliveryChartData}
-          dataKey="delivered"
-          color="#10B981"
-          period={chartPeriod}
-          onPeriodChange={setChartPeriod}
+        <StatCard
+          title="Messages Sent"
+          value={stats?.messages?.sent || 0}
+          change={stats?.messages?.growth || 0}
+          subValue={`${stats?.messages?.today || 0} today`}
+          icon={Send}
+          color="green"
+        />
+        <StatCard
+          title="Delivery Rate"
+          value={`${stats?.delivery?.deliveryRate || 0}%`}
+          subValue={`${stats?.delivery?.delivered || 0} delivered`}
+          icon={CheckCircle}
+          color="purple"
+        />
+        <StatCard
+          title="Active Campaigns"
+          value={stats?.campaigns?.active || 0}
+          subValue={`${stats?.campaigns?.completed || 0} completed`}
+          icon={Zap}
+          color="orange"
         />
       </div>
 
-      {/* Quick Actions & Recent Activity */}
-      <div className="grid lg:grid-cols-2 gap-6">
-        <QuickActions />
-        <RecentActivity activities={widgets?.recentActivity || []} />
+      {/* Charts Row */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+        {/* Messages Overview Chart */}
+        <div className="bg-white dark:bg-gray-800 rounded-xl p-6 border border-gray-200 dark:border-gray-700">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center">
+              <MessageSquare className="w-5 h-5 mr-2 text-green-600" />
+              Messages Overview
+            </h3>
+            <Link
+              to="/dashboard/reports"
+              className="text-sm text-green-600 hover:text-green-700 flex items-center"
+            >
+              View Details
+              <ArrowUpRight className="w-4 h-4 ml-1" />
+            </Link>
+          </div>
+
+          <SimpleBarChart
+            data={widgets?.messagesOverview || []}
+            bars={[
+              { key: 'sent', color: '#22c55e', label: 'Sent' },
+              { key: 'delivered', color: '#3b82f6', label: 'Delivered' },
+              { key: 'received', color: '#8b5cf6', label: 'Received' },
+            ]}
+          />
+
+          {/* Summary */}
+          <div className="grid grid-cols-3 gap-4 mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+            <div className="text-center">
+              <p className="text-2xl font-bold text-gray-900 dark:text-white">
+                {widgets?.summary?.totalSent || 0}
+              </p>
+              <p className="text-xs text-gray-500">Sent</p>
+            </div>
+            <div className="text-center">
+              <p className="text-2xl font-bold text-green-600">
+                {widgets?.summary?.deliveryRate || 0}%
+              </p>
+              <p className="text-xs text-gray-500">Delivery Rate</p>
+            </div>
+            <div className="text-center">
+              <p className="text-2xl font-bold text-blue-600">
+                {widgets?.summary?.readRate || 0}%
+              </p>
+              <p className="text-xs text-gray-500">Read Rate</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Delivery Performance Chart */}
+        <div className="bg-white dark:bg-gray-800 rounded-xl p-6 border border-gray-200 dark:border-gray-700">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center">
+              <BarChart3 className="w-5 h-5 mr-2 text-purple-600" />
+              Delivery Performance
+            </h3>
+          </div>
+
+          <div className="flex items-center justify-center py-4">
+            <SimpleDonutChart
+              data={widgets?.deliveryPerformance || []}
+              size={160}
+            />
+          </div>
+
+          {/* Performance Stats */}
+          <div className="grid grid-cols-2 gap-4 mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+            <div className="flex items-center justify-between p-3 bg-green-50 dark:bg-green-900/20 rounded-lg">
+              <div className="flex items-center">
+                <CheckCircle className="w-5 h-5 text-green-600 mr-2" />
+                <span className="text-sm text-gray-600 dark:text-gray-400">Delivered</span>
+              </div>
+              <span className="font-bold text-green-600">
+                {widgets?.summary?.totalDelivered || 0}
+              </span>
+            </div>
+            <div className="flex items-center justify-between p-3 bg-red-50 dark:bg-red-900/20 rounded-lg">
+              <div className="flex items-center">
+                <XCircle className="w-5 h-5 text-red-600 mr-2" />
+                <span className="text-sm text-gray-600 dark:text-gray-400">Failed</span>
+              </div>
+              <span className="font-bold text-red-600">
+                {widgets?.summary?.totalFailed || 0}
+              </span>
+            </div>
+          </div>
+        </div>
       </div>
 
-      {/* Meta Connect Modal */}
-      <MetaConnectModal
-        isOpen={showConnectModal}
-        onClose={() => setShowConnectModal(false)}
-        organizationId={organizationId}
-        onConnected={handleConnectSuccess}
-      />
+      {/* Second Row */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+        {/* Quick Stats */}
+        <div className="bg-white dark:bg-gray-800 rounded-xl p-6 border border-gray-200 dark:border-gray-700">
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+            Quick Stats
+          </h3>
+          <div className="space-y-4">
+            <QuickStatItem
+              label="Unread Conversations"
+              value={stats?.conversations?.unread || 0}
+              icon={Mail}
+              color="orange"
+              href="/dashboard/inbox"
+            />
+            <QuickStatItem
+              label="Active Conversations"
+              value={stats?.conversations?.active || 0}
+              icon={MessageSquare}
+              color="blue"
+              href="/dashboard/inbox"
+            />
+            <QuickStatItem
+              label="Approved Templates"
+              value={stats?.templates?.approved || 0}
+              icon={FileText}
+              color="green"
+              href="/dashboard/templates"
+            />
+            <QuickStatItem
+              label="Connected Accounts"
+              value={stats?.whatsapp?.connected || 0}
+              icon={CheckCircle}
+              color="purple"
+              href="/dashboard/settings"
+            />
+          </div>
+        </div>
+
+        {/* Recent Campaigns */}
+        <div className="bg-white dark:bg-gray-800 rounded-xl p-6 border border-gray-200 dark:border-gray-700 lg:col-span-2">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+              Recent Campaigns
+            </h3>
+            <Link
+              to="/dashboard/campaigns"
+              className="text-sm text-green-600 hover:text-green-700 flex items-center"
+            >
+              View All
+              <ArrowUpRight className="w-4 h-4 ml-1" />
+            </Link>
+          </div>
+
+          {widgets?.recentCampaigns && widgets.recentCampaigns.length > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="text-left text-xs text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">
+                    <th className="pb-2 font-medium">Campaign</th>
+                    <th className="pb-2 font-medium">Status</th>
+                    <th className="pb-2 font-medium text-right">Sent</th>
+                    <th className="pb-2 font-medium text-right">Delivery</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                  {widgets.recentCampaigns.map((campaign: any) => (
+                    <tr key={campaign.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                      <td className="py-3">
+                        <Link
+                          to={`/dashboard/campaigns/${campaign.id}`}
+                          className="font-medium text-gray-900 dark:text-white hover:text-green-600"
+                        >
+                          {campaign.name}
+                        </Link>
+                      </td>
+                      <td className="py-3">
+                        <span
+                          className={`px-2 py-1 text-xs rounded-full font-medium ${campaign.status === 'COMPLETED'
+                              ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                              : campaign.status === 'RUNNING'
+                                ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                                : campaign.status === 'FAILED'
+                                  ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                                  : 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-400'
+                            }`}
+                        >
+                          {campaign.status}
+                        </span>
+                      </td>
+                      <td className="py-3 text-right text-sm text-gray-600 dark:text-gray-400">
+                        {campaign.sentCount}/{campaign.totalContacts}
+                      </td>
+                      <td className="py-3 text-right">
+                        <span
+                          className={`text-sm font-medium ${campaign.deliveryRate >= 90
+                              ? 'text-green-600'
+                              : campaign.deliveryRate >= 70
+                                ? 'text-yellow-600'
+                                : 'text-red-600'
+                            }`}
+                        >
+                          {campaign.deliveryRate}%
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="text-center py-8">
+              <Zap className="w-12 h-12 text-gray-300 dark:text-gray-600 mx-auto mb-3" />
+              <p className="text-gray-500 dark:text-gray-400">No campaigns yet</p>
+              <Link
+                to="/dashboard/campaigns/create"
+                className="mt-2 inline-block text-green-600 hover:text-green-700 text-sm font-medium"
+              >
+                Create your first campaign →
+              </Link>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Recent Conversations */}
+      <div className="bg-white dark:bg-gray-800 rounded-xl p-6 border border-gray-200 dark:border-gray-700">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+            Recent Conversations
+          </h3>
+          <Link
+            to="/dashboard/inbox"
+            className="text-sm text-green-600 hover:text-green-700 flex items-center"
+          >
+            View Inbox
+            <ArrowUpRight className="w-4 h-4 ml-1" />
+          </Link>
+        </div>
+
+        {widgets?.recentConversations && widgets.recentConversations.length > 0 ? (
+          <div className="space-y-3">
+            {widgets.recentConversations.map((conv: any) => (
+              <Link
+                key={conv.id}
+                to={`/dashboard/inbox/${conv.id}`}
+                className="flex items-center justify-between p-3 hover:bg-gray-50 dark:hover:bg-gray-700/50 rounded-lg transition-colors"
+              >
+                <div className="flex items-center">
+                  <div className="w-10 h-10 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mr-3">
+                    <span className="text-green-600 font-medium">
+                      {conv.contactName?.charAt(0)?.toUpperCase() || '?'}
+                    </span>
+                  </div>
+                  <div>
+                    <p className="font-medium text-gray-900 dark:text-white">
+                      {conv.contactName || conv.phone}
+                    </p>
+                    <p className="text-sm text-gray-500 dark:text-gray-400 truncate max-w-xs">
+                      {conv.lastMessage || 'No messages'}
+                    </p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  {conv.unreadCount > 0 && (
+                    <span className="inline-flex items-center justify-center w-5 h-5 bg-green-600 text-white text-xs rounded-full mb-1">
+                      {conv.unreadCount}
+                    </span>
+                  )}
+                  <p className="text-xs text-gray-400">
+                    {conv.lastMessageAt
+                      ? new Date(conv.lastMessageAt).toLocaleDateString()
+                      : ''}
+                  </p>
+                </div>
+              </Link>
+            ))}
+          </div>
+        ) : (
+          <div className="text-center py-8">
+            <MessageSquare className="w-12 h-12 text-gray-300 dark:text-gray-600 mx-auto mb-3" />
+            <p className="text-gray-500 dark:text-gray-400">No conversations yet</p>
+          </div>
+        )}
+      </div>
     </div>
+  );
+};
+
+// ============================================
+// STAT CARD COMPONENT
+// ============================================
+
+interface StatCardProps {
+  title: string;
+  value: string | number;
+  change?: number;
+  subValue?: string;
+  icon: React.ElementType;
+  color: 'blue' | 'green' | 'purple' | 'orange';
+}
+
+const StatCard: React.FC<StatCardProps> = ({
+  title,
+  value,
+  change,
+  subValue,
+  icon: Icon,
+  color,
+}) => {
+  const colors = {
+    blue: 'bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400',
+    green: 'bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400',
+    purple: 'bg-purple-100 text-purple-600 dark:bg-purple-900/30 dark:text-purple-400',
+    orange: 'bg-orange-100 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400',
+  };
+
+  return (
+    <div className="bg-white dark:bg-gray-800 rounded-xl p-6 border border-gray-200 dark:border-gray-700">
+      <div className="flex items-center justify-between">
+        <div className={`p-3 rounded-xl ${colors[color]}`}>
+          <Icon className="w-6 h-6" />
+        </div>
+        {change !== undefined && (
+          <div
+            className={`flex items-center text-sm font-medium ${change >= 0 ? 'text-green-600' : 'text-red-600'
+              }`}
+          >
+            {change >= 0 ? (
+              <TrendingUp className="w-4 h-4 mr-1" />
+            ) : (
+              <TrendingDown className="w-4 h-4 mr-1" />
+            )}
+            {Math.abs(change)}%
+          </div>
+        )}
+      </div>
+      <div className="mt-4">
+        <p className="text-3xl font-bold text-gray-900 dark:text-white">
+          {typeof value === 'number' ? value.toLocaleString() : value}
+        </p>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{title}</p>
+        {subValue && (
+          <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{subValue}</p>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// ============================================
+// QUICK STAT ITEM COMPONENT
+// ============================================
+
+interface QuickStatItemProps {
+  label: string;
+  value: number;
+  icon: React.ElementType;
+  color: 'blue' | 'green' | 'purple' | 'orange';
+  href: string;
+}
+
+const QuickStatItem: React.FC<QuickStatItemProps> = ({
+  label,
+  value,
+  icon: Icon,
+  color,
+  href,
+}) => {
+  const colors = {
+    blue: 'text-blue-600',
+    green: 'text-green-600',
+    purple: 'text-purple-600',
+    orange: 'text-orange-600',
+  };
+
+  return (
+    <Link
+      to={href}
+      className="flex items-center justify-between p-3 hover:bg-gray-50 dark:hover:bg-gray-700/50 rounded-lg transition-colors"
+    >
+      <div className="flex items-center">
+        <Icon className={`w-5 h-5 ${colors[color]} mr-3`} />
+        <span className="text-sm text-gray-600 dark:text-gray-400">{label}</span>
+      </div>
+      <span className="font-bold text-gray-900 dark:text-white">{value}</span>
+    </Link>
   );
 };
 
