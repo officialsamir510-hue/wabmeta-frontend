@@ -597,6 +597,29 @@ export const campaigns = {
   stats: () => api.get<ApiResponse>('/campaigns/stats'),
 };
 
+// ---------- ANALYTICS ----------
+export const analytics = {
+  getOverview: (params?: { startDate?: string; endDate?: string }) =>
+    api.get<ApiResponse>('/analytics/overview', { params }),
+
+  getMessages: (days?: number) =>
+    api.get<ApiResponse>('/analytics/messages', { params: { days } }),
+
+  getCampaigns: (limit?: number) =>
+    api.get<ApiResponse>('/analytics/campaigns', { params: { limit } }),
+
+  getContacts: (days?: number) =>
+    api.get<ApiResponse>('/analytics/contacts', { params: { days } }),
+
+  getConversations: (days?: number) =>
+    api.get<ApiResponse>('/analytics/conversations', { params: { days } }),
+
+  getTemplates: () =>
+    api.get<ApiResponse>('/analytics/templates'),
+
+  export: (type: string, format?: string) =>
+    api.get<ApiResponse>('/analytics/export', { params: { type, format } }),
+};
 
 // ---------- WHATSAPP ----------
 export const whatsapp = {
