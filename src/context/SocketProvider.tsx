@@ -1,46 +1,27 @@
-// src/context/SocketProvider.tsx - COMPLETE FIXED VERSION
+// src/context/SocketProvider.tsx - FINAL WORKING VERSION
 
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { SocketContext } from './SocketContext';
 
-// ✅ FIXED: Get correct socket URL
-const getSocketUrl = (): string => {
-    const apiUrl = import.meta.env.VITE_API_URL || '';
-
-    // Remove /api, /v1, trailing slashes
-    let socketUrl = apiUrl
-        .replace(/\/api\/?$/i, '')
-        .replace(/\/v1\/?$/i, '')
-        .replace(/\/+$/, '');
-
-    // If empty or localhost, use default
-    if (!socketUrl || socketUrl === 'http://localhost' || socketUrl === 'https://localhost') {
-        socketUrl = import.meta.env.DEV
-            ? 'http://localhost:5000'
-            : 'https://wabmeta-api.onrender.com';
-    }
-
-    console.log('🔌 Socket URL configured:', socketUrl);
-    return socketUrl;
-};
-
 export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [socket, setSocket] = useState<Socket | null>(null);
     const [isConnected, setIsConnected] = useState(false);
-    const reconnectAttempts = useRef(0);
-    const maxReconnectAttempts = 5;
+    const socketRef = useRef<Socket | null>(null);
+    const connectionAttempted = useRef(false);
 
     useEffect(() => {
-        const token = localStorage.getItem('accessToken');
+        // Prevent double connection in React Strict Mode
+        if (connectionAttempted.current) return;
+        connectionAttempted.current = true;
 
-        // Also try legacy token keys
-        const accessToken = token ||
+        const token =
+            localStorage.getItem('accessToken') ||
             localStorage.getItem('token') ||
             localStorage.getItem('wabmeta_token');
 
-        if (!accessToken) {
-            console.log('⚠️ No token found, skipping socket connection');
+        if (!token) {
+            console.log('⚠️ No auth token, skipping socket connection');
             return;
         }
 
@@ -49,47 +30,53 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         try {
             const orgData = localStorage.getItem('wabmeta_org');
             if (orgData) {
-                const parsed = JSON.parse(orgData);
-                organizationId = parsed?.id || null;
+                organizationId = JSON.parse(orgData)?.id || null;
             }
         } catch (e) {
-            console.warn('⚠️ Could not parse organization data');
+            console.warn('Could not parse org data');
         }
 
-        const SOCKET_URL = getSocketUrl();
+        // ✅ FIXED: Hardcode the correct URL - no fancy parsing
+        const SOCKET_URL = import.meta.env.PROD
+            ? 'https://wabmeta-api.onrender.com'
+            : 'http://localhost:5000';
 
-        console.log('🔌 Initializing socket connection...', {
-            url: SOCKET_URL,
-            hasToken: !!accessToken,
-            organizationId,
-        });
+        console.log('🔌 Connecting to socket:', SOCKET_URL);
 
-        // ✅ Create socket with correct configuration
+        // ✅ FIXED: Simple connection without namespace issues
         const newSocket = io(SOCKET_URL, {
+            // ✅ Auth
             auth: {
-                token: accessToken,
+                token,
                 organizationId,
             },
-            transports: ['websocket', 'polling'], // Try websocket first
-            path: '/socket.io', // ✅ Explicit path
+            // ✅ Transport settings
+            transports: ['polling', 'websocket'], // Polling first for reliability
+            // ✅ Path - default socket.io path
+            path: '/socket.io/',
+            // ✅ Reconnection
             reconnection: true,
-            reconnectionAttempts: maxReconnectAttempts,
+            reconnectionAttempts: 10,
             reconnectionDelay: 1000,
             reconnectionDelayMax: 5000,
+            // ✅ Timeout
             timeout: 20000,
-            forceNew: true, // ✅ Force new connection
+            // ✅ Force new connection
+            forceNew: true,
+            // ✅ Auto connect
+            autoConnect: true,
         });
 
-        // Connection handlers
-        newSocket.on('connect', () => {
-            console.log('✅ Socket connected successfully:', newSocket.id);
-            setIsConnected(true);
-            reconnectAttempts.current = 0;
+        socketRef.current = newSocket;
 
-            // Join organization room
+        newSocket.on('connect', () => {
+            console.log('✅ Socket connected:', newSocket.id);
+            setIsConnected(true);
+
+            // Join org room after connection
             if (organizationId) {
                 newSocket.emit('org:join', organizationId);
-                console.log(`📂 Joined org room: org:${organizationId}`);
+                console.log(`📂 Joined org: ${organizationId}`);
             }
         });
 
@@ -99,60 +86,36 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         });
 
         newSocket.on('connect_error', (error) => {
-            reconnectAttempts.current++;
-            console.error(`❌ Socket connection error (attempt ${reconnectAttempts.current}):`, error.message);
+            console.error('❌ Socket error:', error.message);
             setIsConnected(false);
-
-            // Log more details for debugging
-            if (reconnectAttempts.current >= maxReconnectAttempts) {
-                console.error('🛑 Max reconnection attempts reached. Socket disabled.');
-                console.error('Debug info:', {
-                    url: SOCKET_URL,
-                    error: error.message,
-                });
-            }
         });
 
-        newSocket.on('reconnect', (attemptNumber) => {
-            console.log(`🔄 Socket reconnected after ${attemptNumber} attempts`);
-            setIsConnected(true);
-        });
-
-        newSocket.on('reconnect_error', (error) => {
-            console.error('❌ Socket reconnection error:', error.message);
-        });
-
-        // Pong response
-        newSocket.on('pong', (data) => {
-            console.log('🏓 Pong received:', data);
+        newSocket.on('reconnect', (attempt) => {
+            console.log(`🔄 Reconnected after ${attempt} attempts`);
         });
 
         setSocket(newSocket);
 
-        // Cleanup on unmount
         return () => {
-            console.log('🔌 Cleaning up socket connection');
-            newSocket.disconnect();
-            setSocket(null);
-            setIsConnected(false);
+            console.log('🔌 Cleaning up socket');
+            if (socketRef.current) {
+                socketRef.current.disconnect();
+                socketRef.current = null;
+            }
         };
     }, []);
 
-    // Join conversation room
     const joinConversation = useCallback((conversationId: string) => {
-        if (socket && isConnected && conversationId) {
-            socket.emit('join:conversation', conversationId);
-            console.log(`💬 Joined conversation: ${conversationId}`);
+        if (socketRef.current?.connected && conversationId) {
+            socketRef.current.emit('join:conversation', conversationId);
         }
-    }, [socket, isConnected]);
+    }, []);
 
-    // Leave conversation room
     const leaveConversation = useCallback((conversationId: string) => {
-        if (socket && isConnected && conversationId) {
-            socket.emit('leave:conversation', conversationId);
-            console.log(`💬 Left conversation: ${conversationId}`);
+        if (socketRef.current?.connected && conversationId) {
+            socketRef.current.emit('leave:conversation', conversationId);
         }
-    }, [socket, isConnected]);
+    }, []);
 
     return (
         <SocketContext.Provider value={{ socket, isConnected, joinConversation, leaveConversation }}>
