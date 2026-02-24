@@ -5,9 +5,6 @@ import { useParams, useNavigate } from 'react-router-dom';
 import {
   Search,
   MoreVertical,
-  Send,
-  Paperclip,
-  Smile,
   Info,
   CheckCheck,
   Check,
@@ -22,15 +19,14 @@ import {
   Archive,
   ArchiveRestore,
   Trash2,
-  Image,
-  Mic,
   X,
-  Star,
 } from 'lucide-react';
 import { formatDistanceToNow, format } from 'date-fns';
 import { useInboxSocket } from '../hooks/useInboxSocket';
 import api, { inbox as inboxApi, whatsapp as whatsappApi } from '../services/api';
 import toast from 'react-hot-toast';
+import WindowStatus from '../components/inbox/WindowStatus';
+import ChatInput from '../components/inbox/ChatInput';
 
 // TYPES
 interface Contact {
@@ -68,6 +64,7 @@ interface Conversation {
   isArchived: boolean;
   isRead?: boolean;
   isWindowOpen?: boolean;
+  windowExpiresAt?: string;
   isPinned?: boolean;
   labels?: string[];
   assignedTo?: string;
@@ -86,16 +83,6 @@ const LABEL_COLORS: Record<string, { bg: string; text: string; border: string }>
 
 const AVAILABLE_LABELS = Object.keys(LABEL_COLORS);
 
-const QUICK_REPLIES = [
-  { id: '1', text: 'Hello! How can I help you today?', shortcut: '/hello' },
-  { id: '2', text: 'Thank you for your message. We will get back to you shortly.', shortcut: '/thanks' },
-  { id: '3', text: 'Our business hours are Monday to Friday, 9 AM to 6 PM.', shortcut: '/hours' },
-  { id: '4', text: 'Please share your order ID and I will check the status for you.', shortcut: '/order' },
-  { id: '5', text: 'Is there anything else I can help you with?', shortcut: '/more' },
-];
-
-const EMOJIS = ['😀', '😂', '❤️', '👍', '🎉', '🔥', '✨', '💯', '🙏', '👋', '😊', '🤔', '👏', '💪', '🎁', '📱', '✅', '❌', '⭐', '💡'];
-
 const Inbox: React.FC = () => {
   const { conversationId } = useParams();
   const navigate = useNavigate();
@@ -107,7 +94,6 @@ const Inbox: React.FC = () => {
   const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingMessages, setLoadingMessages] = useState(false);
-  const [sending, setSending] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [messageText, setMessageText] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -115,9 +101,6 @@ const Inbox: React.FC = () => {
   const [filter, setFilter] = useState<'all' | 'unread' | 'archived'>('all');
 
   const [showContactInfo, setShowContactInfo] = useState(false);
-  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
-  const [showAttachMenu, setShowAttachMenu] = useState(false);
-  const [showQuickReplies, setShowQuickReplies] = useState(false);
   const [showLabelPicker, setShowLabelPicker] = useState<string | null>(null);
   const [showConversationMenu, setShowConversationMenu] = useState<string | null>(null);
 
@@ -260,9 +243,6 @@ const Inbox: React.FC = () => {
     setMessages((prev) => [...prev, tempMessage]);
     const sentText = messageText;
     setMessageText('');
-    setSending(true);
-    setShowQuickReplies(false);
-    setShowEmojiPicker(false);
     scrollToBottom();
 
     try {
@@ -295,8 +275,6 @@ const Inbox: React.FC = () => {
     } catch (e: any) {
       toast.error(e.response?.data?.message || e.message || 'Failed to send message');
       setMessages((prev) => prev.map((m) => (m.id === tempId ? { ...m, status: 'FAILED' } : m)));
-    } finally {
-      setSending(false);
     }
   };
 
@@ -400,7 +378,6 @@ const Inbox: React.FC = () => {
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    setShowAttachMenu(false);
     await handleUploadAndSendMedia(file);
   };
 
@@ -565,7 +542,15 @@ const Inbox: React.FC = () => {
         playNotificationSound();
       }
     },
-    () => { }, // conversationUpdated callback
+    (updatedConv: any) => {
+      // ✅ Handle Conversation updates (e.g., 24h window changes)
+      setConversations((prev) =>
+        prev.map((c) => (c.id === updatedConv.id ? { ...c, ...updatedConv } : c))
+      );
+      if (selectedConversation?.id === updatedConv.id) {
+        setSelectedConversation((prev) => prev ? { ...prev, ...updatedConv } : prev);
+      }
+    },
     (statusUpdate: any) => {
       // ✅ Update message status in real-time
       setMessages((prev) =>
@@ -696,15 +681,28 @@ const Inbox: React.FC = () => {
                       <Pin className="w-3 h-3 text-yellow-900" />
                     </div>
                   )}
+
+                  {/* ✅ Unread Dot on Avatar */}
+                  {conv.unreadCount > 0 ? (
+                    <div className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-green-500 rounded-full border-2 border-white dark:border-gray-800 animate-pulse" />
+                  ) : null}
                 </div>
 
                 <div className="flex-1 min-w-0">
                   <div className="flex justify-between mb-1">
-                    <h3 className="font-semibold truncate text-gray-900 dark:text-white">{getContactName(conv.contact)}</h3>
-                    <span className="text-xs text-gray-500">{formatDistanceToNow(new Date(conv.lastMessageAt), { addSuffix: false })}</span>
+                    <h3 className={`font-semibold truncate ${conv.unreadCount > 0 ? 'text-gray-900 dark:text-white' : 'text-gray-700 dark:text-gray-300'}`}>{getContactName(conv.contact)}</h3>
+                    <div className="flex flex-col items-end gap-1">
+                      <span className={`text-xs ${conv.unreadCount > 0 ? 'text-green-600 font-semibold' : 'text-gray-500'}`}>{formatDistanceToNow(new Date(conv.lastMessageAt), { addSuffix: false })}</span>
+                      {/* ✅ Unread Badge */}
+                      {conv.unreadCount > 0 && (
+                        <span className="min-w-[1.25rem] h-5 px-1.5 bg-green-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center animate-pulse">
+                          {conv.unreadCount > 99 ? '99+' : conv.unreadCount}
+                        </span>
+                      )}
+                    </div>
                   </div>
 
-                  <p className="text-sm truncate text-gray-500 dark:text-gray-400">{conv.lastMessagePreview || 'No messages yet'}</p>
+                  <p className={`text-sm truncate ${conv.unreadCount > 0 ? 'text-gray-900 dark:text-gray-200 font-medium' : 'text-gray-500 dark:text-gray-400'}`}>{conv.lastMessagePreview || 'No messages yet'}</p>
 
                   {conv.labels?.length ? (
                     <div className="flex flex-wrap gap-1 mt-1">
@@ -817,6 +815,14 @@ const Inbox: React.FC = () => {
               </div>
             </div>
 
+            {/* ✅ Window Status (Added here) */}
+            <div className="flex-none z-10 w-full shrink-0">
+              <WindowStatus
+                windowExpiresAt={selectedConversation.windowExpiresAt || null}
+                isWindowOpen={selectedConversation.isWindowOpen || false}
+              />
+            </div>
+
             <div className="flex-1 overflow-y-auto p-4 space-y-2 bg-[#efe7dd]">
               {loadingMessages ? (
                 <div className="flex items-center justify-center h-full">
@@ -872,102 +878,25 @@ const Inbox: React.FC = () => {
               )}
             </div>
 
-            {showQuickReplies && (
-              <div className="bg-white border-t border-gray-200 p-3">
-                <div className="flex justify-between mb-2">
-                  <span className="text-sm font-medium text-gray-700">Quick Replies</span>
-                  <button onClick={() => setShowQuickReplies(false)}><X className="w-4 h-4 text-gray-500" /></button>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {QUICK_REPLIES.map((r) => (
-                    <button
-                      key={r.id}
-                      onClick={() => { setMessageText(r.text); setShowQuickReplies(false); }}
-                      className="px-3 py-1.5 bg-gray-100 text-gray-700 text-sm rounded-full hover:bg-gray-200"
-                    >
-                      {r.shortcut}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            <div className="bg-white border-t border-gray-200 px-4 py-3">
-              <div className="flex items-center gap-2">
-                <button onClick={() => setShowQuickReplies(!showQuickReplies)} className="p-2 rounded-full hover:bg-gray-100" title="Quick Replies">
-                  <Star className="w-5 h-5 text-gray-500" />
-                </button>
-
-                {/* emoji */}
-                <div className="relative">
-                  <button onClick={() => setShowEmojiPicker(!showEmojiPicker)} className="p-2 rounded-full hover:bg-gray-100">
-                    <Smile className="w-5 h-5 text-gray-500" />
-                  </button>
-                  {showEmojiPicker && (
-                    <>
-                      <div className="fixed inset-0 z-10" onClick={() => setShowEmojiPicker(false)} />
-                      <div className="absolute bottom-full left-0 mb-2 p-3 bg-white rounded-xl shadow-lg border z-20">
-                        <div className="grid grid-cols-10 gap-1">
-                          {EMOJIS.map((emoji, i) => (
-                            <button key={i} onClick={() => { setMessageText((p) => p + emoji); setShowEmojiPicker(false); }} className="w-8 h-8 text-xl hover:bg-gray-100 rounded">
-                              {emoji}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    </>
-                  )}
-                </div>
-
-                {/* attach */}
-                <div className="relative">
-                  <button onClick={() => setShowAttachMenu(!showAttachMenu)} className="p-2 rounded-full hover:bg-gray-100">
-                    <Paperclip className="w-5 h-5 text-gray-500" />
-                  </button>
-                  {showAttachMenu && (
-                    <>
-                      <div className="fixed inset-0 z-10" onClick={() => setShowAttachMenu(false)} />
-                      <div className="absolute bottom-full left-0 mb-2 p-2 bg-white rounded-xl shadow-lg border z-20">
-                        <button
-                          onClick={() => { fileInputRef.current?.click(); setShowAttachMenu(false); }}
-                          className="flex items-center gap-3 px-4 py-2 hover:bg-gray-100 rounded-lg"
-                        >
-                          <div className="w-10 h-10 bg-purple-500 rounded-full flex items-center justify-center">
-                            <Image className="w-5 h-5 text-white" />
-                          </div>
-                          <span className="text-sm font-medium">Photo/Video/Doc</span>
-                        </button>
-                      </div>
-                    </>
-                  )}
-                </div>
-
-                <div className="flex-1">
-                  <input
-                    value={messageText}
-                    onChange={(e) => setMessageText(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && !e.shiftKey) {
-                        e.preventDefault();
-                        handleSendMessage();
-                      }
-                    }}
-                    placeholder="Type a message..."
-                    className="w-full px-4 py-3 bg-gray-100 border-none rounded-full focus:ring-2 focus:ring-green-500 outline-none"
-                  />
-                </div>
-
-                {messageText.trim() ? (
-                  <button onClick={handleSendMessage} disabled={sending} className="p-3 bg-green-500 text-white rounded-full hover:bg-green-600 disabled:opacity-50">
-                    {sending ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
-                  </button>
-                ) : (
-                  <button className="p-3 bg-gray-100 text-gray-500 rounded-full hover:bg-gray-200">
-                    <Mic className="w-5 h-5" />
-                  </button>
-                )}
-              </div>
+            {/* Use ChatInput Component instead of inline input */}
+            <div className="flex-none z-20 w-full shrink-0">
+              <ChatInput
+                onSendMessage={async (msg) => {
+                  setMessageText(msg);
+                  await new Promise(resolve => setTimeout(resolve, 0)); // wait for state to update
+                  await handleSendMessage();
+                }}
+                onOpenTemplateModal={() => {
+                  // Add state for template modal or implement open logic here
+                  // For now just logging, needs corresponding state if Template Modal is used in Inbox
+                  console.log("Open Template Modal");
+                  toast("Please use template message (Feature in development for Inbox UI)");
+                }}
+                isWindowOpen={selectedConversation.isWindowOpen || false}
+                windowExpiresAt={selectedConversation.windowExpiresAt}
+              />
             </div>
+
           </>
         ) : (
           <div className="flex-1 flex items-center justify-center">
@@ -979,8 +908,9 @@ const Inbox: React.FC = () => {
               <p className="text-gray-600 max-w-sm">Choose a conversation from the list</p>
             </div>
           </div>
-        )}
-      </div>
+        )
+        }
+      </div >
 
       {showContactInfo && selectedConversation && (
         <div className="w-80 bg-white border-l border-gray-200 flex flex-col overflow-hidden">
@@ -1035,7 +965,7 @@ const Inbox: React.FC = () => {
           </div>
         </div>
       )}
-    </div>
+    </div >
   );
 };
 
