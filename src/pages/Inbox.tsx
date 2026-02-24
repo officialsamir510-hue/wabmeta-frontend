@@ -131,6 +131,11 @@ const Inbox: React.FC = () => {
   const [showLabelPicker, setShowLabelPicker] = useState<string | null>(null);
   const [showConversationMenu, setShowConversationMenu] = useState<string | null>(null);
 
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const conversationListRef = useRef<HTMLDivElement>(null);
+
   const fetchingMessagesRef = useRef(false);
   const lastFetchedConvId = useRef<string | null>(null);
 
@@ -162,8 +167,83 @@ const Inbox: React.FC = () => {
     try {
       setLoading(true);
       setError(null);
+      setPage(1);
+      setHasMore(true);
 
-      const params: any = { search: searchQuery || undefined, limit: 50 };
+      const params: any = {
+        limit: 200,  // ✅ Increased limit
+      };
+
+      // ✅ Only add search if provided
+      if (searchQuery?.trim()) {
+        params.search = searchQuery.trim();
+      }
+
+      // ✅ FIXED: Filter logic
+      if (filter === 'unread') {
+        params.isRead = false;
+        params.isArchived = false;  // Unread should exclude archived
+      } else if (filter === 'archived') {
+        params.isArchived = true;
+      }
+      // ✅ For 'all' filter - don't pass isArchived at all (show everything except archived)
+      else {
+        params.isArchived = false;  // 'all' = all non-archived
+      }
+
+      console.log('📥 Fetching conversations with params:', params);
+
+      const response = await inboxApi.getConversations(params);
+
+      if (response.data.success) {
+        let data: Conversation[] = [];
+
+        if (Array.isArray(response.data.data)) {
+          data = response.data.data;
+        } else if (response.data.data?.conversations) {
+          data = response.data.data.conversations;
+        }
+
+        // Filter out invalid entries
+        const valid = data.filter((c) => c?.id && c?.contact);
+
+        // Sort: Pinned first, then by lastMessageAt
+        valid.sort((a, b) => {
+          if (a.isPinned && !b.isPinned) return -1;
+          if (!a.isPinned && b.isPinned) return 1;
+
+          const dateA = new Date(a.lastMessageAt || 0).getTime();
+          const dateB = new Date(b.lastMessageAt || 0).getTime();
+          return dateB - dateA;
+        });
+
+        console.log(`✅ Loaded ${valid.length} conversations`);
+        setConversations(valid);
+      } else {
+        throw new Error(response.data.message || 'Failed to load conversations');
+      }
+    } catch (e: any) {
+      console.error('❌ Fetch conversations error:', e);
+      setError(e.response?.data?.message || e.message || 'Failed to load conversations');
+      setConversations([]);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, [searchQuery, filter]);
+
+  // Load more function
+  const loadMoreConversations = async () => {
+    if (loadingMore || !hasMore) return;
+
+    try {
+      setLoadingMore(true);
+      const nextPage = page + 1;
+
+      const params: any = {
+        page: nextPage,
+        limit: 50,
+      };
 
       if (filter === 'unread') params.isRead = false;
       else if (filter === 'archived') params.isArchived = true;
@@ -172,31 +252,36 @@ const Inbox: React.FC = () => {
       const response = await inboxApi.getConversations(params);
 
       if (response.data.success) {
-        let data: Conversation[] = [];
-        if (Array.isArray(response.data.data)) data = response.data.data;
-        else if (response.data.data?.conversations) data = response.data.data.conversations;
+        let newData: Conversation[] = [];
+        if (Array.isArray(response.data.data)) {
+          newData = response.data.data;
+        } else if (response.data.data?.conversations) {
+          newData = response.data.data.conversations;
+        }
 
-        const valid = data.filter((c) => c?.id && c?.contact);
-
-        valid.sort((a, b) => {
-          if (a.isPinned && !b.isPinned) return -1;
-          if (!a.isPinned && b.isPinned) return 1;
-          return new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime();
-        });
-
-        setConversations(valid);
-      } else {
-        throw new Error(response.data.message || 'Failed to load conversations');
+        if (newData.length === 0) {
+          setHasMore(false);
+        } else {
+          setConversations(prev => [...prev, ...newData.filter((c: any) => c?.id && c?.contact)]);
+          setPage(nextPage);
+        }
       }
-    } catch (e: any) {
-      console.error(e);
-      setError(e.response?.data?.message || e.message || 'Failed to load conversations');
-      setConversations([]);
+    } catch (e) {
+      console.error('Load more error:', e);
     } finally {
-      setLoading(false);
-      setRefreshing(false);
+      setLoadingMore(false);
     }
-  }, [searchQuery, filter]);
+  };
+
+  // Scroll handler
+  const handleConversationScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
+
+    // Load more when 80% scrolled
+    if (scrollTop + clientHeight >= scrollHeight * 0.8) {
+      loadMoreConversations();
+    }
+  };
 
   const fetchMessages = useCallback(async (convId: string) => {
     if (fetchingMessagesRef.current) return;
@@ -704,22 +789,36 @@ const Inbox: React.FC = () => {
           </div>
 
           <div className="flex gap-1 bg-gray-100 dark:bg-gray-700 p-1 rounded-xl">
-            {(['all', 'unread', 'archived'] as const).map((f) => (
+            {[
+              { key: 'all', label: 'All Chats' },
+              { key: 'unread', label: 'Unread' },
+              { key: 'archived', label: 'Archived' },
+            ].map((f) => (
               <button
-                key={f}
-                onClick={() => setFilter(f)}
-                className={`flex-1 px-3 py-2 text-sm font-medium rounded-lg transition-all capitalize ${filter === f
+                key={f.key}
+                onClick={() => setFilter(f.key as 'all' | 'unread' | 'archived')}
+                className={`flex-1 px-3 py-2 text-sm font-medium rounded-lg transition-all ${filter === f.key
                   ? 'bg-white dark:bg-gray-600 text-green-600 dark:text-green-400 shadow-sm'
-                  : 'text-gray-600 dark:text-gray-400'
+                  : 'text-gray-600 dark:text-gray-400 hover:text-gray-800'
                   }`}
               >
-                {f}
+                {f.label}
+                {/* ✅ Show count badge */}
+                {f.key === 'unread' && conversations.filter(c => c.unreadCount > 0).length > 0 && (
+                  <span className="ml-1 px-1.5 py-0.5 text-xs bg-green-500 text-white rounded-full">
+                    {conversations.filter(c => c.unreadCount > 0).length}
+                  </span>
+                )}
               </button>
             ))}
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto">
+        <div
+          ref={conversationListRef}
+          onScroll={handleConversationScroll}
+          className="flex-1 overflow-y-auto"
+        >
           {conversations.map((conv) => (
             <div key={conv.id} className="relative">
               <div
@@ -868,6 +967,20 @@ const Inbox: React.FC = () => {
               )}
             </div>
           ))}
+
+          {/* ✅ Loading more indicator */}
+          {loadingMore && (
+            <div className="flex justify-center py-4">
+              <Loader2 className="w-6 h-6 animate-spin text-green-600" />
+            </div>
+          )}
+
+          {/* ✅ No more conversations */}
+          {!hasMore && conversations.length > 0 && (
+            <div className="text-center py-4 text-gray-400 text-sm">
+              No more conversations
+            </div>
+          )}
         </div>
       </div>
 
