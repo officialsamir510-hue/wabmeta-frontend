@@ -166,7 +166,7 @@ const CreateCampaign: React.FC = () => {
       try {
         const [templatesRes, contactsRes] = await Promise.all([
           templateApi.getAll({ whatsappAccountId: selectedAccountId }),
-          contactApi.getAll(),
+          contactApi.getAll({ limit: 10000 }),
         ]);
 
         // Templates

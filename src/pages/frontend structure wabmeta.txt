@@ -1,0 +1,250 @@
+File Tree: WabMeta
+Generated on: 2/24/2026, 7:29:52 PM
+Root path: c:\Users\Sameer Thakur\OneDrive\WabMeta
+
+────────────────────────────────────────────────────────────────────────────────
+
+├── 📁 .github/
+│   └── 📝 copilot-instructions.md
+├── 📁 .qodo/
+│   ├── 📁 agents/
+│   └── 📁 workflows/
+├── 📁 public/
+│   ├── 🌐 index.html
+│   ├── ⚙️ manifest.json
+│   └── 🖼️ vite.svg
+├── 📁 src/
+│   ├── 📁 assets/
+│   │   ├── 📁 images/
+│   │   ├── 🖼️ logo-white.jpeg
+│   │   ├── 🖼️ logo.png
+│   │   └── 🖼️ react.svg
+│   ├── 📁 components/
+│   │   ├── 📁 admin/
+│   │   │   ├── 📄 AdminLayout.tsx
+│   │   │   ├── 📄 AdminProtectedRoute.tsx
+│   │   │   ├── 📄 AdminSidebar.tsx
+│   │   │   ├── 📄 AssignPlanModal.tsx
+│   │   │   └── 📄 ExtendSubscriptionModal.tsx
+│   │   ├── 📁 analytics/
+│   │   │   ├── 📄 CampaignPerformance.tsx
+│   │   │   ├── 📄 ConversationMetrics.tsx
+│   │   │   ├── 📄 DateRangePicker.tsx
+│   │   │   ├── 📄 DeliveryChart.tsx
+│   │   │   └── 📄 OverviewStats.tsx
+│   │   ├── 📁 auth/
+│   │   │   ├── 📄 AuthLayout.tsx
+│   │   │   ├── 📄 OTPInput.tsx
+│   │   │   ├── 📄 PasswordStrengthMeter.tsx
+│   │   │   ├── 📄 SocialLoginButtons.tsx
+│   │   │   ├── 📄 VerifyEmail.tsx
+│   │   │   ├── 📄 VerifyOTP.tsx
+│   │   │   └── 📄 WhatsAppSignup.tsx
+│   │   ├── 📁 automation/
+│   │   │   └── 📄 CreateRuleModal.tsx
+│   │   ├── 📁 billing/
+│   │   │   ├── 📄 CurrentPlan.tsx
+│   │   │   ├── 📄 InvoiceHistory.tsx
+│   │   │   ├── 📄 PaymentMethods.tsx
+│   │   │   ├── 📄 PricingPlans.tsx
+│   │   │   └── 📄 UsageStats.tsx
+│   │   ├── 📁 campaigns/
+│   │   │   ├── 📄 AudienceSelector.tsx
+│   │   │   ├── 📄 CampaignCard.tsx
+│   │   │   ├── 📄 CampaignFilters.tsx
+│   │   │   ├── 📄 CampaignStats.tsx
+│   │   │   ├── 📄 CsvAudienceUploader.tsx
+│   │   │   ├── 📄 SchedulePicker.tsx
+│   │   │   ├── 📄 TemplateSelector.tsx
+│   │   │   └── 📄 VariableMapper.tsx
+│   │   ├── 📁 chatbot/
+│   │   │   ├── 📁 nodes/
+│   │   │   │   ├── 📄 ButtonNode.tsx
+│   │   │   │   ├── 📄 ConditionNode.tsx
+│   │   │   │   ├── 📄 MessageNode.tsx
+│   │   │   │   └── 📄 StartNode.tsx
+│   │   │   ├── 📄 FlowControls.tsx
+│   │   │   └── 📄 NodeSidebar.tsx
+│   │   ├── 📁 common/
+│   │   │   ├── 📄 Avatar.tsx
+│   │   │   ├── 📄 Badge.tsx
+│   │   │   ├── 📄 Button.tsx
+│   │   │   ├── 📄 Card.tsx
+│   │   │   ├── 📄 Checkbox.tsx
+│   │   │   ├── 📄 Dropdown.tsx
+│   │   │   ├── 📄 ErrorBoundary.tsx
+│   │   │   ├── 📄 Input.tsx
+│   │   │   ├── 📄 Loader.tsx
+│   │   │   ├── 📄 LoadingScreen.tsx
+│   │   │   ├── 📄 Logo.tsx
+│   │   │   ├── 📄 Modal.tsx
+│   │   │   ├── 📄 NoWhatsAppConnected.tsx
+│   │   │   ├── 📄 Table.tsx
+│   │   │   ├── 📄 Toast.tsx
+│   │   │   ├── 📄 UpgradeModal.tsx
+│   │   │   └── 📄 WhatsAppAccountSelector.tsx
+│   │   ├── 📁 contacts/
+│   │   │   ├── 📄 AddContactModal.tsx
+│   │   │   ├── 📄 BulkActions.tsx
+│   │   │   ├── 📄 ContactFilters.tsx
+│   │   │   ├── 📄 ContactsTable.tsx
+│   │   │   └── 📄 ImportUploader.tsx
+│   │   ├── 📁 dashboard/
+│   │   │   ├── 📄 ChartCard.tsx
+│   │   │   ├── 📄 ConnectionStatus.tsx
+│   │   │   ├── 📄 DashboardLayout.tsx
+│   │   │   ├── 📄 MetaConnectModal.tsx
+│   │   │   ├── 📄 QuickActions.tsx
+│   │   │   ├── 📄 RecentActivity.tsx
+│   │   │   ├── 📄 Sidebar.tsx
+│   │   │   ├── 📄 StatsCard.tsx
+│   │   │   └── 📄 TopBar.tsx
+│   │   ├── 📁 inbox/
+│   │   │   ├── 📄 ChatInput.tsx
+│   │   │   ├── 📄 ChatWindow.tsx
+│   │   │   ├── 📄 ContactInfo.tsx
+│   │   │   ├── 📄 ConversationItem.tsx
+│   │   │   ├── 📄 ConversationList.tsx
+│   │   │   ├── 📄 MessageBubble.tsx
+│   │   │   ├── 📄 QuickReplies.tsx
+│   │   │   ├── 📄 SendTemplateModal.tsx
+│   │   │   └── 📄 WindowStatus.tsx
+│   │   ├── 📁 landing/
+│   │   │   ├── 📄 CTA.tsx
+│   │   │   ├── 📄 FAQ.tsx
+│   │   │   ├── 📄 Features.tsx
+│   │   │   ├── 📄 Footer.tsx
+│   │   │   ├── 📄 Hero.tsx
+│   │   │   ├── 📄 HowItWorks.tsx
+│   │   │   ├── 📄 Navbar.tsx
+│   │   │   ├── 📄 Pricing.tsx
+│   │   │   └── 📄 Testimonials.tsx
+│   │   ├── 📁 settings/
+│   │   │   ├── 📄 ApiConfig.tsx
+│   │   │   ├── 📄 BusinessProfile.tsx
+│   │   │   ├── 📄 GeneralSettings.tsx
+│   │   │   ├── 📄 MetaApiWebhookSettings.tsx
+│   │   │   ├── 📄 NotificationSettings.tsx
+│   │   │   ├── 📄 SecuritySettings.tsx
+│   │   │   ├── 📄 WebhookLogs.tsx
+│   │   │   └── 📄 WhatsAppSettings.tsx
+│   │   ├── 📁 team/
+│   │   │   ├── 📄 InviteMemberModal.tsx
+│   │   │   ├── 📄 RoleBadge.tsx
+│   │   │   ├── 📄 TeamList.tsx
+│   │   │   └── 📄 TeamStats.tsx
+│   │   └── 📁 templates/
+│   │       ├── 📄 ButtonBuilder.tsx
+│   │       ├── 📄 MediaUploader.tsx
+│   │       ├── 📄 TemplateCard.tsx
+│   │       ├── 📄 TemplateFilters.tsx
+│   │       ├── 📄 TemplatePreview.tsx
+│   │       └── 📄 VariableManager.tsx
+│   ├── 📁 context/
+│   │   ├── 📄 AppContext.ts
+│   │   ├── 📄 AppProvider.tsx
+│   │   ├── 📄 AuthContext.ts
+│   │   ├── 📄 AuthProvider.tsx
+│   │   ├── 📄 SocketContext.ts
+│   │   ├── 📄 SocketProvider.tsx
+│   │   ├── 📄 ThemeContext.ts
+│   │   └── 📄 ThemeProvider.tsx
+│   ├── 📁 hooks/
+│   │   ├── 📄 useCampaignRealtime.ts
+│   │   ├── 📄 useChatbot.ts
+│   │   ├── 📄 useDelayedFlag.ts
+│   │   ├── 📄 useFacebookSDK.ts
+│   │   ├── 📄 useInbox.ts
+│   │   ├── 📄 useInboxSocket.ts
+│   │   ├── 📄 useMetaConnection.ts
+│   │   ├── 📄 usePlanAccess.ts
+│   │   ├── 📄 useTheme.ts
+│   │   └── 📄 useWhatsAppConnection.ts
+│   ├── 📁 pages/
+│   │   ├── 📁 admin/
+│   │   │   ├── 📄 AdminDashboard.tsx
+│   │   │   ├── 📄 AdminLogin.tsx
+│   │   │   ├── 📄 SubscriptionManagement.tsx
+│   │   │   ├── 📄 Subscriptions.tsx
+│   │   │   ├── 📄 SystemSettings.tsx
+│   │   │   └── 📄 UserManagement.tsx
+│   │   ├── 📁 auth/
+│   │   ├── 📄 Automation.tsx
+│   │   ├── 📄 Billing.tsx
+│   │   ├── 📄 CampaignDetails.tsx
+│   │   ├── 📄 Campaigns.tsx
+│   │   ├── 📄 ChatbotBuilder.tsx
+│   │   ├── 📄 ChatbotList.tsx
+│   │   ├── 📄 ContactDetails.tsx
+│   │   ├── 📄 Contacts.tsx
+│   │   ├── 📄 CreateCampaign.tsx
+│   │   ├── 📄 CreateTemplate.tsx
+│   │   ├── 📄 Dashboard.tsx
+│   │   ├── 📄 DataDeletion.tsx
+│   │   ├── 📄 ForgotPassword.tsx
+│   │   ├── 📄 Help.tsx
+│   │   ├── 📄 ImportContacts.tsx
+│   │   ├── 📄 Inbox.tsx
+│   │   ├── 📄 Landing.tsx
+│   │   ├── 📄 Login.tsx
+│   │   ├── 📄 MetaCallback.tsx
+│   │   ├── 📄 NotFound.tsx
+│   │   ├── 📄 Notifications.tsx
+│   │   ├── 📄 Privacy.tsx
+│   │   ├── 📄 Profile.tsx
+│   │   ├── 📄 Reports.tsx
+│   │   ├── 📄 ResetPassword.tsx
+│   │   ├── 📄 Settings.tsx
+│   │   ├── 📄 Signup.tsx
+│   │   ├── 📄 Team.tsx
+│   │   ├── 📄 Templates.tsx
+│   │   ├── 📄 Terms.tsx
+│   │   ├── 📄 VerifyEmail.tsx
+│   │   └── 📄 VerifyOTP.tsx
+│   ├── 📁 services/
+│   │   ├── 📄 api.ts
+│   │   └── 📄 inboxExtra.ts
+│   ├── 📁 store/
+│   ├── 📁 types/
+│   │   ├── 📄 analytics.ts
+│   │   ├── 📄 auth.ts
+│   │   ├── 📄 automation.ts
+│   │   ├── 📄 billing.ts
+│   │   ├── 📄 campaign.ts
+│   │   ├── 📄 chat.ts
+│   │   ├── 📄 chatbot.ts
+│   │   ├── 📄 meta.ts
+│   │   ├── 📄 settings.ts
+│   │   ├── 📄 team.ts
+│   │   └── 📄 template.ts
+│   ├── 📁 utils/
+│   │   ├── 📄 csvContacts.ts
+│   │   └── 📄 razorpay.ts
+│   ├── 🎨 App.css
+│   ├── 📄 App.tsx
+│   ├── 🎨 index.css
+│   └── 📄 main.tsx
+├── ⚙️ .gitignore
+├── 📝 README.md
+├── 📄 debug_grep.js
+├── 📄 eslint.config.js
+├── 🌐 index.html
+├── 📄 lint_final_check.txt
+├── 📄 lint_output_2.txt
+├── 📄 lint_output_3.txt
+├── 📄 lint_output_final.txt
+├── 📄 lint_results.txt
+├── ⚙️ package-lock.json
+├── ⚙️ package.json
+├── 📄 postcss.config.js
+├── 📄 tailwind.config.js
+├── 📄 test_api.js
+├── 📄 tsc_output.txt
+├── ⚙️ tsconfig.app.json
+├── ⚙️ tsconfig.json
+├── ⚙️ tsconfig.node.json
+├── ⚙️ vercel.json
+└── 📄 vite.config.ts
+
+────────────────────────────────────────────────────────────────────────────────
+Generated by FileTree Pro Extension

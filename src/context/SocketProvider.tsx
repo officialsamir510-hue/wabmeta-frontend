@@ -77,12 +77,13 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         });
 
         s.on('connect', () => {
-            console.log('✅ [SOCKET] Connected:', s.id);
+            console.log('✅ Socket connected:', s.id);
             setIsConnected(true);
 
-            // ✅ fallback join
+            // ✅ Explicitly join org room
             if (organizationId) {
                 s.emit('org:join', organizationId);
+                console.log(`📂 Joined org room: ${organizationId}`);
             }
         });
 
