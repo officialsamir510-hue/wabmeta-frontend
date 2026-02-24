@@ -1,4 +1,4 @@
-// src/context/SocketContext.ts
+// src/context/SocketContext.ts - COMPLETE
 
 import { createContext, useContext } from 'react';
 import { Socket } from 'socket.io-client';
@@ -17,4 +17,12 @@ export const SocketContext = createContext<SocketContextType>({
     leaveConversation: () => { },
 });
 
-export const useSocket = () => useContext(SocketContext);
+export const useSocket = () => {
+    const context = useContext(SocketContext);
+    if (!context) {
+        console.warn('useSocket must be used within SocketProvider');
+    }
+    return context;
+};
+
+export default SocketContext;
