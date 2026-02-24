@@ -1,6 +1,6 @@
 // src/hooks/useInboxSocket.ts - COMPLETE FIXED
 
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef } from 'react';
 import { useSocket } from '../context/SocketContext';
 
 interface Message {
@@ -106,7 +106,13 @@ export const useInboxSocket = (
         };
 
         const handleMessageStatus = (data: any) => {
-            console.log('📊 [SOCKET] message:status received:', data);
+            console.log('📊 [SOCKET] message:status received:', {
+                messageId: data.messageId,
+                waMessageId: data.waMessageId,
+                wamId: data.wamId,
+                status: data.status,
+            });
+
             if (onMessageStatusRef.current) {
                 onMessageStatusRef.current(data);
             }

@@ -6,9 +6,6 @@ import {
   Search,
   MoreVertical,
   Info,
-  CheckCheck,
-  Check,
-  Clock,
   Loader2,
   MessageSquare,
   AlertCircle,
@@ -26,6 +23,8 @@ import api, { inbox as inboxApi, whatsapp as whatsappApi } from '../services/api
 import toast from 'react-hot-toast';
 import WindowStatus from '../components/inbox/WindowStatus';
 import ChatInput from '../components/inbox/ChatInput';
+import MessageBubble from '../components/inbox/MessageBubble';
+import SendTemplateModal from '../components/inbox/SendTemplateModal';
 
 // ============================================
 // SAFE DATE FORMATTING HELPERS
@@ -77,6 +76,7 @@ interface Message {
   sentAt?: string;
   deliveredAt?: string;
   readAt?: string;
+  statusUpdatedAt?: string;
   mediaUrl?: string;
   templateName?: string;
   metadata?: any;
@@ -125,8 +125,8 @@ const Inbox: React.FC = () => {
   const [messageText, setMessageText] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [showTemplateModal, setShowTemplateModal] = useState(false);
   const [filter, setFilter] = useState<'all' | 'unread' | 'archived'>('all');
-
   const [showContactInfo, setShowContactInfo] = useState(false);
   const [showLabelPicker, setShowLabelPicker] = useState<string | null>(null);
   const [showConversationMenu, setShowConversationMenu] = useState<string | null>(null);
@@ -148,22 +148,6 @@ const Inbox: React.FC = () => {
   };
 
   const getContactInitial = (contact: Contact): string => getContactName(contact).charAt(0).toUpperCase();
-
-  const parseMessageContent = (message: Message): string => {
-    if (message.type === 'TEMPLATE' && message.content) {
-      try {
-        const parsed = JSON.parse(message.content);
-        return `📋 Template: ${parsed.templateName || 'Unknown'}`;
-      } catch {
-        return message.content;
-      }
-    }
-    if (message.type === 'IMAGE') return message.content || '📷 Image';
-    if (message.type === 'VIDEO') return message.content || '🎥 Video';
-    if (message.type === 'AUDIO') return message.content || '🎵 Audio';
-    if (message.type === 'DOCUMENT') return message.content || '📄 Document';
-    return message.content || '';
-  };
 
   const getLabelStyle = (label: string) => LABEL_COLORS[label.toLowerCase()] || {
     bg: 'bg-gray-100',
@@ -258,9 +242,10 @@ const Inbox: React.FC = () => {
     const text = textToSend || messageText;
     if (!text.trim() || !selectedConversation) return;
 
-    const tempId = `temp-${Date.now()}`;
+    const tempId = `temp-${Date.now()}-${Math.random()}`;
     const now = new Date().toISOString();
 
+    // ✅ Create optimistic message
     const tempMessage: Message = {
       id: tempId,
       content: text,
@@ -271,9 +256,10 @@ const Inbox: React.FC = () => {
       sentAt: now,
     };
 
+    // ✅ IMMEDIATELY add to UI (no await)
     setMessages((prev) => [...prev, tempMessage]);
     const sentText = text;
-    setMessageText('');
+    setMessageText(''); // Clear input immediately
     scrollToBottom();
 
     try {
@@ -281,8 +267,10 @@ const Inbox: React.FC = () => {
       const accounts = accountsRes.data?.data || [];
       const connected = accounts.find((a: any) => a.status === 'CONNECTED');
       const accountId = connected?.id || accounts[0]?.id;
+
       if (!accountId) throw new Error('No WhatsApp account connected');
 
+      // ✅ Send in background
       const response = await whatsappApi.sendText({
         whatsappAccountId: accountId,
         to: selectedConversation.contact.phone,
@@ -292,6 +280,7 @@ const Inbox: React.FC = () => {
       if (response.data.success) {
         const realMessage = response.data.data;
 
+        // ✅ Update temp message with real data
         setMessages((prev) =>
           prev.map((m) =>
             m.id === tempId
@@ -300,13 +289,14 @@ const Inbox: React.FC = () => {
                 id: realMessage.id || tempId,
                 waMessageId: realMessage.waMessageId || realMessage.wamId,
                 wamId: realMessage.wamId || realMessage.waMessageId,
-                status: 'SENT',
+                status: 'SENT', // ✅ Update to SENT
                 sentAt: realMessage.sentAt || now,
               }
               : m
           )
         );
 
+        // Update conversation preview
         setConversations((prev) =>
           prev.map((c) =>
             c.id === selectedConversation.id
@@ -315,13 +305,19 @@ const Inbox: React.FC = () => {
           )
         );
 
-        toast.success('Message sent!');
+        // ✅ Success feedback (subtle, no toast spam)
+        console.log('✅ Message sent successfully');
       } else {
         throw new Error(response.data.message || 'Failed to send message');
       }
     } catch (e: any) {
+      // ✅ Only show error toast
       toast.error(e.response?.data?.message || e.message || 'Failed to send message');
-      setMessages((prev) => prev.map((m) => (m.id === tempId ? { ...m, status: 'FAILED' } : m)));
+
+      // ✅ Mark as FAILED (don't remove message)
+      setMessages((prev) =>
+        prev.map((m) => (m.id === tempId ? { ...m, status: 'FAILED' } : m))
+      );
     }
   };
 
@@ -585,25 +581,38 @@ const Inbox: React.FC = () => {
         setSelectedConversation((prev) => (prev ? { ...prev, ...updatedConv } : prev));
       }
     },
-    // 3. ✅ Status Update (CRITICAL FIX)
+    // ✅ FIXED: Status update handler with better ID matching
     (statusUpdate: any) => {
-      console.log('🔄 Status Update Received:', statusUpdate); // Debug log
+      console.log('🔄 [INBOX] Status Update:', statusUpdate);
 
       setMessages((prev) =>
         prev.map((m) => {
-          // Check ALL possible IDs to ensure match
+          // ✅ Match by ALL possible IDs
           const isMatch =
             m.id === statusUpdate.messageId ||
             m.waMessageId === statusUpdate.waMessageId ||
-            (m.waMessageId && m.waMessageId === statusUpdate.wamId); // Handle wamid variation
+            m.wamId === statusUpdate.wamId ||
+            m.waMessageId === statusUpdate.wamId ||
+            m.wamId === statusUpdate.waMessageId;
 
           if (isMatch) {
-            console.log(`✅ Updating message ${m.id} to ${statusUpdate.status}`);
+            console.log(`✅ Updating message ${m.id} status: ${m.status} → ${statusUpdate.status}`);
+
+            const newStatus = statusUpdate.status.toUpperCase() as Message['status'];
+
             return {
               ...m,
-              status: statusUpdate.status.toUpperCase() as Message['status'], // Ensure uppercase
-              ...(statusUpdate.status === 'DELIVERED' && { deliveredAt: statusUpdate.timestamp }),
-              ...(statusUpdate.status === 'READ' && { readAt: statusUpdate.timestamp }),
+              status: newStatus,
+              statusUpdatedAt: statusUpdate.timestamp,
+              ...(newStatus === 'SENT' && { sentAt: statusUpdate.timestamp }),
+              ...(newStatus === 'DELIVERED' && {
+                deliveredAt: statusUpdate.timestamp,
+                status: 'DELIVERED' as const
+              }),
+              ...(newStatus === 'READ' && {
+                readAt: statusUpdate.timestamp,
+                status: 'READ' as const
+              }),
             };
           }
           return m;
@@ -906,8 +915,6 @@ const Inbox: React.FC = () => {
               ) : (
                 <>
                   {messages.map((m, idx) => {
-                    const outbound = m.direction === 'OUTBOUND';
-
                     const currentDate = m.createdAt ? new Date(m.createdAt) : null;
                     const prevDate = idx > 0 && messages[idx - 1].createdAt ? new Date(messages[idx - 1].createdAt) : null;
 
@@ -929,39 +936,13 @@ const Inbox: React.FC = () => {
                           </div>
                         )}
 
-                        <div className={`flex ${outbound ? 'justify-end' : 'justify-start'}`}>
-                          <div
-                            className={`max-w-[70%] lg:max-w-md rounded-2xl shadow-sm ${outbound ? 'bg-green-500 text-white rounded-br-md' : 'bg-white text-gray-900 rounded-bl-md'
-                              }`}
-                          >
-                            <div className="px-4 py-2">
-                              {m.type === 'IMAGE' && m.mediaUrl && (
-                                <img
-                                  src={m.mediaUrl}
-                                  className="max-w-full rounded-lg mb-2"
-                                  alt="Image"
-                                  onError={(e) => {
-                                    (e.target as HTMLImageElement).style.display = 'none';
-                                  }}
-                                />
-                              )}
-                              <p className="break-words text-sm whitespace-pre-wrap">{parseMessageContent(m)}</p>
-                            </div>
-
-                            <div className={`flex items-center justify-end gap-1 px-3 pb-2 ${outbound ? 'text-green-100' : 'text-gray-400'}`}>
-                              <span className="text-[11px]">{safeFormatDate(m.createdAt, 'HH:mm', '--:--')}</span>
-                              {outbound && (
-                                <>
-                                  {m.status === 'READ' && <CheckCheck className="w-4 h-4 text-blue-300" />}
-                                  {m.status === 'DELIVERED' && <CheckCheck className="w-4 h-4 text-white/70" />}
-                                  {m.status === 'SENT' && <Check className="w-4 h-4 text-white/60" />}
-                                  {m.status === 'PENDING' && <Clock className="w-4 h-4 text-white/60" />}
-                                  {m.status === 'FAILED' && <AlertCircle className="w-4 h-4 text-red-300" />}
-                                </>
-                              )}
-                            </div>
-                          </div>
-                        </div>
+                        <MessageBubble
+                          message={m as any}
+                          onCopy={(content) => {
+                            navigator.clipboard.writeText(content);
+                            toast.success('Copied to clipboard');
+                          }}
+                        />
                       </React.Fragment>
                     );
                   })}
@@ -975,8 +956,9 @@ const Inbox: React.FC = () => {
                 onSendMessage={async (msg) => {
                   await handleSendMessage(msg);
                 }}
+                onMediaUpload={handleUploadAndSendMedia}
                 onOpenTemplateModal={() => {
-                  toast('Template modal coming soon!');
+                  setShowTemplateModal(true);
                 }}
                 isWindowOpen={selectedConversation.isWindowOpen || false}
                 windowExpiresAt={selectedConversation.windowExpiresAt}
@@ -1039,6 +1021,19 @@ const Inbox: React.FC = () => {
             </div>
           </div>
         </div>
+      )}
+      {showTemplateModal && selectedConversation && (
+        <SendTemplateModal
+          isOpen={showTemplateModal}
+          onClose={() => setShowTemplateModal(false)}
+          conversationId={selectedConversation.id}
+          contactPhone={selectedConversation.contact.phone}
+          contactName={getContactName(selectedConversation.contact)}
+          onSuccess={() => {
+            fetchConversations();
+            fetchMessages(selectedConversation.id);
+          }}
+        />
       )}
     </div>
   );

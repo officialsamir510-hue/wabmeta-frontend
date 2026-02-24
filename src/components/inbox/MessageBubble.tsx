@@ -15,6 +15,7 @@ import {
   File,
   MapPin,
   Image as ImageIcon,
+  FileText,
 } from 'lucide-react';
 
 interface Message {
@@ -36,20 +37,36 @@ interface MessageBubbleProps {
   onDelete?: (id: string) => void;
 }
 
-// ✅ Helper to safely parse content
-const parseContent = (content: string, type: string) => {
+// ✅ FIXED: Template content parser
+const parseContent = (content: string, type: string, metadata?: any) => {
   if (type === 'TEMPLATE') {
     try {
+      // Try parsing JSON content
       const parsed = typeof content === 'string' ? JSON.parse(content) : content;
-      // Backend Fix 1 se 'body' milega, agar nahi mila toh fallback
+
+      // Extract template body from various possible structures
+      const body =
+        parsed.body ||
+        parsed.text?.body ||
+        parsed.components?.find((c: any) => c.type === 'BODY')?.text ||
+        parsed.templateName ||
+        metadata?.templateName ||
+        'Template Message';
+
       return {
-        body: parsed.body || parsed.templateName || 'Template Message',
-        header: parsed.header || null,
-        footer: parsed.footer || null,
+        body: body,
+        header: parsed.header || parsed.components?.find((c: any) => c.type === 'HEADER')?.text || null,
+        footer: parsed.footer || parsed.components?.find((c: any) => c.type === 'FOOTER')?.text || null,
+        templateName: parsed.templateName || metadata?.templateName || null,
         isTemplate: true
       };
     } catch (e) {
-      return { body: content, isTemplate: true };
+      // Fallback: if JSON parse fails, use content as-is
+      return {
+        body: content || 'Template Message',
+        templateName: metadata?.templateName,
+        isTemplate: true
+      };
     }
   }
   return { body: content, isTemplate: false };
@@ -66,7 +83,11 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
 
   const isOutgoing = message.direction === 'OUTBOUND';
 
-  const { body, header, footer, isTemplate } = parseContent(message.content, message.type);
+  const { body, header, footer, templateName, isTemplate } = parseContent(
+    message.content,
+    message.type,
+    message.metadata // Pass metadata too
+  );
 
   // ✅ Status Icon Logic (Corrected)
   const getStatusIcon = (status?: string) => {
@@ -82,9 +103,26 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
     if (isTemplate) {
       return (
         <div className="space-y-1.5">
-          {header && <p className="text-sm font-semibold opacity-90 pb-1">{header}</p>}
-          <p className="text-sm whitespace-pre-wrap">{body}</p>
-          {footer && <p className="text-[10px] opacity-70 pt-1">{footer}</p>}
+          {/* Show template name if available */}
+          {templateName && (
+            <div className="flex items-center gap-1 pb-1 border-b border-white/10">
+              <FileText className="w-3 h-3 opacity-70" />
+              <span className="text-[10px] opacity-70 font-medium">{templateName}</span>
+            </div>
+          )}
+
+          {/* Header */}
+          {header && (
+            <p className="text-sm font-semibold opacity-90 pb-1">{header}</p>
+          )}
+
+          {/* Body - MAIN CONTENT */}
+          <p className="text-sm whitespace-pre-wrap leading-relaxed">{body}</p>
+
+          {/* Footer */}
+          {footer && (
+            <p className="text-[10px] opacity-70 pt-1 italic">{footer}</p>
+          )}
         </div>
       );
     }
