@@ -550,7 +550,11 @@ const Inbox: React.FC = () => {
       if (!msg?.conversationId) return;
 
       if (selectedConversation?.id === msg.conversationId) {
-        setMessages((prev) => (prev.some((m) => m.id === msg.id) ? prev : [...prev, msg]));
+        // Check duplicate
+        setMessages((prev) => {
+          if (prev.some(m => m.id === msg.id || m.waMessageId === msg.waMessageId)) return prev;
+          return [...prev, msg];
+        });
         scrollToBottom();
         inboxApi.markAsRead(msg.conversationId).catch(() => { });
       }
@@ -560,10 +564,11 @@ const Inbox: React.FC = () => {
           if (c.id === msg.conversationId) {
             return {
               ...c,
-              lastMessagePreview: msg.content?.substring(0, 50) || '[Media]',
+              lastMessagePreview: msg.type === 'TEMPLATE'
+                ? '📋 Template Message'
+                : (msg.content?.substring(0, 50) || 'New message'),
               lastMessageAt: msg.createdAt || new Date().toISOString(),
               unreadCount: selectedConversation?.id === msg.conversationId ? 0 : (c.unreadCount || 0) + 1,
-              isRead: selectedConversation?.id === msg.conversationId,
             };
           }
           return c;
@@ -580,21 +585,23 @@ const Inbox: React.FC = () => {
         setSelectedConversation((prev) => (prev ? { ...prev, ...updatedConv } : prev));
       }
     },
+    // 3. ✅ Status Update (CRITICAL FIX)
     (statusUpdate: any) => {
-      // ✅ CRITICAL FIX: Update by waMessageId OR wamId OR id
+      console.log('🔄 Status Update Received:', statusUpdate); // Debug log
+
       setMessages((prev) =>
         prev.map((m) => {
-          const match =
+          // Check ALL possible IDs to ensure match
+          const isMatch =
             m.id === statusUpdate.messageId ||
             m.waMessageId === statusUpdate.waMessageId ||
-            m.wamId === statusUpdate.waMessageId ||
-            m.waMessageId === statusUpdate.wamId ||
-            m.wamId === statusUpdate.wamId;
+            (m.waMessageId && m.waMessageId === statusUpdate.wamId); // Handle wamid variation
 
-          if (match) {
+          if (isMatch) {
+            console.log(`✅ Updating message ${m.id} to ${statusUpdate.status}`);
             return {
               ...m,
-              status: statusUpdate.status.toUpperCase() as Message['status'],
+              status: statusUpdate.status.toUpperCase() as Message['status'], // Ensure uppercase
               ...(statusUpdate.status === 'DELIVERED' && { deliveredAt: statusUpdate.timestamp }),
               ...(statusUpdate.status === 'READ' && { readAt: statusUpdate.timestamp }),
             };
@@ -693,8 +700,8 @@ const Inbox: React.FC = () => {
                 key={f}
                 onClick={() => setFilter(f)}
                 className={`flex-1 px-3 py-2 text-sm font-medium rounded-lg transition-all capitalize ${filter === f
-                    ? 'bg-white dark:bg-gray-600 text-green-600 dark:text-green-400 shadow-sm'
-                    : 'text-gray-600 dark:text-gray-400'
+                  ? 'bg-white dark:bg-gray-600 text-green-600 dark:text-green-400 shadow-sm'
+                  : 'text-gray-600 dark:text-gray-400'
                   }`}
               >
                 {f}
@@ -709,8 +716,8 @@ const Inbox: React.FC = () => {
               <div
                 onClick={() => selectConversation(conv)}
                 className={`flex items-start gap-3 px-4 py-3 cursor-pointer border-b border-gray-100 dark:border-gray-700/50 hover:bg-gray-50 dark:hover:bg-gray-700/50 ${selectedConversation?.id === conv.id
-                    ? 'bg-green-50 dark:bg-green-900/20 border-l-4 border-l-green-500'
-                    : ''
+                  ? 'bg-green-50 dark:bg-green-900/20 border-l-4 border-l-green-500'
+                  : ''
                   }`}
               >
                 <div className="relative flex-shrink-0">
@@ -758,8 +765,8 @@ const Inbox: React.FC = () => {
 
                   <p
                     className={`text-sm truncate ${conv.unreadCount > 0
-                        ? 'text-gray-900 dark:text-gray-200 font-medium'
-                        : 'text-gray-500 dark:text-gray-400'
+                      ? 'text-gray-900 dark:text-gray-200 font-medium'
+                      : 'text-gray-500 dark:text-gray-400'
                       }`}
                   >
                     {conv.lastMessagePreview || 'No messages yet'}

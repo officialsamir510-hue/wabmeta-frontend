@@ -5,7 +5,6 @@ import {
   Check,
   CheckCheck,
   Clock,
-  AlertCircle,
   MoreVertical,
   Reply,
   Copy,
@@ -15,10 +14,8 @@ import {
   Pause,
   File,
   MapPin,
-  FileText,
   Image as ImageIcon,
 } from 'lucide-react';
-import { format } from 'date-fns';
 
 interface Message {
   id: string;
@@ -39,6 +36,25 @@ interface MessageBubbleProps {
   onDelete?: (id: string) => void;
 }
 
+// ✅ Helper to safely parse content
+const parseContent = (content: string, type: string) => {
+  if (type === 'TEMPLATE') {
+    try {
+      const parsed = typeof content === 'string' ? JSON.parse(content) : content;
+      // Backend Fix 1 se 'body' milega, agar nahi mila toh fallback
+      return {
+        body: parsed.body || parsed.templateName || 'Template Message',
+        header: parsed.header || null,
+        footer: parsed.footer || null,
+        isTemplate: true
+      };
+    } catch (e) {
+      return { body: content, isTemplate: true };
+    }
+  }
+  return { body: content, isTemplate: false };
+};
+
 const MessageBubble: React.FC<MessageBubbleProps> = ({
   message,
   onReply,
@@ -50,104 +66,30 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
 
   const isOutgoing = message.direction === 'OUTBOUND';
 
-  // ✅ FIXED: Status Icons with correct colors
+  const { body, header, footer, isTemplate } = parseContent(message.content, message.type);
+
+  // ✅ Status Icon Logic (Corrected)
   const getStatusIcon = (status?: string) => {
     const st = status?.toUpperCase();
-
-    switch (st) {
-      case 'PENDING':
-      case 'SENDING':
-        return <Clock className="w-3.5 h-3.5 text-white/60" />;
-
-      case 'SENT':
-        return <Check className="w-3.5 h-3.5 text-white/60" />;
-
-      case 'DELIVERED':
-        return <CheckCheck className="w-3.5 h-3.5 text-white/70" />;
-
-      case 'READ':
-        return <CheckCheck className="w-3.5 h-3.5 text-blue-400" />;
-
-      case 'FAILED':
-        return <AlertCircle className="w-3.5 h-3.5 text-red-400" />;
-
-      default:
-        return <Clock className="w-3.5 h-3.5 text-white/60" />;
-    }
-  };
-
-  // ✅ FIXED: Parse template content
-  const parseTemplateContent = () => {
-    try {
-      const data = typeof message.content === 'string'
-        ? JSON.parse(message.content)
-        : message.content;
-
-      // If it's already parsed object
-      if (data?.templateName || data?.body) {
-        return {
-          templateName: data.templateName || message.templateName || 'Template',
-          body: data.body || data.text || '',
-          header: data.header,
-          footer: data.footer,
-          params: data.params || [],
-        };
-      }
-
-      // If it's just text
-      return {
-        templateName: message.templateName || 'Template',
-        body: message.content || '',
-        header: null,
-        footer: null,
-        params: [],
-      };
-    } catch (e) {
-      return {
-        templateName: message.templateName || 'Template',
-        body: message.content || 'Template message',
-        header: null,
-        footer: null,
-        params: [],
-      };
-    }
+    if (st === 'READ') return <CheckCheck className="w-3.5 h-3.5 text-blue-400" />;
+    if (st === 'DELIVERED') return <CheckCheck className="w-3.5 h-3.5 text-gray-300" />;
+    if (st === 'SENT') return <Check className="w-3.5 h-3.5 text-gray-300" />;
+    return <Clock className="w-3.5 h-3.5 text-gray-400" />;
   };
 
   // ✅ FIXED: Render message content based on type
   const renderContent = () => {
+    if (isTemplate) {
+      return (
+        <div className="space-y-1.5">
+          {header && <p className="text-sm font-semibold opacity-90 pb-1">{header}</p>}
+          <p className="text-sm whitespace-pre-wrap">{body}</p>
+          {footer && <p className="text-[10px] opacity-70 pt-1">{footer}</p>}
+        </div>
+      );
+    }
+
     switch (message.type) {
-      case 'TEMPLATE': {
-        const templateData = parseTemplateContent();
-
-        return (
-          <div className="space-y-2">
-            {/* Header */}
-            {templateData.header && (
-              <div className="font-semibold text-sm opacity-90 pb-2 border-b border-white/10">
-                {templateData.header}
-              </div>
-            )}
-
-            {/* Body with params replaced */}
-            <div className="text-sm whitespace-pre-wrap leading-relaxed">
-              {templateData.body}
-            </div>
-
-            {/* Footer */}
-            {templateData.footer && (
-              <div className="text-xs opacity-70 pt-2 border-t border-white/10">
-                {templateData.footer}
-              </div>
-            )}
-
-            {/* Template Badge */}
-            <div className="flex items-center gap-1.5 text-xs opacity-60 pt-1">
-              <FileText className="w-3 h-3" />
-              <span className="font-medium">{templateData.templateName}</span>
-            </div>
-          </div>
-        );
-      }
 
       case 'IMAGE':
         return (
@@ -243,7 +185,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
       default:
         return (
           <p className="text-sm whitespace-pre-wrap break-words leading-relaxed">
-            {message.content}
+            {body}
           </p>
         );
     }
@@ -324,7 +266,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
               }`}
           >
             <span className="text-[10px]">
-              {format(new Date(message.createdAt), 'HH:mm')}
+              {new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
             </span>
             {isOutgoing && getStatusIcon(message.status)}
           </div>
