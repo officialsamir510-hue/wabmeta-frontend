@@ -514,37 +514,64 @@ const Inbox: React.FC = () => {
   // =========================
   // SOCKET LISTENERS
   // =========================
+  const playNotificationSound = () => {
+    try {
+      const audio = new Audio('/notification.mp3'); // Add this file to public folder
+      audio.volume = 0.5;
+      audio.play().catch(() => {
+        // Ignore autoplay errors
+      });
+    } catch (e) {
+      // Ignore sound errors
+    }
+  };
+
   useInboxSocket(
     selectedConversation?.id || null,
     (newMessage: any) => {
       const msg = newMessage?.message || newMessage;
       if (!msg?.conversationId) return;
 
+      // ✅ Update messages if it's the active conversation
       if (selectedConversation?.id === msg.conversationId) {
         setMessages((prev) => (prev.some((m) => m.id === msg.id) ? prev : [...prev, msg]));
         scrollToBottom();
+
+        // Mark as read immediately
+        inboxApi.markAsRead(msg.conversationId).catch(() => { });
       }
 
-      // Update conversation list preview
+      // ✅ Update conversation list with proper unread logic
       setConversations((prev) =>
-        prev.map((c) =>
-          c.id === msg.conversationId
-            ? {
+        prev.map((c) => {
+          if (c.id === msg.conversationId) {
+            return {
               ...c,
               lastMessagePreview: msg.content?.substring(0, 50) || '[Media]',
               lastMessageAt: msg.createdAt || new Date().toISOString(),
-              unreadCount: selectedConversation?.id === msg.conversationId ? 0 : (c.unreadCount || 0) + 1,
-            }
-            : c
-        )
+              // ✅ Only increment unread if NOT the selected conversation
+              unreadCount: selectedConversation?.id === msg.conversationId
+                ? 0
+                : (c.unreadCount || 0) + 1,
+              isRead: selectedConversation?.id === msg.conversationId,
+            };
+          }
+          return c;
+        })
       );
+
+      // ✅ Play notification sound for incoming messages (not from selected chat)
+      if (msg.direction === 'INBOUND' && selectedConversation?.id !== msg.conversationId) {
+        playNotificationSound();
+      }
     },
-    () => { },
+    () => { }, // conversationUpdated callback
     (statusUpdate: any) => {
+      // ✅ Update message status in real-time
       setMessages((prev) =>
         prev.map((m) =>
           m.id === statusUpdate.messageId || m.waMessageId === statusUpdate.waMessageId
-            ? { ...m, status: statusUpdate.status }
+            ? { ...m, status: statusUpdate.status.toUpperCase() }
             : m
         )
       );

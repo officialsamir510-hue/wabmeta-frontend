@@ -108,11 +108,10 @@ const ConversationItem: React.FC<ConversationItemProps> = ({
   return (
     <div
       onClick={onClick}
-      className={`flex items-center p-4 cursor-pointer transition-all border-b border-gray-100 ${
-        isActive
+      className={`flex items-center p-4 cursor-pointer transition-all border-b border-gray-100 ${isActive
           ? 'bg-primary-50 border-l-4 border-l-primary-500'
           : 'hover:bg-gray-50'
-      }`}
+        }`}
     >
       {/* Avatar */}
       <div className="relative shrink-0">
@@ -123,12 +122,24 @@ const ConversationItem: React.FC<ConversationItemProps> = ({
             className="w-12 h-12 rounded-full object-cover"
           />
         ) : (
-          <div className="w-12 h-12 bg-linear-to-br from-primary-500 to-primary-600 rounded-full flex items-center justify-center text-white font-semibold text-lg">
+          <div className="w-12 h-12 bg-gradient-to-br from-green-400 to-green-600 rounded-full flex items-center justify-center text-white font-semibold text-lg shadow-sm">
             {contact.name.charAt(0).toUpperCase()}
           </div>
         )}
-        {/* Online/Status Indicator */}
-        <div className={`absolute bottom-0 right-0 w-3.5 h-3.5 rounded-full border-2 border-white ${getStatusColor()}`}></div>
+
+        {/* ✅ Unread Badge */}
+        {unreadCount > 0 && (
+          <div className="absolute -top-1 -right-1 min-w-5 h-5 px-1.5 bg-green-500 text-white text-xs font-bold rounded-full flex items-center justify-center border-2 border-white shadow-md animate-pulse">
+            {unreadCount > 99 ? '99+' : unreadCount}
+          </div>
+        )}
+
+        {/* ✅ Online/New Message Indicator */}
+        {unreadCount > 0 ? (
+          <div className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-green-500 rounded-full border-2 border-white animate-pulse" />
+        ) : (
+          <div className={`absolute bottom-0 right-0 w-3.5 h-3.5 rounded-full border-2 border-white ${getStatusColor()}`} />
+        )}
       </div>
 
       {/* Content */}
@@ -148,9 +159,8 @@ const ConversationItem: React.FC<ConversationItemProps> = ({
         </div>
 
         <div className="flex items-center justify-between">
-          <p className={`text-sm truncate flex items-center ${
-            unreadCount > 0 ? 'text-gray-900 font-medium' : 'text-gray-500'
-          }`}>
+          <p className={`text-sm truncate flex items-center ${unreadCount > 0 ? 'text-gray-900 font-medium' : 'text-gray-500'
+            }`}>
             {getMessagePreview()}
           </p>
           <div className="flex items-center space-x-2 ml-2">

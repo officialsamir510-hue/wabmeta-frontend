@@ -1,7 +1,7 @@
 // src/components/inbox/WindowStatus.tsx
 
 import React from 'react';
-import { Clock, AlertTriangle, CheckCircle } from 'lucide-react';
+import { Clock, AlertTriangle } from 'lucide-react';
 
 interface WindowStatusProps {
     windowExpiresAt: string | Date | null;
