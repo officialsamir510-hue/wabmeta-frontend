@@ -458,7 +458,9 @@ export const auth = {
 
 // ---------- USERS ----------
 export const users = {
+
   getProfile: () => api.get<ApiResponse>('/users/profile'),
+
 
   updateProfile: (data: {
     firstName?: string;
