@@ -1,7 +1,7 @@
-// src/pages/Login.tsx
+// src/pages/Login.tsx - FINAL FIXED
 
 import React, { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import { Mail, Lock, ArrowRight, AlertCircle } from "lucide-react";
 import AuthLayout from "../components/auth/AuthLayout";
 import Input from "../components/common/Input";
@@ -9,13 +9,14 @@ import Button from "../components/common/Button";
 import Checkbox from "../components/common/Checkbox";
 import SocialLoginButtons from "../components/auth/SocialLoginButtons";
 import { useAuth } from "../context/AuthContext";
+import toast from "react-hot-toast";
 
 const Login: React.FC = () => {
   const navigate = useNavigate();
-  const { login } = useAuth();
+  const location = useLocation();
+  const { login, isLoading, clearError } = useAuth();
 
-  const [loading, setLoading] = useState(false);
-  const [rememberMe, setRememberMe] = useState(false);
+  const [rememberMe, setRememberMe] = useState(true); // ✅ Default to true for persistent login
 
   const [formData, setFormData] = useState({
     email: "",
@@ -45,21 +46,39 @@ const Login: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setApiError(null);
+    clearError();
 
     if (!validateForm()) return;
 
-    setLoading(true);
-
     try {
-      await login(formData.email.trim().toLowerCase(), formData.password);
+      const result = await login(
+        formData.email.trim().toLowerCase(),
+        formData.password
+      );
 
-      if (rememberMe) {
-        localStorage.setItem("remember_me", "true");
+      if (result.success) {
+        // ✅ Save remember me preference
+        if (rememberMe) {
+          localStorage.setItem("remember_me", "true");
+        } else {
+          localStorage.removeItem("remember_me");
+        }
+
+        toast.success("Welcome back!");
+
+        // ✅ Redirect to saved location or dashboard
+        const from = (location.state as any)?.from || "/dashboard";
+        navigate(from, { replace: true });
       } else {
-        localStorage.removeItem("remember_me");
-      }
+        // ✅ Handle specific error cases
+        const errorMessage = result.error || "Login failed";
+        setApiError(errorMessage);
 
-      navigate("/dashboard");
+        // Don't show toast for validation errors
+        if (!errorMessage.includes("password") && !errorMessage.includes("email")) {
+          toast.error(errorMessage);
+        }
+      }
     } catch (error: any) {
       console.error("❌ Login Error:", error);
 
@@ -81,8 +100,6 @@ const Login: React.FC = () => {
       } else {
         setApiError(message || "Login failed. Please check your credentials.");
       }
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -102,7 +119,7 @@ const Login: React.FC = () => {
       subtitle="Sign in to continue to your dashboard"
     >
       {apiError && (
-        <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl flex items-start space-x-3 text-red-600 animate-fade-in">
+        <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl flex items-start space-x-3 text-red-600 dark:text-red-400 animate-fade-in">
           <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
           <p className="text-sm font-medium">{apiError}</p>
         </div>
@@ -118,6 +135,7 @@ const Login: React.FC = () => {
           onChange={(e) => updateField("email", e.target.value)}
           error={errors.email}
           autoFocus
+          disabled={isLoading}
         />
 
         <Input
@@ -128,6 +146,7 @@ const Login: React.FC = () => {
           value={formData.password}
           onChange={(e) => updateField("password", e.target.value)}
           error={errors.password}
+          disabled={isLoading}
         />
 
         <div className="flex items-center justify-between">
@@ -135,7 +154,7 @@ const Login: React.FC = () => {
             id="remember-me"
             checked={rememberMe}
             onChange={setRememberMe}
-            label="Remember me"
+            label="Keep me logged in"
           />
           <Link
             to="/forgot-password"
@@ -148,25 +167,28 @@ const Login: React.FC = () => {
         <Button
           type="submit"
           fullWidth
-          loading={loading}
+          loading={isLoading}
           icon={<ArrowRight className="w-5 h-5" />}
           iconPosition="right"
+          disabled={isLoading}
         >
           Sign In
         </Button>
 
         <div className="relative">
           <div className="absolute inset-0 flex items-center">
-            <div className="w-full border-t border-gray-200" />
+            <div className="w-full border-t border-gray-200 dark:border-gray-700" />
           </div>
           <div className="relative flex justify-center text-sm">
-            <span className="px-4 bg-gray-50 text-gray-500">Or continue with</span>
+            <span className="px-4 bg-gray-50 dark:bg-gray-900 text-gray-500">
+              Or continue with
+            </span>
           </div>
         </div>
 
-        <SocialLoginButtons loading={loading} />
+        <SocialLoginButtons loading={isLoading} />
 
-        <p className="text-center text-gray-600">
+        <p className="text-center text-gray-600 dark:text-gray-400">
           Don't have an account?{" "}
           <Link
             to="/signup"

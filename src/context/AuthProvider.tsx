@@ -1,12 +1,16 @@
-// src/context/AuthProvider.tsx
+// src/context/AuthProvider.tsx - PERSISTENT LOGIN FINAL
 
-import React, { useState, useEffect, type ReactNode, useCallback } from "react";
-import { auth, organizations } from "../services/api";
-import { AuthContext, type AuthContextType } from "./AuthContext";
-import type { User } from "../types/auth";
+import React, { useEffect, useState, useCallback, useRef } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { AuthContext, type User, type Organization } from './AuthContext';
+import api, { auth, setAuthToken, removeAuthToken } from '../services/api';
 
-interface AuthProviderProps {
-    children: ReactNode;
+interface AuthState {
+    user: User | null;
+    organization: Organization | null;
+    isAuthenticated: boolean;
+    isLoading: boolean;
+    error: string | null;
 }
 
 const TOKEN_KEYS = {
@@ -14,169 +18,496 @@ const TOKEN_KEYS = {
     REFRESH: 'refreshToken',
     USER: 'wabmeta_user',
     ORG: 'wabmeta_org',
-    ORG_ID: 'currentOrganizationId',
     LEGACY_TOKEN: 'token',
     LEGACY_WABMETA: 'wabmeta_token',
+} as const;
+
+// ✅ Public routes that don't require authentication
+const PUBLIC_ROUTES = [
+    '/',
+    '/login',
+    '/signup',
+    '/forgot-password',
+    '/reset-password',
+    '/verify-email',
+    '/verify-otp',
+    '/privacy',
+    '/terms',
+    '/data-deletion',
+    '/meta/callback',
+    '/admin/login',
+];
+
+const isPublicRoute = (pathname: string): boolean => {
+    // Exact match
+    if (PUBLIC_ROUTES.includes(pathname)) return true;
+
+    // Prefix match for some routes
+    if (pathname.startsWith('/reset-password')) return true;
+    if (pathname.startsWith('/verify-email')) return true;
+
+    return false;
 };
 
-export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
-    const [user, setUser] = useState<User | null>(() => {
-        try {
-            const u = localStorage.getItem(TOKEN_KEYS.USER);
-            return u ? (JSON.parse(u) as User) : null;
-        } catch {
-            return null;
-        }
+// ✅ Check if JWT token is valid format
+const isValidJWT = (token: string | null): boolean => {
+    if (!token || typeof token !== 'string') return false;
+    const parts = token.split('.');
+    return parts.length === 3;
+};
+
+export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+    const navigate = useNavigate();
+    const location = useLocation();
+
+    const [state, setState] = useState<AuthState>({
+        user: null,
+        organization: null,
+        isAuthenticated: false,
+        isLoading: true, // ✅ Start with loading = true
+        error: null,
     });
 
-    const [isLoading, setIsLoading] = useState(true);
+    const initialCheckDone = useRef(false);
+    const isRefreshing = useRef(false);
 
-    const hasAccessToken = useCallback(() => {
-        const t =
+    // ✅ Get access token from storage
+    const getAccessToken = useCallback((): string | null => {
+        const token =
             localStorage.getItem(TOKEN_KEYS.ACCESS) ||
             localStorage.getItem(TOKEN_KEYS.LEGACY_TOKEN) ||
             localStorage.getItem(TOKEN_KEYS.LEGACY_WABMETA);
-        return !!t;
+
+        return isValidJWT(token) ? token : null;
     }, []);
 
-    const storeTokens = useCallback((accessToken: string, refreshToken?: string | null) => {
-        localStorage.setItem(TOKEN_KEYS.ACCESS, accessToken);
-        localStorage.setItem(TOKEN_KEYS.LEGACY_TOKEN, accessToken);
-        localStorage.setItem(TOKEN_KEYS.LEGACY_WABMETA, accessToken);
+    // ✅ Get refresh token from storage
+    const getRefreshToken = useCallback((): string | null => {
+        return localStorage.getItem(TOKEN_KEYS.REFRESH);
+    }, []);
 
-        if (refreshToken) {
-            localStorage.setItem(TOKEN_KEYS.REFRESH, refreshToken);
+    // ✅ Load saved user from localStorage (for instant UI)
+    const loadSavedData = useCallback((): { user: User | null; org: Organization | null } => {
+        try {
+            const savedUser = localStorage.getItem(TOKEN_KEYS.USER);
+            const savedOrg = localStorage.getItem(TOKEN_KEYS.ORG);
+
+            return {
+                user: savedUser ? JSON.parse(savedUser) : null,
+                org: savedOrg ? JSON.parse(savedOrg) : null,
+            };
+        } catch (e) {
+            console.warn('⚠️ Failed to parse saved auth data');
+            return { user: null, org: null };
         }
     }, []);
 
-    const storeUser = useCallback((u: User | null) => {
-        if (!u) {
+    // ✅ Save user/org to localStorage
+    const saveToStorage = useCallback((user: User | null, org: Organization | null) => {
+        if (user) {
+            localStorage.setItem(TOKEN_KEYS.USER, JSON.stringify(user));
+        } else {
             localStorage.removeItem(TOKEN_KEYS.USER);
-            setUser(null);
-            return;
         }
-        localStorage.setItem(TOKEN_KEYS.USER, JSON.stringify(u));
-        setUser(u);
+
+        if (org) {
+            localStorage.setItem(TOKEN_KEYS.ORG, JSON.stringify(org));
+        } else {
+            localStorage.removeItem(TOKEN_KEYS.ORG);
+        }
     }, []);
 
-    const storeOrg = useCallback((org: any) => {
-        if (!org?.id) return;
-        localStorage.setItem(TOKEN_KEYS.ORG, JSON.stringify(org));
-        localStorage.setItem(TOKEN_KEYS.ORG_ID, org.id);
-    }, []);
-
-    const clearAuthStorage = useCallback(() => {
+    // ✅ Clear all auth data
+    const clearAuthData = useCallback(() => {
         Object.values(TOKEN_KEYS).forEach(key => {
             localStorage.removeItem(key);
         });
-        setUser(null);
+        // Also clear any other auth-related items
+        localStorage.removeItem('remember_me');
+        localStorage.removeItem('currentOrganizationId');
     }, []);
 
-    const checkAuth = useCallback(async () => {
+    // ✅ Refresh access token using refresh token
+    const refreshAccessToken = useCallback(async (): Promise<boolean> => {
+        if (isRefreshing.current) {
+            console.log('⏳ Already refreshing token...');
+            return false;
+        }
+
+        const refreshToken = getRefreshToken();
+
+        if (!refreshToken) {
+            console.log('❌ No refresh token available');
+            return false;
+        }
+
         try {
-            if (!hasAccessToken()) {
-                setIsLoading(false);
+            isRefreshing.current = true;
+            console.log('🔄 Refreshing access token...');
+
+            const response = await auth.refresh(refreshToken);
+
+            if (response.data?.success && response.data?.data?.accessToken) {
+                const { accessToken, refreshToken: newRefreshToken } = response.data.data;
+
+                setAuthToken(accessToken, newRefreshToken || refreshToken);
+                console.log('✅ Token refreshed successfully');
+                return true;
+            }
+
+            console.log('❌ Token refresh response invalid');
+            return false;
+        } catch (error: any) {
+            console.error('❌ Token refresh failed:', error?.message);
+            return false;
+        } finally {
+            isRefreshing.current = false;
+        }
+    }, [getRefreshToken]);
+
+    // ✅ Verify session with server
+    const verifySession = useCallback(async (): Promise<boolean> => {
+        const accessToken = getAccessToken();
+
+        if (!accessToken) {
+            console.log('📭 No access token found');
+            return false;
+        }
+
+        try {
+            console.log('🔍 Verifying session with server...');
+
+            // Get current user from server
+            const userResponse = await auth.me();
+
+            if (userResponse.data?.success && userResponse.data?.data) {
+                const user = userResponse.data.data;
+
+                // Try to get organization
+                let org: Organization | null = null;
+                try {
+                    const orgResponse = await api.get('/organizations/current');
+                    if (orgResponse.data?.success && orgResponse.data?.data) {
+                        org = orgResponse.data.data;
+                    }
+                } catch (e) {
+                    // Use saved org if API fails
+                    const saved = loadSavedData();
+                    org = saved.org;
+                    console.log('ℹ️ Using saved organization data');
+                }
+
+                // Save to storage for next time
+                saveToStorage(user, org);
+
+                // Update state
+                setState({
+                    user,
+                    organization: org,
+                    isAuthenticated: true,
+                    isLoading: false,
+                    error: null,
+                });
+
+                console.log('✅ Session verified:', user.email);
+                return true;
+            }
+
+            return false;
+        } catch (error: any) {
+            console.log('⚠️ Session verification failed:', error?.response?.status);
+
+            // If 401, try to refresh token
+            if (error?.response?.status === 401) {
+                const refreshed = await refreshAccessToken();
+
+                if (refreshed) {
+                    // Retry verification after refresh
+                    return await verifySession();
+                }
+            }
+
+            return false;
+        }
+    }, [getAccessToken, loadSavedData, saveToStorage, refreshAccessToken]);
+
+    // ✅ Initial auth check on app load
+    useEffect(() => {
+        // Prevent double execution in React Strict Mode
+        if (initialCheckDone.current) return;
+        initialCheckDone.current = true;
+
+        const initAuth = async () => {
+            console.log('🚀 Initializing authentication...');
+
+            const accessToken = getAccessToken();
+
+            // No token = not logged in
+            if (!accessToken) {
+                console.log('📭 No token found - user not logged in');
+                setState(prev => ({ ...prev, isLoading: false }));
+
+                // Redirect to login if on protected route
+                if (!isPublicRoute(location.pathname) && !location.pathname.startsWith('/admin')) {
+                    console.log('🔒 Protected route, redirecting to login');
+                    navigate('/login', {
+                        replace: true,
+                        state: { from: location.pathname }
+                    });
+                }
                 return;
             }
 
-            const response = await auth.me();
+            // ✅ Token exists - load saved data immediately for fast UI
+            const { user: savedUser, org: savedOrg } = loadSavedData();
+
+            if (savedUser) {
+                console.log('👤 Restoring saved session:', savedUser.email);
+                setState({
+                    user: savedUser,
+                    organization: savedOrg,
+                    isAuthenticated: true,
+                    isLoading: true, // Still loading while verifying
+                    error: null,
+                });
+            }
+
+            // ✅ Verify with server in background
+            const isValid = await verifySession();
+
+            if (!isValid) {
+                console.log('❌ Session invalid - clearing auth');
+                clearAuthData();
+
+                setState({
+                    user: null,
+                    organization: null,
+                    isAuthenticated: false,
+                    isLoading: false,
+                    error: null,
+                });
+
+                // Redirect to login if on protected route
+                if (!isPublicRoute(location.pathname) && !location.pathname.startsWith('/admin')) {
+                    navigate('/login', {
+                        replace: true,
+                        state: { from: location.pathname }
+                    });
+                }
+            }
+        };
+
+        initAuth();
+    }, []); // Empty deps - run only once on mount
+
+    // ✅ Login function
+    const login = useCallback(async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
+        setState(prev => ({ ...prev, isLoading: true, error: null }));
+
+        try {
+            console.log('🔐 Logging in:', email);
+
+            const response = await auth.login({ email, password });
 
             if (response.data?.success && response.data?.data) {
-                storeUser(response.data.data as User);
-            } else {
-                clearAuthStorage();
+                const { user, tokens, organization } = response.data.data;
+
+                // Save tokens
+                setAuthToken(tokens.accessToken, tokens.refreshToken);
+
+                // Save to storage
+                saveToStorage(user, organization || null);
+
+                // Update state
+                setState({
+                    user,
+                    organization: organization || null,
+                    isAuthenticated: true,
+                    isLoading: false,
+                    error: null,
+                });
+
+                console.log('✅ Login successful:', user.email);
+                return { success: true };
             }
+
+            throw new Error(response.data?.message || 'Login failed');
         } catch (error: any) {
-            console.error("Auth check failed:", error);
+            const message = error.response?.data?.message || error.message || 'Login failed';
 
-            // Only clear if it's a 401 error
-            if (error?.response?.status === 401) {
-                clearAuthStorage();
+            setState(prev => ({
+                ...prev,
+                isLoading: false,
+                error: message,
+            }));
+
+            console.error('❌ Login error:', message);
+            return { success: false, error: message };
+        }
+    }, [saveToStorage]);
+
+    // ✅ Register function
+    const register = useCallback(async (data: any): Promise<{ success: boolean; error?: string }> => {
+        setState(prev => ({ ...prev, isLoading: true, error: null }));
+
+        try {
+            const response = await auth.register(data);
+
+            if (response.data?.success && response.data?.data) {
+                const { user, tokens, organization } = response.data.data;
+
+                setAuthToken(tokens.accessToken, tokens.refreshToken);
+                saveToStorage(user, organization || null);
+
+                setState({
+                    user,
+                    organization: organization || null,
+                    isAuthenticated: true,
+                    isLoading: false,
+                    error: null,
+                });
+
+                console.log('✅ Registration successful:', user.email);
+                return { success: true };
             }
-        } finally {
-            setIsLoading(false);
+
+            throw new Error(response.data?.message || 'Registration failed');
+        } catch (error: any) {
+            const message = error.response?.data?.message || error.message || 'Registration failed';
+
+            setState(prev => ({
+                ...prev,
+                isLoading: false,
+                error: message,
+            }));
+
+            return { success: false, error: message };
         }
-    }, [hasAccessToken, storeUser, clearAuthStorage]);
+    }, [saveToStorage]);
 
-    useEffect(() => {
-        checkAuth();
-    }, [checkAuth]);
+    // ✅ Google login
+    const googleLogin = useCallback(async (credential: string): Promise<{ success: boolean; error?: string }> => {
+        setState(prev => ({ ...prev, isLoading: true, error: null }));
 
-    const login = async (email: string, password: string) => {
-        const response = await auth.login({ email, password });
+        try {
+            const response = await auth.googleLogin({ credential });
 
-        if (!response.data?.success) {
-            throw new Error(response.data?.message || "Login failed");
-        }
+            if (response.data?.success && response.data?.data) {
+                const { user, tokens, organization } = response.data.data;
 
-        const data = response.data.data;
+                setAuthToken(tokens.accessToken, tokens.refreshToken);
+                saveToStorage(user, organization || null);
 
-        const accessToken = data?.tokens?.accessToken;
-        const refreshToken = data?.tokens?.refreshToken;
-        const userData = data?.user;
-        const org = data?.organization;
+                setState({
+                    user,
+                    organization: organization || null,
+                    isAuthenticated: true,
+                    isLoading: false,
+                    error: null,
+                });
 
-        if (!accessToken) {
-            throw new Error("Access token missing from login response");
-        }
-
-        storeTokens(accessToken, refreshToken);
-
-        if (userData) {
-            storeUser(userData as User);
-        }
-
-        if (org?.id) {
-            storeOrg(org);
-        }
-
-        // Fallback: get current org if not returned
-        if (!org?.id) {
-            try {
-                const orgRes = await organizations.getCurrent();
-                if (orgRes.data?.success && orgRes.data?.data?.id) {
-                    storeOrg(orgRes.data.data);
-                }
-            } catch {
-                // ignore - org is optional
+                return { success: true };
             }
-        }
 
-        // Fallback: get user if not returned
-        if (!userData) {
-            await refreshUser();
-        }
-    };
+            throw new Error(response.data?.message || 'Google login failed');
+        } catch (error: any) {
+            const message = error.response?.data?.message || error.message || 'Google login failed';
 
-    const logout = async () => {
+            setState(prev => ({
+                ...prev,
+                isLoading: false,
+                error: message,
+            }));
+
+            return { success: false, error: message };
+        }
+    }, [saveToStorage]);
+
+    // ✅ Logout function
+    const logout = useCallback(async () => {
+        console.log('👋 Logging out...');
+
         try {
             await auth.logout();
-        } catch (error) {
-            console.error("Logout error:", error);
-        } finally {
-            clearAuthStorage();
+        } catch (e) {
+            console.warn('⚠️ Logout API call failed, clearing locally');
         }
-    };
 
-    const refreshUser = async () => {
-        try {
-            const response = await auth.me();
-            if (response.data?.success && response.data?.data) {
-                storeUser(response.data.data as User);
-            }
-        } catch (error) {
-            console.error("Refresh user failed:", error);
-        }
-    };
+        // Clear everything
+        clearAuthData();
+        removeAuthToken();
 
-    const value: AuthContextType = {
-        user,
-        isAuthenticated: !!user && hasAccessToken(),
-        isLoading,
+        setState({
+            user: null,
+            organization: null,
+            isAuthenticated: false,
+            isLoading: false,
+            error: null,
+        });
+
+        navigate('/login', { replace: true });
+    }, [navigate, clearAuthData]);
+
+    // ✅ Update user
+    const updateUser = useCallback((updatedUser: Partial<User>) => {
+        setState(prev => {
+            if (!prev.user) return prev;
+
+            const newUser = { ...prev.user, ...updatedUser };
+            saveToStorage(newUser, prev.organization);
+
+            return { ...prev, user: newUser };
+        });
+    }, [saveToStorage]);
+
+    // ✅ Update organization
+    const updateOrganization = useCallback((updatedOrg: Partial<Organization>) => {
+        setState(prev => {
+            if (!prev.organization) return prev;
+
+            const newOrg = { ...prev.organization, ...updatedOrg };
+            saveToStorage(prev.user, newOrg);
+
+            return { ...prev, organization: newOrg };
+        });
+    }, [saveToStorage]);
+
+    // ✅ Set organization (after switching)
+    const setOrganization = useCallback((org: Organization | null) => {
+        setState(prev => {
+            saveToStorage(prev.user, org);
+            return { ...prev, organization: org };
+        });
+    }, [saveToStorage]);
+
+    // ✅ Clear error
+    const clearError = useCallback(() => {
+        setState(prev => ({ ...prev, error: null }));
+    }, []);
+
+    // ✅ Refresh session (can be called manually)
+    const refreshSession = useCallback(async (): Promise<boolean> => {
+        return await verifySession();
+    }, [verifySession]);
+
+    const value = {
+        ...state,
         login,
+        register,
+        googleLogin,
         logout,
-        refreshUser,
+        updateUser,
+        updateOrganization,
+        setOrganization,
+        clearError,
+        refreshSession,
     };
 
-    return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+    return (
+        <AuthContext.Provider value={value}>
+            {children}
+        </AuthContext.Provider>
+    );
 };
+
+export default AuthProvider;
