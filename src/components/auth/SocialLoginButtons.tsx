@@ -1,132 +1,174 @@
-// src/components/auth/SocialLoginButtons.tsx
+// src/components/auth/SocialLoginButtons.tsx - COMPLETE FIXED
 
-import React, { useState } from 'react';
+import React, { useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { auth } from '../../services/api';
+import { useAuth } from '../../context/AuthContext';
+import toast from 'react-hot-toast';
 
 interface SocialLoginButtonsProps {
   loading?: boolean;
-  onSuccess?: () => void;
-  onError?: (error: string) => void;
 }
 
-const SocialLoginButtons: React.FC<SocialLoginButtonsProps> = ({
-  loading: externalLoading = false,
-  onSuccess,
-  onError,
-}) => {
+declare global {
+  interface Window {
+    google?: {
+      accounts: {
+        id: {
+          initialize: (config: any) => void;
+          renderButton: (element: HTMLElement, config: any) => void;
+          prompt: () => void;
+        };
+      };
+    };
+  }
+}
+
+const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
+
+const SocialLoginButtons: React.FC<SocialLoginButtonsProps> = ({ loading = false }) => {
   const navigate = useNavigate();
-  const [googleLoading, setGoogleLoading] = useState(false);
+  const { googleLogin } = useAuth();
 
-  const handleGoogleLogin = async () => {
-    if (externalLoading || googleLoading) return;
+  // ✅ FIX #1: Prevent multiple initializations
+  const initialized = useRef(false);
+  const buttonRendered = useRef(false);
 
-    setGoogleLoading(true);
+  const handleGoogleCallback = useCallback(async (response: any) => {
+    if (!response.credential) {
+      toast.error('Google login failed - no credential received');
+      return;
+    }
 
     try {
-      // Initialize Google Sign-In
-      // @ts-ignore - google is loaded from script
-      const google = window.google;
+      console.log('🔐 Google login callback triggered');
 
-      if (!google) {
-        throw new Error('Google Sign-In not loaded');
+      const result = await googleLogin(response.credential);
+
+      if (result.success) {
+        toast.success('Login successful!');
+        navigate('/dashboard', { replace: true });
+      } else {
+        toast.error(result.error || 'Google login failed');
+      }
+    } catch (error: any) {
+      console.error('❌ Google login error:', error);
+      toast.error(error.message || 'Google login failed');
+    }
+  }, [googleLogin, navigate]);
+
+  useEffect(() => {
+    // ✅ FIX #2: Skip if no client ID
+    if (!GOOGLE_CLIENT_ID) {
+      console.warn('⚠️ Google Client ID not configured');
+      return;
+    }
+
+    // ✅ FIX #3: Prevent double initialization in React Strict Mode
+    if (initialized.current) {
+      console.log('ℹ️ Google already initialized, skipping...');
+      return;
+    }
+
+    const loadGoogleScript = () => {
+      // Check if script already exists
+      if (document.getElementById('google-signin-script')) {
+        console.log('ℹ️ Google script already loaded');
+        initializeGoogle();
+        return;
       }
 
-      google.accounts.id.initialize({
-        client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID,
-        callback: async (response: any) => {
-          try {
-            const result = await auth.googleLogin({ credential: response.credential });
+      console.log('📥 Loading Google Sign-In script...');
 
-            const data = result.data?.data;
-            const accessToken = data?.tokens?.accessToken;
-            const refreshToken = data?.tokens?.refreshToken;
-            const user = data?.user;
-            const organization = data?.organization;
+      const script = document.createElement('script');
+      script.id = 'google-signin-script';
+      script.src = 'https://accounts.google.com/gsi/client';
+      script.async = true;
+      script.defer = true;
+      script.onload = () => {
+        console.log('✅ Google script loaded');
+        initializeGoogle();
+      };
+      script.onerror = () => {
+        console.error('❌ Failed to load Google script');
+      };
 
-            if (!accessToken) {
-              throw new Error('No access token received');
-            }
+      document.head.appendChild(script);
+    };
 
-            // Store tokens
-            localStorage.setItem('accessToken', accessToken);
-            localStorage.setItem('token', accessToken);
-            localStorage.setItem('wabmeta_token', accessToken);
+    const initializeGoogle = () => {
+      if (!window.google) {
+        console.error('❌ Google SDK not available');
+        return;
+      }
 
-            if (refreshToken) {
-              localStorage.setItem('refreshToken', refreshToken);
-            }
+      // ✅ FIX #4: Mark as initialized BEFORE calling initialize
+      initialized.current = true;
 
-            if (user) {
-              localStorage.setItem('wabmeta_user', JSON.stringify(user));
-            }
+      console.log('🔧 Initializing Google Sign-In...');
 
-            if (organization) {
-              localStorage.setItem('wabmeta_org', JSON.stringify(organization));
-              localStorage.setItem('currentOrganizationId', organization.id);
-            }
-
-            onSuccess?.();
-            navigate('/dashboard');
-          } catch (error: any) {
-            console.error('Google auth error:', error);
-            const message = error?.response?.data?.message || 'Google login failed';
-            onError?.(message);
-          } finally {
-            setGoogleLoading(false);
-          }
-        },
+      window.google.accounts.id.initialize({
+        client_id: GOOGLE_CLIENT_ID,
+        callback: handleGoogleCallback,
+        auto_select: false,
+        cancel_on_tap_outside: true,
       });
 
-      google.accounts.id.prompt();
-    } catch (error: any) {
-      console.error('Google Sign-In error:', error);
-      onError?.(error.message || 'Google Sign-In not available');
-      setGoogleLoading(false);
-    }
-  };
+      // ✅ FIX #5: Only render button once
+      const buttonDiv = document.getElementById('google-signin-button');
+      if (buttonDiv && !buttonRendered.current) {
+        console.log('🎨 Rendering Google button...');
+
+        window.google.accounts.id.renderButton(buttonDiv, {
+          type: 'standard',
+          theme: 'outline',
+          size: 'large',
+          width: buttonDiv.offsetWidth || 300,
+          text: 'continue_with',
+          shape: 'rectangular',
+          logo_alignment: 'center',
+        });
+
+        buttonRendered.current = true;
+        console.log('✅ Google button rendered');
+      }
+    };
+
+    loadGoogleScript();
+
+    // ✅ Cleanup (optional, but good practice)
+    return () => {
+      // Don't reset initialized.current here to prevent re-initialization
+      console.log('🧹 SocialLoginButtons unmounted');
+    };
+  }, [handleGoogleCallback]); // Only re-run if callback changes
+
+  if (!GOOGLE_CLIENT_ID) {
+    return (
+      <div className="p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
+        <p className="text-sm text-yellow-700 dark:text-yellow-400">
+          Google Sign-In not configured
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-3">
-      <button
-        type="button"
-        onClick={handleGoogleLogin}
-        disabled={externalLoading || googleLoading}
-        className={`
-          w-full flex items-center justify-center space-x-3 
-          px-4 py-3 border border-gray-200 rounded-xl
-          bg-white hover:bg-gray-50 
-          transition-all duration-200
-          disabled:opacity-60 disabled:cursor-not-allowed
-          focus:outline-none focus:ring-2 focus:ring-primary-500/20
-        `}
+      {/* ✅ Google Sign-in Button Container */}
+      <div
+        id="google-signin-button"
+        className={`flex justify-center min-h-[44px] ${loading ? 'opacity-50 pointer-events-none' : ''
+          }`}
       >
-        {googleLoading ? (
-          <div className="w-5 h-5 border-2 border-gray-300 border-t-primary-500 rounded-full animate-spin" />
-        ) : (
-          <svg className="w-5 h-5" viewBox="0 0 24 24">
-            <path
-              fill="#4285F4"
-              d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-            />
-            <path
-              fill="#34A853"
-              d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-            />
-            <path
-              fill="#FBBC05"
-              d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
-            />
-            <path
-              fill="#EA4335"
-              d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
-            />
-          </svg>
-        )}
-        <span className="text-gray-700 font-medium">
-          {googleLoading ? 'Signing in...' : 'Continue with Google'}
-        </span>
-      </button>
+        {/* Button will be rendered here by Google SDK */}
+      </div>
+
+      {/* ✅ Loading indicator while Google SDK loads */}
+      {!buttonRendered.current && (
+        <div className="text-center text-sm text-gray-500">
+          Loading Google Sign-In...
+        </div>
+      )}
     </div>
   );
 };
