@@ -1,6 +1,8 @@
 {
   "rewrites": [
-    { "source": "/meta-callback", "destination": "/index.html" },
-    { "source": "/(.*)", "destination": "/index.html" }
+    {
+      "source": "/((?!assets/|logo.png|manifest.json|favicon.ico|.*\\.).*)",
+      "destination": "/index.html"
+    }
   ]
 }
