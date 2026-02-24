@@ -1,4 +1,4 @@
-// src/pages/Inbox.tsx - COMPLETE (your UI + backend connected features)
+// src/pages/Inbox.tsx - COMPLETE FINAL VERSION
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
@@ -18,7 +18,6 @@ import {
   Tag,
   Archive,
   ArchiveRestore,
-  Trash2,
   X,
 } from 'lucide-react';
 import { formatDistanceToNow, format } from 'date-fns';
@@ -27,6 +26,31 @@ import api, { inbox as inboxApi, whatsapp as whatsappApi } from '../services/api
 import toast from 'react-hot-toast';
 import WindowStatus from '../components/inbox/WindowStatus';
 import ChatInput from '../components/inbox/ChatInput';
+
+// ============================================
+// SAFE DATE FORMATTING HELPERS
+// ============================================
+const safeFormatDate = (date: any, formatStr: string, fallback: string = 'N/A'): string => {
+  try {
+    if (!date) return fallback;
+    const d = new Date(date);
+    if (isNaN(d.getTime())) return fallback;
+    return format(d, formatStr);
+  } catch (e) {
+    return fallback;
+  }
+};
+
+const safeFormatDistance = (date: any, fallback: string = 'Just now'): string => {
+  try {
+    if (!date) return fallback;
+    const d = new Date(date);
+    if (isNaN(d.getTime())) return fallback;
+    return formatDistanceToNow(d, { addSuffix: false });
+  } catch (e) {
+    return fallback;
+  }
+};
 
 // TYPES
 interface Contact {
@@ -44,12 +68,15 @@ interface Contact {
 interface Message {
   id: string;
   waMessageId?: string;
+  wamId?: string;
   content: string;
   type: 'TEXT' | 'IMAGE' | 'VIDEO' | 'AUDIO' | 'DOCUMENT' | 'TEMPLATE' | 'STICKER';
   direction: 'INBOUND' | 'OUTBOUND';
   status?: 'PENDING' | 'SENT' | 'DELIVERED' | 'READ' | 'FAILED';
   createdAt: string;
   sentAt?: string;
+  deliveredAt?: string;
+  readAt?: string;
   mediaUrl?: string;
   templateName?: string;
   metadata?: any;
@@ -222,26 +249,30 @@ const Inbox: React.FC = () => {
       setLoadingMessages(false);
       fetchingMessagesRef.current = false;
     }
-  }, []);
+  }, [messages.length]);
 
   // =========================
-  // SEND TEXT (existing flow)
+  // SEND TEXT
   // =========================
-  const handleSendMessage = async () => {
-    if (!messageText.trim() || !selectedConversation) return;
+  const handleSendMessage = async (textToSend?: string) => {
+    const text = textToSend || messageText;
+    if (!text.trim() || !selectedConversation) return;
 
     const tempId = `temp-${Date.now()}`;
+    const now = new Date().toISOString();
+
     const tempMessage: Message = {
       id: tempId,
-      content: messageText,
+      content: text,
       type: 'TEXT',
       direction: 'OUTBOUND',
       status: 'PENDING',
-      createdAt: new Date().toISOString(),
+      createdAt: now,
+      sentAt: now,
     };
 
     setMessages((prev) => [...prev, tempMessage]);
-    const sentText = messageText;
+    const sentText = text;
     setMessageText('');
     scrollToBottom();
 
@@ -260,11 +291,27 @@ const Inbox: React.FC = () => {
 
       if (response.data.success) {
         const realMessage = response.data.data;
-        setMessages((prev) => prev.map((m) => (m.id === tempId ? { ...realMessage, id: realMessage.id || tempId, status: 'SENT', content: sentText } : m)));
+
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === tempId
+              ? {
+                ...m,
+                id: realMessage.id || tempId,
+                waMessageId: realMessage.waMessageId || realMessage.wamId,
+                wamId: realMessage.wamId || realMessage.waMessageId,
+                status: 'SENT',
+                sentAt: realMessage.sentAt || now,
+              }
+              : m
+          )
+        );
 
         setConversations((prev) =>
           prev.map((c) =>
-            c.id === selectedConversation.id ? { ...c, lastMessagePreview: sentText, lastMessageAt: new Date().toISOString() } : c
+            c.id === selectedConversation.id
+              ? { ...c, lastMessagePreview: sentText, lastMessageAt: now }
+              : c
           )
         );
 
@@ -279,7 +326,7 @@ const Inbox: React.FC = () => {
   };
 
   // =========================
-  // ✅ MEDIA: upload + send
+  // MEDIA UPLOAD
   // =========================
   const handleUploadAndSendMedia = async (file: File) => {
     if (!selectedConversation) return;
@@ -288,12 +335,14 @@ const Inbox: React.FC = () => {
     const mime = file.type || '';
 
     const tempType: Message['type'] =
-      mime.startsWith('image/') ? 'IMAGE'
-        : mime.startsWith('video/') ? 'VIDEO'
-          : mime.startsWith('audio/') ? 'AUDIO'
+      mime.startsWith('image/')
+        ? 'IMAGE'
+        : mime.startsWith('video/')
+          ? 'VIDEO'
+          : mime.startsWith('audio/')
+            ? 'AUDIO'
             : 'DOCUMENT';
 
-    // Optimistic message
     const tempMsg: Message = {
       id: tempId,
       content: file.name,
@@ -317,7 +366,7 @@ const Inbox: React.FC = () => {
       });
       toast.dismiss();
 
-      const uploaded = uploadRes.data?.data; // sendSuccess => {success,data,...}
+      const uploaded = uploadRes.data?.data;
       const mediaUrl = uploaded?.url;
       const mediaType = uploaded?.mediaType;
 
@@ -327,12 +376,12 @@ const Inbox: React.FC = () => {
       const sendRes = await api.post(`/inbox/conversations/${selectedConversation.id}/messages/media`, {
         mediaType,
         mediaUrl,
-        caption: (mediaType === 'image' || mediaType === 'video' || mediaType === 'document') ? (messageText.trim() || undefined) : undefined,
+        caption: messageText.trim() || undefined,
       });
       toast.dismiss();
 
       const result = sendRes.data?.data;
-      const dbMessage = result?.message || result; // depends on whatsappService response
+      const dbMessage = result?.message || result;
 
       setMessages((prev) =>
         prev.map((m) =>
@@ -349,11 +398,13 @@ const Inbox: React.FC = () => {
         )
       );
 
-      // Update conversation preview
       const preview =
-        mediaType === 'image' ? '📷 Image'
-          : mediaType === 'video' ? '🎥 Video'
-            : mediaType === 'audio' ? '🎵 Audio'
+        mediaType === 'image'
+          ? '📷 Image'
+          : mediaType === 'video'
+            ? '🎥 Video'
+            : mediaType === 'audio'
+              ? '🎵 Audio'
               : '📄 Document';
 
       setConversations((prev) =>
@@ -382,19 +433,16 @@ const Inbox: React.FC = () => {
   };
 
   // =========================
-  // ✅ PIN persist
+  // PIN/ARCHIVE/LABELS
   // =========================
   const handlePinConversation = async (conv: Conversation, e: React.MouseEvent) => {
     e.stopPropagation();
     try {
       const newPinned = !Boolean(conv.isPinned);
-
-      // optimistic
       setConversations((prev) => prev.map((c) => (c.id === conv.id ? { ...c, isPinned: newPinned } : c)));
       if (selectedConversation?.id === conv.id) setSelectedConversation({ ...selectedConversation, isPinned: newPinned });
 
       await api.patch(`/inbox/conversations/${conv.id}/pin`, { isPinned: newPinned });
-
       toast.success(newPinned ? 'Pinned conversation' : 'Unpinned conversation');
       fetchConversations();
     } catch (e: any) {
@@ -405,9 +453,6 @@ const Inbox: React.FC = () => {
     }
   };
 
-  // =========================
-  // ✅ ARCHIVE persist
-  // =========================
   const handleArchiveConversation = async (conv: Conversation, e: React.MouseEvent) => {
     e.stopPropagation();
     try {
@@ -432,16 +477,12 @@ const Inbox: React.FC = () => {
     }
   };
 
-  // =========================
-  // ✅ LABELS persist
-  // =========================
   const handleAddLabel = async (conv: Conversation, label: string) => {
     try {
       await api.post(`/inbox/conversations/${conv.id}/labels`, { labels: [label] });
       toast.success(`Added label: ${label}`);
       setShowLabelPicker(null);
 
-      // optimistic UI
       setConversations((prev) =>
         prev.map((c) =>
           c.id === conv.id ? { ...c, labels: Array.from(new Set([...(c.labels || []), label])) } : c
@@ -468,7 +509,10 @@ const Inbox: React.FC = () => {
         prev.map((c) => (c.id === conv.id ? { ...c, labels: (c.labels || []).filter((l) => l !== label) } : c))
       );
       if (selectedConversation?.id === conv.id) {
-        setSelectedConversation({ ...selectedConversation, labels: (selectedConversation.labels || []).filter((l) => l !== label) });
+        setSelectedConversation({
+          ...selectedConversation,
+          labels: (selectedConversation.labels || []).filter((l) => l !== label),
+        });
       }
     } catch (e: any) {
       toast.error(e.response?.data?.message || 'Failed to remove label');
@@ -493,14 +537,10 @@ const Inbox: React.FC = () => {
   // =========================
   const playNotificationSound = () => {
     try {
-      const audio = new Audio('/notification.mp3'); // Add this file to public folder
+      const audio = new Audio('/notification.mp3');
       audio.volume = 0.5;
-      audio.play().catch(() => {
-        // Ignore autoplay errors
-      });
-    } catch (e) {
-      // Ignore sound errors
-    }
+      audio.play().catch(() => { });
+    } catch (e) { }
   };
 
   useInboxSocket(
@@ -509,16 +549,12 @@ const Inbox: React.FC = () => {
       const msg = newMessage?.message || newMessage;
       if (!msg?.conversationId) return;
 
-      // ✅ Update messages if it's the active conversation
       if (selectedConversation?.id === msg.conversationId) {
         setMessages((prev) => (prev.some((m) => m.id === msg.id) ? prev : [...prev, msg]));
         scrollToBottom();
-
-        // Mark as read immediately
         inboxApi.markAsRead(msg.conversationId).catch(() => { });
       }
 
-      // ✅ Update conversation list with proper unread logic
       setConversations((prev) =>
         prev.map((c) => {
           if (c.id === msg.conversationId) {
@@ -526,10 +562,7 @@ const Inbox: React.FC = () => {
               ...c,
               lastMessagePreview: msg.content?.substring(0, 50) || '[Media]',
               lastMessageAt: msg.createdAt || new Date().toISOString(),
-              // ✅ Only increment unread if NOT the selected conversation
-              unreadCount: selectedConversation?.id === msg.conversationId
-                ? 0
-                : (c.unreadCount || 0) + 1,
+              unreadCount: selectedConversation?.id === msg.conversationId ? 0 : (c.unreadCount || 0) + 1,
               isRead: selectedConversation?.id === msg.conversationId,
             };
           }
@@ -537,28 +570,37 @@ const Inbox: React.FC = () => {
         })
       );
 
-      // ✅ Play notification sound for incoming messages (not from selected chat)
       if (msg.direction === 'INBOUND' && selectedConversation?.id !== msg.conversationId) {
         playNotificationSound();
       }
     },
     (updatedConv: any) => {
-      // ✅ Handle Conversation updates (e.g., 24h window changes)
-      setConversations((prev) =>
-        prev.map((c) => (c.id === updatedConv.id ? { ...c, ...updatedConv } : c))
-      );
+      setConversations((prev) => prev.map((c) => (c.id === updatedConv.id ? { ...c, ...updatedConv } : c)));
       if (selectedConversation?.id === updatedConv.id) {
-        setSelectedConversation((prev) => prev ? { ...prev, ...updatedConv } : prev);
+        setSelectedConversation((prev) => (prev ? { ...prev, ...updatedConv } : prev));
       }
     },
     (statusUpdate: any) => {
-      // ✅ Update message status in real-time
+      // ✅ CRITICAL FIX: Update by waMessageId OR wamId OR id
       setMessages((prev) =>
-        prev.map((m) =>
-          m.id === statusUpdate.messageId || m.waMessageId === statusUpdate.waMessageId
-            ? { ...m, status: statusUpdate.status.toUpperCase() }
-            : m
-        )
+        prev.map((m) => {
+          const match =
+            m.id === statusUpdate.messageId ||
+            m.waMessageId === statusUpdate.waMessageId ||
+            m.wamId === statusUpdate.waMessageId ||
+            m.waMessageId === statusUpdate.wamId ||
+            m.wamId === statusUpdate.wamId;
+
+          if (match) {
+            return {
+              ...m,
+              status: statusUpdate.status.toUpperCase() as Message['status'],
+              ...(statusUpdate.status === 'DELIVERED' && { deliveredAt: statusUpdate.timestamp }),
+              ...(statusUpdate.status === 'READ' && { readAt: statusUpdate.timestamp }),
+            };
+          }
+          return m;
+        })
       );
     }
   );
@@ -566,7 +608,9 @@ const Inbox: React.FC = () => {
   // =========================
   // EFFECTS
   // =========================
-  useEffect(() => { fetchConversations(); }, [filter]);
+  useEffect(() => {
+    fetchConversations();
+  }, [filter]);
 
   useEffect(() => {
     const t = setTimeout(() => fetchConversations(), 300);
@@ -585,7 +629,7 @@ const Inbox: React.FC = () => {
   }, [conversationId, conversations]);
 
   // =========================
-  // RENDER STATES
+  // RENDER
   // =========================
   if (loading && conversations.length === 0) {
     return (
@@ -611,18 +655,9 @@ const Inbox: React.FC = () => {
     );
   }
 
-  // =========================
-  // MAIN UI (same as yours, just connected)
-  // =========================
   return (
     <div className="flex h-[calc(100vh-4rem)] bg-gray-100 dark:bg-gray-900">
-      <input
-        type="file"
-        ref={fileInputRef}
-        className="hidden"
-        accept="image/*,video/*,audio/*,.pdf,.doc,.docx"
-        onChange={handleFileSelect}
-      />
+      <input type="file" ref={fileInputRef} className="hidden" accept="image/*,video/*,audio/*,.pdf,.doc,.docx" onChange={handleFileSelect} />
 
       {/* LEFT SIDEBAR */}
       <div className="w-96 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col">
@@ -630,7 +665,10 @@ const Inbox: React.FC = () => {
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-bold text-gray-900 dark:text-white">Inbox</h2>
             <button
-              onClick={() => { setRefreshing(true); fetchConversations(); }}
+              onClick={() => {
+                setRefreshing(true);
+                fetchConversations();
+              }}
               disabled={refreshing}
               className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
             >
@@ -654,7 +692,9 @@ const Inbox: React.FC = () => {
               <button
                 key={f}
                 onClick={() => setFilter(f)}
-                className={`flex-1 px-3 py-2 text-sm font-medium rounded-lg transition-all capitalize ${filter === f ? 'bg-white dark:bg-gray-600 text-green-600 dark:text-green-400 shadow-sm' : 'text-gray-600 dark:text-gray-400'
+                className={`flex-1 px-3 py-2 text-sm font-medium rounded-lg transition-all capitalize ${filter === f
+                    ? 'bg-white dark:bg-gray-600 text-green-600 dark:text-green-400 shadow-sm'
+                    : 'text-gray-600 dark:text-gray-400'
                   }`}
               >
                 {f}
@@ -668,41 +708,62 @@ const Inbox: React.FC = () => {
             <div key={conv.id} className="relative">
               <div
                 onClick={() => selectConversation(conv)}
-                className={`flex items-start gap-3 px-4 py-3 cursor-pointer border-b border-gray-100 dark:border-gray-700/50 hover:bg-gray-50 dark:hover:bg-gray-700/50 ${selectedConversation?.id === conv.id ? 'bg-green-50 dark:bg-green-900/20 border-l-4 border-l-green-500' : ''
+                className={`flex items-start gap-3 px-4 py-3 cursor-pointer border-b border-gray-100 dark:border-gray-700/50 hover:bg-gray-50 dark:hover:bg-gray-700/50 ${selectedConversation?.id === conv.id
+                    ? 'bg-green-50 dark:bg-green-900/20 border-l-4 border-l-green-500'
+                    : ''
                   }`}
               >
                 <div className="relative flex-shrink-0">
-                  <div className="w-12 h-12 bg-gradient-to-br from-green-400 to-green-600 rounded-full flex items-center justify-center text-white font-semibold text-lg">
-                    {conv.contact.avatar ? <img src={conv.contact.avatar} className="w-full h-full rounded-full object-cover" /> : getContactInitial(conv.contact)}
+                  <div className="w-12 h-12 bg-gradient-to-br from-green-400 to-green-600 rounded-full flex items-center justify-center text-white font-semibold text-lg shadow-sm">
+                    {conv.contact.avatar ? (
+                      <img src={conv.contact.avatar} className="w-full h-full rounded-full object-cover" alt="" />
+                    ) : (
+                      getContactInitial(conv.contact)
+                    )}
                   </div>
 
                   {conv.isPinned && (
-                    <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-yellow-400 rounded-full flex items-center justify-center">
+                    <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-yellow-400 rounded-full flex items-center justify-center shadow-sm">
                       <Pin className="w-3 h-3 text-yellow-900" />
                     </div>
                   )}
 
-                  {/* ✅ Unread Dot on Avatar */}
-                  {conv.unreadCount > 0 ? (
+                  {conv.unreadCount > 0 && (
                     <div className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-green-500 rounded-full border-2 border-white dark:border-gray-800 animate-pulse" />
-                  ) : null}
+                  )}
                 </div>
 
                 <div className="flex-1 min-w-0">
                   <div className="flex justify-between mb-1">
-                    <h3 className={`font-semibold truncate ${conv.unreadCount > 0 ? 'text-gray-900 dark:text-white' : 'text-gray-700 dark:text-gray-300'}`}>{getContactName(conv.contact)}</h3>
+                    <h3
+                      className={`font-semibold truncate ${conv.unreadCount > 0 ? 'text-gray-900 dark:text-white' : 'text-gray-700 dark:text-gray-300'
+                        }`}
+                    >
+                      {getContactName(conv.contact)}
+                    </h3>
                     <div className="flex flex-col items-end gap-1">
-                      <span className={`text-xs ${conv.unreadCount > 0 ? 'text-green-600 font-semibold' : 'text-gray-500'}`}>{formatDistanceToNow(new Date(conv.lastMessageAt), { addSuffix: false })}</span>
-                      {/* ✅ Unread Badge */}
+                      <span
+                        className={`text-xs ${conv.unreadCount > 0 ? 'text-green-600 font-semibold' : 'text-gray-500'
+                          }`}
+                      >
+                        {safeFormatDistance(conv.lastMessageAt, 'now')}
+                      </span>
                       {conv.unreadCount > 0 && (
-                        <span className="min-w-[1.25rem] h-5 px-1.5 bg-green-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center animate-pulse">
+                        <span className="min-w-[1.25rem] h-5 px-1.5 bg-green-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center shadow-sm">
                           {conv.unreadCount > 99 ? '99+' : conv.unreadCount}
                         </span>
                       )}
                     </div>
                   </div>
 
-                  <p className={`text-sm truncate ${conv.unreadCount > 0 ? 'text-gray-900 dark:text-gray-200 font-medium' : 'text-gray-500 dark:text-gray-400'}`}>{conv.lastMessagePreview || 'No messages yet'}</p>
+                  <p
+                    className={`text-sm truncate ${conv.unreadCount > 0
+                        ? 'text-gray-900 dark:text-gray-200 font-medium'
+                        : 'text-gray-500 dark:text-gray-400'
+                      }`}
+                  >
+                    {conv.lastMessagePreview || 'No messages yet'}
+                  </p>
 
                   {conv.labels?.length ? (
                     <div className="flex flex-wrap gap-1 mt-1">
@@ -723,7 +784,10 @@ const Inbox: React.FC = () => {
                 </div>
 
                 <button
-                  onClick={(e) => { e.stopPropagation(); setShowConversationMenu(showConversationMenu === conv.id ? null : conv.id); }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowConversationMenu(showConversationMenu === conv.id ? null : conv.id);
+                  }}
                   className="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-600"
                 >
                   <MoreVertical className="w-4 h-4 text-gray-500" />
@@ -743,7 +807,11 @@ const Inbox: React.FC = () => {
                     </button>
 
                     <button
-                      onClick={(e) => { e.stopPropagation(); setShowLabelPicker(conv.id); setShowConversationMenu(null); }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setShowLabelPicker(conv.id);
+                        setShowConversationMenu(null);
+                      }}
                       className="w-full flex items-center gap-2 px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700"
                     >
                       <Tag className="w-4 h-4" />
@@ -796,7 +864,7 @@ const Inbox: React.FC = () => {
                 <div className="flex items-center gap-3 cursor-pointer" onClick={() => setShowContactInfo(!showContactInfo)}>
                   <div className="w-10 h-10 bg-gradient-to-br from-green-400 to-green-600 rounded-full flex items-center justify-center text-white font-semibold">
                     {selectedConversation.contact.avatar ? (
-                      <img src={selectedConversation.contact.avatar} className="w-full h-full rounded-full object-cover" />
+                      <img src={selectedConversation.contact.avatar} className="w-full h-full rounded-full object-cover" alt="" />
                     ) : (
                       getContactInitial(selectedConversation.contact)
                     )}
@@ -808,14 +876,14 @@ const Inbox: React.FC = () => {
                 </div>
                 <button
                   onClick={() => setShowContactInfo(!showContactInfo)}
-                  className={`p-2 rounded-lg ${showContactInfo ? 'bg-green-100 text-green-600' : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600'}`}
+                  className={`p-2 rounded-lg ${showContactInfo ? 'bg-green-100 text-green-600' : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600'
+                    }`}
                 >
                   <Info className="w-5 h-5" />
                 </button>
               </div>
             </div>
 
-            {/* ✅ Window Status (Added here) */}
             <div className="flex-none z-10 w-full shrink-0">
               <WindowStatus
                 windowExpiresAt={selectedConversation.windowExpiresAt || null}
@@ -832,38 +900,55 @@ const Inbox: React.FC = () => {
                 <>
                   {messages.map((m, idx) => {
                     const outbound = m.direction === 'OUTBOUND';
+
+                    const currentDate = m.createdAt ? new Date(m.createdAt) : null;
+                    const prevDate = idx > 0 && messages[idx - 1].createdAt ? new Date(messages[idx - 1].createdAt) : null;
+
                     const showDate =
                       idx === 0 ||
-                      new Date(m.createdAt).toDateString() !== new Date(messages[idx - 1].createdAt).toDateString();
+                      (currentDate &&
+                        prevDate &&
+                        !isNaN(currentDate.getTime()) &&
+                        !isNaN(prevDate.getTime()) &&
+                        currentDate.toDateString() !== prevDate.toDateString());
 
                     return (
                       <React.Fragment key={m.id}>
-                        {showDate && (
+                        {showDate && currentDate && !isNaN(currentDate.getTime()) && (
                           <div className="flex justify-center my-4">
                             <span className="px-4 py-1 bg-white text-gray-500 text-xs rounded-full shadow-sm">
-                              {format(new Date(m.createdAt), 'MMMM d, yyyy')}
+                              {safeFormatDate(m.createdAt, 'MMMM d, yyyy', 'Today')}
                             </span>
                           </div>
                         )}
 
                         <div className={`flex ${outbound ? 'justify-end' : 'justify-start'}`}>
-                          <div className={`max-w-[70%] lg:max-w-md rounded-2xl shadow-sm ${outbound ? 'bg-green-500 text-white rounded-br-md' : 'bg-white text-gray-900 rounded-bl-md'
-                            }`}>
+                          <div
+                            className={`max-w-[70%] lg:max-w-md rounded-2xl shadow-sm ${outbound ? 'bg-green-500 text-white rounded-br-md' : 'bg-white text-gray-900 rounded-bl-md'
+                              }`}
+                          >
                             <div className="px-4 py-2">
                               {m.type === 'IMAGE' && m.mediaUrl && (
-                                <img src={m.mediaUrl} className="max-w-full rounded-lg mb-2" />
+                                <img
+                                  src={m.mediaUrl}
+                                  className="max-w-full rounded-lg mb-2"
+                                  alt="Image"
+                                  onError={(e) => {
+                                    (e.target as HTMLImageElement).style.display = 'none';
+                                  }}
+                                />
                               )}
                               <p className="break-words text-sm whitespace-pre-wrap">{parseMessageContent(m)}</p>
                             </div>
 
                             <div className={`flex items-center justify-end gap-1 px-3 pb-2 ${outbound ? 'text-green-100' : 'text-gray-400'}`}>
-                              <span className="text-[11px]">{format(new Date(m.createdAt), 'HH:mm')}</span>
+                              <span className="text-[11px]">{safeFormatDate(m.createdAt, 'HH:mm', '--:--')}</span>
                               {outbound && (
                                 <>
                                   {m.status === 'READ' && <CheckCheck className="w-4 h-4 text-blue-300" />}
-                                  {m.status === 'DELIVERED' && <CheckCheck className="w-4 h-4" />}
-                                  {m.status === 'SENT' && <Check className="w-4 h-4" />}
-                                  {m.status === 'PENDING' && <Clock className="w-4 h-4" />}
+                                  {m.status === 'DELIVERED' && <CheckCheck className="w-4 h-4 text-white/70" />}
+                                  {m.status === 'SENT' && <Check className="w-4 h-4 text-white/60" />}
+                                  {m.status === 'PENDING' && <Clock className="w-4 h-4 text-white/60" />}
                                   {m.status === 'FAILED' && <AlertCircle className="w-4 h-4 text-red-300" />}
                                 </>
                               )}
@@ -878,25 +963,18 @@ const Inbox: React.FC = () => {
               )}
             </div>
 
-            {/* Use ChatInput Component instead of inline input */}
             <div className="flex-none z-20 w-full shrink-0">
               <ChatInput
                 onSendMessage={async (msg) => {
-                  setMessageText(msg);
-                  await new Promise(resolve => setTimeout(resolve, 0)); // wait for state to update
-                  await handleSendMessage();
+                  await handleSendMessage(msg);
                 }}
                 onOpenTemplateModal={() => {
-                  // Add state for template modal or implement open logic here
-                  // For now just logging, needs corresponding state if Template Modal is used in Inbox
-                  console.log("Open Template Modal");
-                  toast("Please use template message (Feature in development for Inbox UI)");
+                  toast('Template modal coming soon!');
                 }}
                 isWindowOpen={selectedConversation.isWindowOpen || false}
                 windowExpiresAt={selectedConversation.windowExpiresAt}
               />
             </div>
-
           </>
         ) : (
           <div className="flex-1 flex items-center justify-center">
@@ -908,9 +986,8 @@ const Inbox: React.FC = () => {
               <p className="text-gray-600 max-w-sm">Choose a conversation from the list</p>
             </div>
           </div>
-        )
-        }
-      </div >
+        )}
+      </div>
 
       {showContactInfo && selectedConversation && (
         <div className="w-80 bg-white border-l border-gray-200 flex flex-col overflow-hidden">
@@ -923,7 +1000,7 @@ const Inbox: React.FC = () => {
           <div className="p-6 text-center border-b">
             <div className="w-24 h-24 bg-gradient-to-br from-green-400 to-green-600 rounded-full flex items-center justify-center text-white text-3xl font-bold mx-auto mb-4">
               {selectedConversation.contact.avatar ? (
-                <img src={selectedConversation.contact.avatar} className="w-full h-full rounded-full object-cover" />
+                <img src={selectedConversation.contact.avatar} className="w-full h-full rounded-full object-cover" alt="" />
               ) : (
                 getContactInitial(selectedConversation.contact)
               )}
@@ -954,18 +1031,9 @@ const Inbox: React.FC = () => {
               </div>
             </div>
           </div>
-
-          <div className="p-4 border-t space-y-2">
-            <button className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200">
-              <Archive className="w-4 h-4" /> Archive Conversation
-            </button>
-            <button className="w-full flex items-center justify-center gap-2 px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg">
-              <Trash2 className="w-4 h-4" /> Delete Conversation
-            </button>
-          </div>
         </div>
       )}
-    </div >
+    </div>
   );
 };
 
