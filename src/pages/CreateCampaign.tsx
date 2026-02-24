@@ -205,9 +205,12 @@ const CreateCampaign: React.FC = () => {
         setLoadingData(false);
       }
     };
-
-    if (!loadingAccounts && selectedAccountId) {
-      fetchData();
+    if (!loadingAccounts) {
+      if (selectedAccountId) {
+        fetchData();
+      } else {
+        setLoadingData(false);
+      }
     }
   }, [loadingAccounts, selectedAccountId]);
 
