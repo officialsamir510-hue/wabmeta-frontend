@@ -1,18 +1,18 @@
-// src/hooks/useInboxSocket.ts - COMPLETE WORKING VERSION
+// src/hooks/useInboxSocket.ts - COMPLETE FIXED VERSION
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useCallback } from 'react';
 import { useSocket } from '../context/SocketContext';
 
 interface Message {
     id: string;
     conversationId: string;
+    waMessageId?: string;
+    wamId?: string;
     content: string;
     direction: string;
     status: string;
     createdAt: string;
     type: string;
-    contact?: any;
-    message?: any;
 }
 
 interface ConversationUpdate {
@@ -20,12 +20,14 @@ interface ConversationUpdate {
     lastMessageAt: string;
     lastMessagePreview: string;
     unreadCount: number;
-    contact?: any;
+    isWindowOpen?: boolean;
+    windowExpiresAt?: string;
 }
 
 interface MessageStatus {
     messageId: string;
     waMessageId?: string;
+    wamId?: string;
     conversationId: string;
     status: string;
     timestamp: string;
@@ -37,35 +39,10 @@ export const useInboxSocket = (
     onConversationUpdate?: (update: ConversationUpdate) => void,
     onMessageStatus?: (status: MessageStatus) => void
 ) => {
-    const { socket, isConnected, joinConversation, leaveConversation } = useSocket();
+    const { socket, isConnected } = useSocket();
     const previousConversationId = useRef<string | null>(null);
 
-    // Join/leave conversation room
-    useEffect(() => {
-        if (!socket || !isConnected) return;
-
-        // Leave previous conversation
-        if (previousConversationId.current && previousConversationId.current !== selectedConversationId) {
-            console.log(`📤 Leaving conversation room: ${previousConversationId.current}`);
-            leaveConversation(previousConversationId.current);
-        }
-
-        // Join new conversation
-        if (selectedConversationId) {
-            console.log(`📥 Joining conversation room: ${selectedConversationId}`);
-            joinConversation(selectedConversationId);
-            previousConversationId.current = selectedConversationId;
-        }
-
-        return () => {
-            if (selectedConversationId) {
-                console.log(`📤 Cleanup: Leaving conversation room: ${selectedConversationId}`);
-                leaveConversation(selectedConversationId);
-            }
-        };
-    }, [socket, isConnected, selectedConversationId, joinConversation, leaveConversation]);
-
-    // Store latest callbacks in refs so we don't need to re-attach listeners on every render
+    // Store callbacks in refs
     const onNewMessageRef = useRef(onNewMessage);
     const onConversationUpdateRef = useRef(onConversationUpdate);
     const onMessageStatusRef = useRef(onMessageStatus);
@@ -76,38 +53,49 @@ export const useInboxSocket = (
         onMessageStatusRef.current = onMessageStatus;
     });
 
-    // Listen for socket events
+    // Join/leave conversation room
     useEffect(() => {
-        if (!socket) {
-            console.warn('⚠️ Socket not initialized, skipping event listeners');
-            return;
+        if (!socket || !isConnected) return;
+
+        if (previousConversationId.current && previousConversationId.current !== selectedConversationId) {
+            socket.emit('leave:conversation', previousConversationId.current);
         }
 
-        // Handle new message
+        if (selectedConversationId) {
+            socket.emit('join:conversation', selectedConversationId);
+            previousConversationId.current = selectedConversationId;
+        }
+
+        return () => {
+            if (selectedConversationId) {
+                socket.emit('leave:conversation', selectedConversationId);
+            }
+        };
+    }, [socket, isConnected, selectedConversationId]);
+
+    // Listen for socket events
+    useEffect(() => {
+        if (!socket) return;
+
         const handleNewMessage = (data: any) => {
             console.log('📩 [SOCKET] New message received:', data);
-
-            // Extract actual message from various response formats
-            const message: Message = data.message || data;
-
+            const message = data.message || data;
             if (onNewMessageRef.current) {
                 onNewMessageRef.current(message);
             }
         };
 
-        // Handle conversation update
         const handleConversationUpdate = (data: any) => {
             console.log('💬 [SOCKET] Conversation updated:', data);
-
+            const update = data.conversation || data;
             if (onConversationUpdateRef.current) {
-                onConversationUpdateRef.current(data);
+                onConversationUpdateRef.current(update);
             }
         };
 
-        // Handle message status update
+        // ✅ CRITICAL: Handle message status updates
         const handleMessageStatus = (data: any) => {
             console.log('📊 [SOCKET] Message status update:', data);
-
             if (onMessageStatusRef.current) {
                 onMessageStatusRef.current(data);
             }
@@ -118,20 +106,16 @@ export const useInboxSocket = (
         socket.on('conversation:updated', handleConversationUpdate);
         socket.on('message:status', handleMessageStatus);
 
-        console.log('✅ [SOCKET] Event listeners registered');
+        console.log('✅ [SOCKET] Inbox event listeners registered');
 
-        // Cleanup
         return () => {
             socket.off('message:new', handleNewMessage);
             socket.off('conversation:updated', handleConversationUpdate);
             socket.off('message:status', handleMessageStatus);
-            console.log('🔌 [SOCKET] Event listeners removed');
         };
     }, [socket]);
 
-    return {
-        isConnected,
-    };
+    return { isConnected };
 };
 
 export default useInboxSocket;
