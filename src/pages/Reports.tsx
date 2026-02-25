@@ -4,7 +4,6 @@ import React, { useState, useEffect } from 'react';
 import {
   BarChart3,
   TrendingUp,
-  TrendingDown,
   Users,
   MessageSquare,
   Send,
@@ -12,10 +11,8 @@ import {
   XCircle,
   Eye,
   Mail,
-  Calendar,
   Download,
   RefreshCw,
-  Filter,
   Loader2,
   ArrowUpRight,
   ArrowDownRight,

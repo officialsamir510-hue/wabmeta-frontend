@@ -234,9 +234,9 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
       <div className={`relative max-w-[70%] ${isOutgoing ? 'order-1' : ''}`}>
         {/* Message Bubble */}
         <div
-          className={`relative px-3 py-2 rounded-lg shadow-sm ${isOutgoing
-            ? 'bg-[#005c4b] text-white rounded-tr-none'
-            : 'bg-white text-gray-900 rounded-tl-none border border-gray-100'
+          className={`relative py-2 rounded-lg shadow-sm ${isOutgoing
+            ? 'bg-[#005c4b] text-white rounded-tr-none pl-8 pr-3'
+            : 'bg-white text-gray-900 rounded-tl-none border border-gray-100 pr-8 pl-3'
             }`}
         >
           {/* Menu Button */}

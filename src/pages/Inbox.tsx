@@ -365,21 +365,31 @@ const Inbox: React.FC = () => {
       if (response.data.success) {
         const realMessage = response.data.data;
 
-        // ✅ Update temp message with real data
-        setMessages((prev) =>
-          prev.map((m) =>
+        // ✅ Update temp message with real data (checking for socket duplicates)
+        setMessages((prev) => {
+          const isAlreadyIn = prev.some(m =>
+            m.id === realMessage.id ||
+            (m.waMessageId && m.waMessageId === (realMessage.waMessageId || realMessage.wamId))
+          );
+
+          if (isAlreadyIn) {
+            // Socket already added it, just remove the temporary one
+            return prev.filter(m => m.id !== tempId);
+          }
+
+          return prev.map((m) =>
             m.id === tempId
               ? {
                 ...m,
                 id: realMessage.id || tempId,
                 waMessageId: realMessage.waMessageId || realMessage.wamId,
                 wamId: realMessage.wamId || realMessage.waMessageId,
-                status: 'SENT', // ✅ Update to SENT
+                status: 'SENT',
                 sentAt: realMessage.sentAt || now,
               }
               : m
-          )
-        );
+          );
+        });
 
         // Update conversation preview
         setConversations((prev) =>
@@ -1020,7 +1030,7 @@ const Inbox: React.FC = () => {
               />
             </div>
 
-            <div className="flex-1 overflow-y-auto p-4 space-y-2 bg-[#efe7dd]">
+            <div className="flex-1 overflow-y-auto p-4 space-y-2 bg-[#efe7dd] dark:bg-gray-950">
               {loadingMessages ? (
                 <div className="flex items-center justify-center h-full">
                   <Loader2 className="w-8 h-8 animate-spin text-green-600" />

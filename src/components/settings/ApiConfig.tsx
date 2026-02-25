@@ -1,7 +1,7 @@
 // src/components/settings/ApiConfig.tsx
 
 import React, { useState } from 'react';
-import { Code, Key, Webhook, Copy, Eye, EyeOff, Plus } from 'lucide-react';
+import { Code, Copy, Eye, EyeOff, Plus } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 const ApiConfig: React.FC = () => {

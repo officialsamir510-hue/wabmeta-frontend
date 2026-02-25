@@ -7,13 +7,11 @@ import {
   User,
   Bell,
   Shield,
-  Key,
   Code,
-  Palette,
   Globe,
   CreditCard,
 } from 'lucide-react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 
 // Import settings components
 import WhatsAppSettings from '../components/settings/WhatsAppSettings';
@@ -26,7 +24,6 @@ type SettingsTab = 'whatsapp' | 'general' | 'notifications' | 'security' | 'api'
 
 const Settings: React.FC = () => {
   const [activeTab, setActiveTab] = useState<SettingsTab>('whatsapp');
-  const location = useLocation();
 
   const tabs = [
     {

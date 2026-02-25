@@ -1,7 +1,7 @@
 // src/components/settings/GeneralSettings.tsx
 
 import React from 'react';
-import { Building, Globe, Clock } from 'lucide-react';
+import { Building } from 'lucide-react';
 
 const GeneralSettings: React.FC = () => {
   return (
