@@ -6,12 +6,11 @@ import {
   CheckCircle2,
   AlertCircle,
   Users,
-  ArrowRight,
   Loader2,
   Download,
   RefreshCw,
+  Upload,
 } from "lucide-react";
-import ImportUploader from "../components/contacts/ImportUploader";
 
 interface ImportResult {
   total: number;      // total rows in CSV
@@ -246,6 +245,25 @@ const ImportContacts: React.FC = () => {
     return step === "importing" ? 2 : idx;
   }, [step]);
 
+  // Download Sample CSV
+  const downloadSampleCsv = () => {
+    const header = "Name,Phone,Email,Company\n";
+    const rows = [
+      "John Doe,919876543210,john@example.com,WabMeta Inc",
+      "Jane Smith,918877665544,jane@example.com,Design Agency",
+    ].join("\n");
+
+    const blob = new Blob([header + rows], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "wabmeta-sample-contacts.csv";
+    a.click();
+
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="max-w-4xl mx-auto space-y-6">
       {/* Header */}
@@ -270,13 +288,12 @@ const ImportContacts: React.FC = () => {
               <div key={label} className="flex items-center">
                 <div className="flex items-center">
                   <div
-                    className={`w-10 h-10 rounded-full flex items-center justify-center font-semibold transition-colors ${
-                      isCompleted
-                        ? "bg-primary-500 text-white"
-                        : isActive
+                    className={`w-10 h-10 rounded-full flex items-center justify-center font-semibold transition-colors ${isCompleted
+                      ? "bg-primary-500 text-white"
+                      : isActive
                         ? "bg-primary-500 text-white ring-4 ring-primary-100"
                         : "bg-gray-200 text-gray-500"
-                    }`}
+                      }`}
                   >
                     {isCompleted ? <CheckCircle2 className="w-5 h-5" /> : index + 1}
                   </div>
@@ -298,8 +315,36 @@ const ImportContacts: React.FC = () => {
         {/* Upload */}
         {step === "upload" && (
           <>
-            <h2 className="text-lg font-semibold text-gray-900 mb-6">Upload Your File</h2>
-            <ImportUploader onImport={handleImport} />
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-lg font-semibold text-gray-900">Upload Your File</h2>
+              <button
+                onClick={downloadSampleCsv}
+                className="flex items-center gap-2 text-primary-600 hover:text-primary-700 text-sm font-medium transition-colors"
+                title="Download Sample CSV"
+              >
+                <Download className="w-4 h-4" />
+                Sample CSV
+              </button>
+            </div>
+            {/* Simple File Input for now to avoid prop mismatch */}
+            <div className="border-2 border-dashed border-gray-200 rounded-2xl p-12 text-center hover:bg-gray-50 transition-all cursor-pointer group"
+              onClick={() => document.getElementById('file-upload')?.click()}>
+              <input
+                id="file-upload"
+                type="file"
+                accept=".csv"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) handleImport(file);
+                }}
+              />
+              <div className="w-16 h-16 bg-primary-50 rounded-full flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition-transform">
+                <Upload className="w-8 h-8 text-primary-500" />
+              </div>
+              <p className="text-lg font-medium text-gray-900">Click to upload or drag and drop</p>
+              <p className="text-sm text-gray-500 mt-1">CSV files only (max 10MB)</p>
+            </div>
           </>
         )}
 

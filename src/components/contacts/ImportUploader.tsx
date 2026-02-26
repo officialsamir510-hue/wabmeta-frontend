@@ -8,10 +8,11 @@ import {
   Loader2,
   CheckCircle,
   XCircle,
+  Download,
   Info,
   Users,
 } from 'lucide-react';
-import { parseCsvFile } from '../../utils/csvContacts';
+import { parseCsvFile, downloadSampleCsv } from '../../utils/csvContacts';
 import type { ParseResult } from '../../utils/csvContacts';
 import api from '../../services/api';
 
@@ -198,6 +199,16 @@ const ImportUploader: React.FC<ImportUploaderProps> = ({
             disabled={uploading}
           >
             <X className="w-5 h-5 text-gray-500" />
+          </button>
+        </div>
+        <div className="px-6 py-2 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
+          <span className="text-xs text-gray-500 font-medium uppercase tracking-wider">Example Format available</span>
+          <button
+            onClick={downloadSampleCsv}
+            className="flex items-center gap-1.5 text-xs font-bold text-primary-600 hover:text-primary-700 transition-colors"
+          >
+            <Download className="w-3.5 h-3.5" />
+            DOWNLOAD SAMPLE CSV
           </button>
         </div>
 
