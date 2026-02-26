@@ -1,4 +1,4 @@
-// src/pages/Inbox.tsx - COMPLETE FINAL VERSION
+// src/pages/Inbox.tsx - COMPLETE FIXED VERSION
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
@@ -51,7 +51,9 @@ const safeFormatDistance = (date: any, fallback: string = 'Just now'): string =>
   }
 };
 
+// ============================================
 // TYPES
+// ============================================
 interface Contact {
   id: string;
   name?: string;
@@ -97,6 +99,9 @@ interface Conversation {
   assignedTo?: string;
 }
 
+// ============================================
+// LABEL COLORS
+// ============================================
 const LABEL_COLORS: Record<string, { bg: string; text: string; border: string }> = {
   important: { bg: 'bg-red-100', text: 'text-red-700', border: 'border-red-300' },
   'follow-up': { bg: 'bg-yellow-100', text: 'text-yellow-700', border: 'border-yellow-300' },
@@ -110,12 +115,18 @@ const LABEL_COLORS: Record<string, { bg: string; text: string; border: string }>
 
 const AVAILABLE_LABELS = Object.keys(LABEL_COLORS);
 
+// ============================================
+// MAIN COMPONENT
+// ============================================
 const Inbox: React.FC = () => {
   const { conversationId } = useParams();
   const navigate = useNavigate();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // ============================================
+  // STATE
+  // ============================================
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
   const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
@@ -131,14 +142,22 @@ const Inbox: React.FC = () => {
   const [showLabelPicker, setShowLabelPicker] = useState<string | null>(null);
   const [showConversationMenu, setShowConversationMenu] = useState<string | null>(null);
 
-  const [page, setPage] = useState(1);
+  // Pagination state
+  const [_page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
+  const [loadingMore, _setLoadingMore] = useState(false);
   const conversationListRef = useRef<HTMLDivElement>(null);
 
+  // Refs to prevent duplicate fetches
   const fetchingMessagesRef = useRef(false);
   const lastFetchedConvId = useRef<string | null>(null);
 
+  // ✅ NEW: Track pending message IDs to prevent duplicates
+  const pendingMessageIds = useRef<Set<string>>(new Set());
+
+  // ============================================
+  // HELPER FUNCTIONS
+  // ============================================
   const scrollToBottom = (smooth = true) => {
     setTimeout(() => {
       messagesEndRef.current?.scrollIntoView({ behavior: smooth ? 'smooth' : 'auto' });
@@ -148,21 +167,58 @@ const Inbox: React.FC = () => {
   const getContactName = (contact: Contact): string => {
     if (contact.whatsappProfileName) return contact.whatsappProfileName;
     if (contact.name) return contact.name;
-    if (contact.firstName || contact.lastName) return [contact.firstName, contact.lastName].filter(Boolean).join(' ');
+    if (contact.firstName || contact.lastName)
+      return [contact.firstName, contact.lastName].filter(Boolean).join(' ');
     return contact.phone;
   };
 
-  const getContactInitial = (contact: Contact): string => getContactName(contact).charAt(0).toUpperCase();
+  const getContactInitial = (contact: Contact): string =>
+    getContactName(contact).charAt(0).toUpperCase();
 
-  const getLabelStyle = (label: string) => LABEL_COLORS[label.toLowerCase()] || {
-    bg: 'bg-gray-100',
-    text: 'text-gray-700',
-    border: 'border-gray-300',
+  const getLabelStyle = (label: string) =>
+    LABEL_COLORS[label.toLowerCase()] || {
+      bg: 'bg-gray-100',
+      text: 'text-gray-700',
+      border: 'border-gray-300',
+    };
+
+  const playNotificationSound = () => {
+    try {
+      const audio = new Audio('/come-here-notification.mp3');
+      audio.volume = 0.5;
+      audio.play().catch(() => { });
+    } catch (e) { }
   };
 
-  // =========================
-  // API: conversations
-  // =========================
+  // ============================================
+  // ✅ IMPROVED: Check for duplicate messages
+  // ============================================
+  const isDuplicateMessage = (newMsg: Message, existingMessages: Message[]): boolean => {
+    return existingMessages.some((m) => {
+      // Check by ID
+      if (m.id === newMsg.id) return true;
+
+      // Check by waMessageId
+      if (newMsg.waMessageId && m.waMessageId === newMsg.waMessageId) return true;
+
+      // Check by wamId
+      if (newMsg.wamId && m.wamId === newMsg.wamId) return true;
+
+      // Cross-check waMessageId and wamId
+      if (newMsg.waMessageId && m.wamId === newMsg.waMessageId) return true;
+      if (newMsg.wamId && m.waMessageId === newMsg.wamId) return true;
+
+      // Check pending message IDs (for optimistic updates)
+      if (pendingMessageIds.current.has(newMsg.id)) return true;
+      if (newMsg.waMessageId && pendingMessageIds.current.has(newMsg.waMessageId)) return true;
+
+      return false;
+    });
+  };
+
+  // ============================================
+  // FETCH CONVERSATIONS
+  // ============================================
   const fetchConversations = useCallback(async () => {
     try {
       setLoading(true);
@@ -170,25 +226,19 @@ const Inbox: React.FC = () => {
       setPage(1);
       setHasMore(true);
 
-      const params: any = {
-        limit: 200,  // ✅ Increased limit
-      };
+      const params: any = { limit: 200 };
 
-      // ✅ Only add search if provided
       if (searchQuery?.trim()) {
         params.search = searchQuery.trim();
       }
 
-      // ✅ FIXED: Filter logic
       if (filter === 'unread') {
         params.isRead = false;
-        params.isArchived = false;  // Unread should exclude archived
+        params.isArchived = false;
       } else if (filter === 'archived') {
         params.isArchived = true;
-      }
-      // ✅ For 'all' filter - don't pass isArchived at all (show everything except archived)
-      else {
-        params.isArchived = false;  // 'all' = all non-archived
+      } else {
+        params.isArchived = false;
       }
 
       console.log('📥 Fetching conversations with params:', params);
@@ -204,14 +254,12 @@ const Inbox: React.FC = () => {
           data = response.data.data.conversations;
         }
 
-        // Filter out invalid entries
         const valid = data.filter((c) => c?.id && c?.contact);
 
         // Sort: Pinned first, then by lastMessageAt
         valid.sort((a, b) => {
           if (a.isPinned && !b.isPinned) return -1;
           if (!a.isPinned && b.isPinned) return 1;
-
           const dateA = new Date(a.lastMessageAt || 0).getTime();
           const dateB = new Date(b.lastMessageAt || 0).getTime();
           return dateB - dateA;
@@ -232,57 +280,9 @@ const Inbox: React.FC = () => {
     }
   }, [searchQuery, filter]);
 
-  // Load more function
-  const loadMoreConversations = async () => {
-    if (loadingMore || !hasMore) return;
-
-    try {
-      setLoadingMore(true);
-      const nextPage = page + 1;
-
-      const params: any = {
-        page: nextPage,
-        limit: 50,
-      };
-
-      if (filter === 'unread') params.isRead = false;
-      else if (filter === 'archived') params.isArchived = true;
-      else params.isArchived = false;
-
-      const response = await inboxApi.getConversations(params);
-
-      if (response.data.success) {
-        let newData: Conversation[] = [];
-        if (Array.isArray(response.data.data)) {
-          newData = response.data.data;
-        } else if (response.data.data?.conversations) {
-          newData = response.data.data.conversations;
-        }
-
-        if (newData.length === 0) {
-          setHasMore(false);
-        } else {
-          setConversations(prev => [...prev, ...newData.filter((c: any) => c?.id && c?.contact)]);
-          setPage(nextPage);
-        }
-      }
-    } catch (e) {
-      console.error('Load more error:', e);
-    } finally {
-      setLoadingMore(false);
-    }
-  };
-
-  // Scroll handler
-  const handleConversationScroll = (e: React.UIEvent<HTMLDivElement>) => {
-    const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
-
-    // Load more when 80% scrolled
-    if (scrollTop + clientHeight >= scrollHeight * 0.8) {
-      loadMoreConversations();
-    }
-  };
-
+  // ============================================
+  // FETCH MESSAGES
+  // ============================================
   const fetchMessages = useCallback(async (convId: string) => {
     if (fetchingMessagesRef.current) return;
     if (lastFetchedConvId.current === convId && messages.length > 0) return;
@@ -301,14 +301,22 @@ const Inbox: React.FC = () => {
         else if (d?.messages) messagesData = d.messages;
         else if (d?.data?.messages) messagesData = d.data.messages;
 
-        messagesData.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+        messagesData.sort((a, b) =>
+          new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+        );
 
         setMessages(messagesData);
         lastFetchedConvId.current = convId;
 
+        // Clear pending IDs when fetching fresh
+        pendingMessageIds.current.clear();
+
         scrollToBottom(false);
         inboxApi.markAsRead(convId).catch(() => { });
-        setConversations((prev) => prev.map((c) => (c.id === convId ? { ...c, unreadCount: 0, isRead: true } : c)));
+
+        setConversations((prev) =>
+          prev.map((c) => (c.id === convId ? { ...c, unreadCount: 0, isRead: true } : c))
+        );
       }
     } catch (e: any) {
       console.error(e);
@@ -320,17 +328,18 @@ const Inbox: React.FC = () => {
     }
   }, [messages.length]);
 
-  // =========================
-  // SEND TEXT
-  // =========================
+  // ============================================
+  // ✅ FIXED: SEND MESSAGE - Proper optimistic update
+  // ============================================
   const handleSendMessage = async (textToSend?: string) => {
     const text = textToSend || messageText;
     if (!text.trim() || !selectedConversation) return;
 
+    // Generate unique temp ID
     const tempId = `temp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     const now = new Date().toISOString();
 
-    // ✅ Create optimistic message with unique temp ID
+    // Create optimistic message
     const tempMessage: Message = {
       id: tempId,
       content: text,
@@ -341,14 +350,16 @@ const Inbox: React.FC = () => {
       sentAt: now,
     };
 
-    // ✅ Add to UI immediately
+    // ✅ Track this temp ID to prevent duplicates
+    pendingMessageIds.current.add(tempId);
+
+    // Add to UI immediately
     setMessages((prev) => [...prev, tempMessage]);
     const sentText = text;
-    setMessageText(''); // Clear input
+    setMessageText('');
     scrollToBottom();
 
     try {
-      // Get account
       const accountsRes = await whatsappApi.accounts();
       const accounts = accountsRes.data?.data || [];
       const connected = accounts.find((a: any) => a.status === 'CONNECTED');
@@ -356,30 +367,36 @@ const Inbox: React.FC = () => {
 
       if (!accountId) throw new Error('No WhatsApp account connected');
 
-      // ✅ Send message with tempId for tracking
       const response = await whatsappApi.sendText({
         whatsappAccountId: accountId,
         to: selectedConversation.contact.phone,
         message: sentText,
-        // ✅ Pass tempId so backend can link it
-        tempId: tempId,
+        tempId: tempId, // Pass tempId for tracking
       });
 
       if (response.data.success) {
         const realMessage = response.data.data;
+        const realWaId = realMessage.waMessageId || realMessage.wamId;
 
-        // ✅ Replace temp message with real one
+        // ✅ Track the real waMessageId too
+        if (realWaId) {
+          pendingMessageIds.current.add(realWaId);
+        }
+
+        // Replace temp message with real one
         setMessages((prev) => {
-          // Check if socket already added it
+          // Check if socket already added this message
           const socketAlreadyAdded = prev.some(
             (m) =>
-              m.id === realMessage.id ||
-              (realMessage.waMessageId && m.waMessageId === realMessage.waMessageId) ||
-              (realMessage.wamId && m.wamId === realMessage.wamId)
+              m.id !== tempId && (
+                m.id === realMessage.id ||
+                (realWaId && m.waMessageId === realWaId) ||
+                (realWaId && m.wamId === realWaId)
+              )
           );
 
           if (socketAlreadyAdded) {
-            // Socket beat us to it, just remove temp
+            // Remove temp, socket already has the real one
             console.log('🔄 Socket already added message, removing temp');
             return prev.filter((m) => m.id !== tempId);
           }
@@ -389,6 +406,9 @@ const Inbox: React.FC = () => {
             m.id === tempId
               ? {
                 ...realMessage,
+                id: realMessage.id || tempId,
+                waMessageId: realWaId,
+                wamId: realWaId,
                 status: 'SENT',
               }
               : m
@@ -415,16 +435,19 @@ const Inbox: React.FC = () => {
     } catch (e: any) {
       toast.error(e.response?.data?.message || e.message || 'Failed to send message');
 
-      // ✅ Mark as FAILED (keep in UI so user can see error)
+      // Mark as FAILED
       setMessages((prev) =>
         prev.map((m) => (m.id === tempId ? { ...m, status: 'FAILED' } : m))
       );
+
+      // Remove from pending
+      pendingMessageIds.current.delete(tempId);
     }
   };
 
-  // =========================
+  // ============================================
   // MEDIA UPLOAD
-  // =========================
+  // ============================================
   const handleUploadAndSendMedia = async (file: File) => {
     if (!selectedConversation) return;
 
@@ -432,13 +455,9 @@ const Inbox: React.FC = () => {
     const mime = file.type || '';
 
     const tempType: Message['type'] =
-      mime.startsWith('image/')
-        ? 'IMAGE'
-        : mime.startsWith('video/')
-          ? 'VIDEO'
-          : mime.startsWith('audio/')
-            ? 'AUDIO'
-            : 'DOCUMENT';
+      mime.startsWith('image/') ? 'IMAGE' :
+        mime.startsWith('video/') ? 'VIDEO' :
+          mime.startsWith('audio/') ? 'AUDIO' : 'DOCUMENT';
 
     const tempMsg: Message = {
       id: tempId,
@@ -450,6 +469,7 @@ const Inbox: React.FC = () => {
       mediaUrl: mime.startsWith('image/') ? URL.createObjectURL(file) : undefined,
     };
 
+    pendingMessageIds.current.add(tempId);
     setMessages((prev) => [...prev, tempMsg]);
     scrollToBottom();
 
@@ -480,6 +500,10 @@ const Inbox: React.FC = () => {
       const result = sendRes.data?.data;
       const dbMessage = result?.message || result;
 
+      if (dbMessage?.waMessageId) {
+        pendingMessageIds.current.add(dbMessage.waMessageId);
+      }
+
       setMessages((prev) =>
         prev.map((m) =>
           m.id === tempId
@@ -488,21 +512,15 @@ const Inbox: React.FC = () => {
               id: dbMessage?.id || m.id,
               status: 'SENT',
               mediaUrl: mediaUrl,
-              content: dbMessage?.content || m.content,
-              type: (dbMessage?.type || m.type) as any,
             }
             : m
         )
       );
 
       const preview =
-        mediaType === 'image'
-          ? '📷 Image'
-          : mediaType === 'video'
-            ? '🎥 Video'
-            : mediaType === 'audio'
-              ? '🎵 Audio'
-              : '📄 Document';
+        mediaType === 'image' ? '📷 Image' :
+          mediaType === 'video' ? '🎥 Video' :
+            mediaType === 'audio' ? '🎵 Audio' : '📄 Document';
 
       setConversations((prev) =>
         prev.map((c) =>
@@ -518,6 +536,7 @@ const Inbox: React.FC = () => {
       toast.dismiss();
       toast.error(e.response?.data?.message || e.message || 'Failed to send media');
       setMessages((prev) => prev.map((m) => (m.id === tempId ? { ...m, status: 'FAILED' } : m)));
+      pendingMessageIds.current.delete(tempId);
     } finally {
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
@@ -529,15 +548,17 @@ const Inbox: React.FC = () => {
     await handleUploadAndSendMedia(file);
   };
 
-  // =========================
+  // ============================================
   // PIN/ARCHIVE/LABELS
-  // =========================
+  // ============================================
   const handlePinConversation = async (conv: Conversation, e: React.MouseEvent) => {
     e.stopPropagation();
     try {
       const newPinned = !Boolean(conv.isPinned);
       setConversations((prev) => prev.map((c) => (c.id === conv.id ? { ...c, isPinned: newPinned } : c)));
-      if (selectedConversation?.id === conv.id) setSelectedConversation({ ...selectedConversation, isPinned: newPinned });
+      if (selectedConversation?.id === conv.id) {
+        setSelectedConversation({ ...selectedConversation, isPinned: newPinned });
+      }
 
       await api.patch(`/inbox/conversations/${conv.id}/pin`, { isPinned: newPinned });
       toast.success(newPinned ? 'Pinned conversation' : 'Unpinned conversation');
@@ -616,31 +637,23 @@ const Inbox: React.FC = () => {
     }
   };
 
-  // =========================
+  // ============================================
   // SELECT CONVERSATION
-  // =========================
+  // ============================================
   const selectConversation = (conv: Conversation) => {
     if (selectedConversation?.id === conv.id) return;
     setMessages([]);
     lastFetchedConvId.current = null;
+    pendingMessageIds.current.clear(); // Clear pending IDs when switching
     setSelectedConversation(conv);
     setShowContactInfo(false);
     navigate(`/dashboard/inbox/${conv.id}`);
     fetchMessages(conv.id);
   };
 
-  // =========================
-  // SOCKET LISTENERS
-  // =========================
-  const playNotificationSound = () => {
-    try {
-      const audio = new Audio('/notification.mp3');
-      audio.volume = 0.5;
-      audio.play().catch(() => { });
-    } catch (e) { }
-  };
-
-  // ✅ FIXED: Socket listeners with proper deduplication
+  // ============================================
+  // ✅ FIXED: SOCKET LISTENERS - Proper deduplication
+  // ============================================
   useInboxSocket(
     selectedConversation?.id || null,
 
@@ -652,77 +665,85 @@ const Inbox: React.FC = () => {
       if (!msg?.conversationId) return;
 
       const convId = msg.conversationId;
+      const msgWaId = msg.waMessageId || msg.wamId;
 
-      // ✅ FIX 1: Add to messages ONLY if it's the active conversation
+      console.log('📩 [SOCKET] New message received:', {
+        id: msg.id,
+        waMessageId: msgWaId,
+        direction: msg.direction,
+        conversationId: convId,
+      });
+
+      // ✅ Add to messages ONLY if it's the active conversation
       if (selectedConversation?.id === convId) {
         setMessages((prev) => {
-          // ✅ CRITICAL: Check ALL possible IDs for duplicates
-          const isDuplicate = prev.some(
-            (m) =>
-              m.id === msg.id ||
-              (msg.waMessageId && m.waMessageId === msg.waMessageId) ||
-              (msg.wamId && m.wamId === msg.wamId) ||
-              (msg.waMessageId && m.wamId === msg.waMessageId) ||
-              (msg.wamId && m.waMessageId === msg.wamId)
-          );
-
-          if (isDuplicate) {
+          // ✅ CRITICAL: Comprehensive duplicate check
+          if (isDuplicateMessage(msg, prev)) {
             console.log('🔄 Duplicate message prevented:', msg.id);
-            return prev; // ✅ Don't add duplicate
+
+            // If it's a pending message that now has real ID, update it
+            if (msg.metadata?.tempId && pendingMessageIds.current.has(msg.metadata.tempId)) {
+              return prev.map((m) =>
+                m.id === msg.metadata.tempId || m.id.startsWith('temp-')
+                  ? { ...msg, status: msg.status || 'SENT' }
+                  : m
+              );
+            }
+
+            return prev;
           }
 
-          console.log('✅ New message added via socket:', msg.id);
+          console.log('✅ Adding new message via socket:', msg.id);
           return [...prev, msg];
         });
 
         scrollToBottom();
 
-        // Mark as read if user is viewing this conversation
-        inboxApi.markAsRead(convId).catch(() => { });
+        // Mark as read since user is viewing
+        if (msg.direction === 'INBOUND') {
+          inboxApi.markAsRead(convId).catch(() => { });
+        }
       }
 
-      // ✅ FIX 2: Update conversations list correctly
+      // ✅ FIXED: Update conversations list with proper unread logic
       setConversations((prev) => {
         const updated = prev.map((c) => {
           if (c.id !== convId) return c;
 
           const preview =
-            msg.type === 'TEMPLATE'
-              ? '📋 Template Message'
-              : msg.type === 'IMAGE'
-                ? '📷 Image'
-                : msg.type === 'VIDEO'
-                  ? '🎥 Video'
-                  : msg.type === 'AUDIO'
-                    ? '🎵 Audio'
-                    : msg.type === 'DOCUMENT'
-                      ? '📄 Document'
-                      : msg.content?.substring(0, 50) || 'New message';
+            msg.type === 'TEMPLATE' ? '📋 Template' :
+              msg.type === 'IMAGE' ? '📷 Image' :
+                msg.type === 'VIDEO' ? '🎥 Video' :
+                  msg.type === 'AUDIO' ? '🎵 Audio' :
+                    msg.type === 'DOCUMENT' ? '📄 Document' :
+                      msg.content?.substring(0, 50) || 'New message';
+
+          // ✅ CRITICAL: Only increment unread for INBOUND messages 
+          // when user is NOT viewing this conversation
+          const shouldIncrementUnread =
+            msg.direction === 'INBOUND' &&
+            selectedConversation?.id !== convId;
 
           return {
             ...c,
             lastMessagePreview: preview,
             lastMessageAt: msg.createdAt || new Date().toISOString(),
-
-            // ✅ CRITICAL FIX: Unread count logic
-            unreadCount:
-              msg.direction === 'INBOUND' && selectedConversation?.id !== convId
-                ? (c.unreadCount || 0) + 1  // ✅ Increment ONLY if not viewing
-                : c.unreadCount || 0,        // ✅ Keep current if viewing OR outbound
+            unreadCount: shouldIncrementUnread
+              ? (c.unreadCount || 0) + 1
+              : c.unreadCount || 0,
+            isRead: !shouldIncrementUnread,
           };
         });
 
-        // ✅ Sort: Pinned first, then by last message time
+        // Re-sort: Pinned first, then by time
         return updated.sort((a, b) => {
           if (a.isPinned && !b.isPinned) return -1;
           if (!a.isPinned && b.isPinned) return 1;
-          const timeA = new Date(a.lastMessageAt || 0).getTime();
-          const timeB = new Date(b.lastMessageAt || 0).getTime();
-          return timeB - timeA;
+          return new Date(b.lastMessageAt || 0).getTime() - new Date(a.lastMessageAt || 0).getTime();
         });
       });
 
-      // ✅ Play sound ONLY for inbound messages in OTHER conversations
+      // ✅ Play sound for inbound messages in OTHER conversations
       if (msg.direction === 'INBOUND' && selectedConversation?.id !== convId) {
         playNotificationSound();
       }
@@ -732,7 +753,7 @@ const Inbox: React.FC = () => {
     // 💬 CONVERSATION UPDATE HANDLER
     // ========================================
     (updatedConv: any) => {
-      console.log('💬 Conversation updated:', updatedConv.id);
+      console.log('💬 [SOCKET] Conversation updated:', updatedConv.id);
 
       setConversations((prev) =>
         prev.map((c) => (c.id === updatedConv.id ? { ...c, ...updatedConv } : c))
@@ -747,7 +768,7 @@ const Inbox: React.FC = () => {
     // 📊 MESSAGE STATUS HANDLER - FIXED
     // ========================================
     (statusUpdate: any) => {
-      console.log('🔄 Status update received:', {
+      console.log('📊 [SOCKET] Status update:', {
         messageId: statusUpdate.messageId,
         waMessageId: statusUpdate.waMessageId,
         wamId: statusUpdate.wamId,
@@ -762,7 +783,8 @@ const Inbox: React.FC = () => {
             m.waMessageId === statusUpdate.waMessageId ||
             m.wamId === statusUpdate.wamId ||
             m.waMessageId === statusUpdate.wamId ||
-            m.wamId === statusUpdate.waMessageId;
+            m.wamId === statusUpdate.waMessageId ||
+            (statusUpdate.tempId && m.id === statusUpdate.tempId);
 
           if (!isMatch) return m;
 
@@ -782,9 +804,9 @@ const Inbox: React.FC = () => {
     }
   );
 
-  // =========================
+  // ============================================
   // EFFECTS
-  // =========================
+  // ============================================
   useEffect(() => {
     fetchConversations();
   }, [filter]);
@@ -801,13 +823,15 @@ const Inbox: React.FC = () => {
     const conv = conversations.find((c) => c.id === conversationId);
     if (conv) {
       setSelectedConversation(conv);
-      if (lastFetchedConvId.current !== conversationId) fetchMessages(conversationId);
+      if (lastFetchedConvId.current !== conversationId) {
+        fetchMessages(conversationId);
+      }
     }
   }, [conversationId, conversations]);
 
-  // =========================
-  // RENDER
-  // =========================
+  // ============================================
+  // RENDER - Loading state
+  // ============================================
   if (loading && conversations.length === 0) {
     return (
       <div className="flex items-center justify-center h-full bg-gray-50 dark:bg-gray-900">
@@ -819,25 +843,45 @@ const Inbox: React.FC = () => {
     );
   }
 
+  // ============================================
+  // RENDER - Error state
+  // ============================================
   if (error && conversations.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-full bg-gray-50 dark:bg-gray-900">
         <AlertCircle className="w-16 h-16 text-red-500 mb-4" />
-        <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">Failed to Load Inbox</h3>
+        <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
+          Failed to Load Inbox
+        </h3>
         <p className="text-gray-600 dark:text-gray-400 mb-6 text-center max-w-md">{error}</p>
-        <button onClick={fetchConversations} className="flex items-center gap-2 px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700">
+        <button
+          onClick={fetchConversations}
+          className="flex items-center gap-2 px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700"
+        >
           <RefreshCw className="w-5 h-5" /> Try Again
         </button>
       </div>
     );
   }
 
+  // ============================================
+  // RENDER - Main UI
+  // ============================================
   return (
     <div className="flex h-[calc(100vh-4rem)] bg-gray-100 dark:bg-gray-900">
-      <input type="file" ref={fileInputRef} className="hidden" accept="image/*,video/*,audio/*,.pdf,.doc,.docx" onChange={handleFileSelect} />
+      <input
+        type="file"
+        ref={fileInputRef}
+        className="hidden"
+        accept="image/*,video/*,audio/*,.pdf,.doc,.docx"
+        onChange={handleFileSelect}
+      />
 
-      {/* LEFT SIDEBAR */}
+      {/* ============================================ */}
+      {/* LEFT SIDEBAR - Conversations List */}
+      {/* ============================================ */}
       <div className="w-96 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col">
+        {/* Header */}
         <div className="p-4 border-b border-gray-200 dark:border-gray-700">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-bold text-gray-900 dark:text-white">Inbox</h2>
@@ -853,6 +897,7 @@ const Inbox: React.FC = () => {
             </button>
           </div>
 
+          {/* Search */}
           <div className="relative mb-3">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
             <input
@@ -864,6 +909,7 @@ const Inbox: React.FC = () => {
             />
           </div>
 
+          {/* Filter Tabs */}
           <div className="flex gap-1 bg-gray-100 dark:bg-gray-700 p-1 rounded-xl">
             {[
               { key: 'all', label: 'All Chats' },
@@ -879,10 +925,9 @@ const Inbox: React.FC = () => {
                   }`}
               >
                 {f.label}
-                {/* ✅ Show count badge */}
-                {f.key === 'unread' && conversations.filter(c => c.unreadCount > 0).length > 0 && (
+                {f.key === 'unread' && conversations.filter((c) => c.unreadCount > 0).length > 0 && (
                   <span className="ml-1 px-1.5 py-0.5 text-xs bg-green-500 text-white rounded-full">
-                    {conversations.filter(c => c.unreadCount > 0).length}
+                    {conversations.filter((c) => c.unreadCount > 0).length}
                   </span>
                 )}
               </button>
@@ -890,11 +935,8 @@ const Inbox: React.FC = () => {
           </div>
         </div>
 
-        <div
-          ref={conversationListRef}
-          onScroll={handleConversationScroll}
-          className="flex-1 overflow-y-auto"
-        >
+        {/* Conversations List */}
+        <div ref={conversationListRef} className="flex-1 overflow-y-auto">
           {conversations.map((conv) => (
             <div key={conv.id} className="relative">
               <div
@@ -904,30 +946,40 @@ const Inbox: React.FC = () => {
                   : ''
                   }`}
               >
+                {/* Avatar */}
                 <div className="relative flex-shrink-0">
                   <div className="w-12 h-12 bg-gradient-to-br from-green-400 to-green-600 rounded-full flex items-center justify-center text-white font-semibold text-lg shadow-sm">
                     {conv.contact.avatar ? (
-                      <img src={conv.contact.avatar} className="w-full h-full rounded-full object-cover" alt="" />
+                      <img
+                        src={conv.contact.avatar}
+                        className="w-full h-full rounded-full object-cover"
+                        alt=""
+                      />
                     ) : (
                       getContactInitial(conv.contact)
                     )}
                   </div>
 
+                  {/* Pin indicator */}
                   {conv.isPinned && (
                     <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-yellow-400 rounded-full flex items-center justify-center shadow-sm">
                       <Pin className="w-3 h-3 text-yellow-900" />
                     </div>
                   )}
 
+                  {/* ✅ FIXED: Unread indicator (green dot) */}
                   {conv.unreadCount > 0 && (
                     <div className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-green-500 rounded-full border-2 border-white dark:border-gray-800 animate-pulse" />
                   )}
                 </div>
 
+                {/* Content */}
                 <div className="flex-1 min-w-0">
                   <div className="flex justify-between mb-1">
                     <h3
-                      className={`font-semibold truncate ${conv.unreadCount > 0 ? 'text-gray-900 dark:text-white' : 'text-gray-700 dark:text-gray-300'
+                      className={`font-semibold truncate ${conv.unreadCount > 0
+                        ? 'text-gray-900 dark:text-white'
+                        : 'text-gray-700 dark:text-gray-300'
                         }`}
                     >
                       {getContactName(conv.contact)}
@@ -939,6 +991,8 @@ const Inbox: React.FC = () => {
                       >
                         {safeFormatDistance(conv.lastMessageAt, 'now')}
                       </span>
+
+                      {/* ✅ FIXED: Unread badge */}
                       {conv.unreadCount > 0 && (
                         <span className="min-w-[1.25rem] h-5 px-1.5 bg-green-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center shadow-sm">
                           {conv.unreadCount > 99 ? '99+' : conv.unreadCount}
@@ -956,6 +1010,7 @@ const Inbox: React.FC = () => {
                     {conv.lastMessagePreview || 'No messages yet'}
                   </p>
 
+                  {/* Labels */}
                   {conv.labels?.length ? (
                     <div className="flex flex-wrap gap-1 mt-1">
                       {conv.labels.slice(0, 3).map((label) => {
@@ -974,6 +1029,7 @@ const Inbox: React.FC = () => {
                   ) : null}
                 </div>
 
+                {/* Menu Button */}
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
@@ -985,6 +1041,7 @@ const Inbox: React.FC = () => {
                 </button>
               </div>
 
+              {/* Context Menu */}
               {showConversationMenu === conv.id && (
                 <>
                   <div className="fixed inset-0 z-10" onClick={() => setShowConversationMenu(null)} />
@@ -1013,18 +1070,25 @@ const Inbox: React.FC = () => {
                       onClick={(e) => handleArchiveConversation(conv, e)}
                       className="w-full flex items-center gap-2 px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700"
                     >
-                      {conv.isArchived ? <ArchiveRestore className="w-4 h-4" /> : <Archive className="w-4 h-4" />}
+                      {conv.isArchived ? (
+                        <ArchiveRestore className="w-4 h-4" />
+                      ) : (
+                        <Archive className="w-4 h-4" />
+                      )}
                       {conv.isArchived ? 'Unarchive' : 'Archive'}
                     </button>
                   </div>
                 </>
               )}
 
+              {/* Label Picker */}
               {showLabelPicker === conv.id && (
                 <>
                   <div className="fixed inset-0 z-10" onClick={() => setShowLabelPicker(null)} />
                   <div className="absolute right-4 top-12 w-48 bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 py-2 z-20">
-                    <div className="px-3 py-1 text-xs font-semibold text-gray-500 uppercase">Add Label</div>
+                    <div className="px-3 py-1 text-xs font-semibold text-gray-500 uppercase">
+                      Add Label
+                    </div>
                     {AVAILABLE_LABELS.filter((l) => !(conv.labels || []).includes(l)).map((label) => {
                       const style = getLabelStyle(label);
                       return (
@@ -1044,44 +1108,56 @@ const Inbox: React.FC = () => {
             </div>
           ))}
 
-          {/* ✅ Loading more indicator */}
+          {/* Loading More */}
           {loadingMore && (
             <div className="flex justify-center py-4">
               <Loader2 className="w-6 h-6 animate-spin text-green-600" />
             </div>
           )}
 
-          {/* ✅ No more conversations */}
+          {/* No More */}
           {!hasMore && conversations.length > 0 && (
-            <div className="text-center py-4 text-gray-400 text-sm">
-              No more conversations
-            </div>
+            <div className="text-center py-4 text-gray-400 text-sm">No more conversations</div>
           )}
         </div>
       </div>
 
-      {/* CHAT AREA */}
+      {/* ============================================ */}
+      {/* RIGHT SIDE - Chat Area */}
+      {/* ============================================ */}
       <div className="flex-1 flex flex-col h-full overflow-hidden">
         {selectedConversation ? (
           <>
+            {/* Chat Header */}
             <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-4">
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3 cursor-pointer" onClick={() => setShowContactInfo(!showContactInfo)}>
+                <div
+                  className="flex items-center gap-3 cursor-pointer"
+                  onClick={() => setShowContactInfo(!showContactInfo)}
+                >
                   <div className="w-10 h-10 bg-gradient-to-br from-green-400 to-green-600 rounded-full flex items-center justify-center text-white font-semibold">
                     {selectedConversation.contact.avatar ? (
-                      <img src={selectedConversation.contact.avatar} className="w-full h-full rounded-full object-cover" alt="" />
+                      <img
+                        src={selectedConversation.contact.avatar}
+                        className="w-full h-full rounded-full object-cover"
+                        alt=""
+                      />
                     ) : (
                       getContactInitial(selectedConversation.contact)
                     )}
                   </div>
                   <div>
-                    <h2 className="font-semibold text-gray-900 dark:text-white">{getContactName(selectedConversation.contact)}</h2>
+                    <h2 className="font-semibold text-gray-900 dark:text-white">
+                      {getContactName(selectedConversation.contact)}
+                    </h2>
                     <p className="text-xs text-gray-500">{selectedConversation.contact.phone}</p>
                   </div>
                 </div>
                 <button
                   onClick={() => setShowContactInfo(!showContactInfo)}
-                  className={`p-2 rounded-lg ${showContactInfo ? 'bg-green-100 text-green-600' : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600'
+                  className={`p-2 rounded-lg ${showContactInfo
+                    ? 'bg-green-100 text-green-600'
+                    : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600'
                     }`}
                 >
                   <Info className="w-5 h-5" />
@@ -1089,6 +1165,7 @@ const Inbox: React.FC = () => {
               </div>
             </div>
 
+            {/* Window Status */}
             <div className="flex-none z-10 w-full shrink-0">
               <WindowStatus
                 windowExpiresAt={selectedConversation.windowExpiresAt || null}
@@ -1096,6 +1173,7 @@ const Inbox: React.FC = () => {
               />
             </div>
 
+            {/* Messages Area */}
             <div className="flex-1 overflow-y-auto p-4 space-y-2 bg-[#efe7dd] dark:bg-gray-950">
               {loadingMessages ? (
                 <div className="flex items-center justify-center h-full">
@@ -1105,7 +1183,10 @@ const Inbox: React.FC = () => {
                 <>
                   {messages.map((m, idx) => {
                     const currentDate = m.createdAt ? new Date(m.createdAt) : null;
-                    const prevDate = idx > 0 && messages[idx - 1].createdAt ? new Date(messages[idx - 1].createdAt) : null;
+                    const prevDate =
+                      idx > 0 && messages[idx - 1].createdAt
+                        ? new Date(messages[idx - 1].createdAt)
+                        : null;
 
                     const showDate =
                       idx === 0 ||
@@ -1140,6 +1221,7 @@ const Inbox: React.FC = () => {
               )}
             </div>
 
+            {/* Chat Input */}
             <div className="flex-none z-20 w-full shrink-0">
               <ChatInput
                 onSendMessage={async (msg) => {
@@ -1155,6 +1237,7 @@ const Inbox: React.FC = () => {
             </div>
           </>
         ) : (
+          // Empty State
           <div className="flex-1 flex items-center justify-center">
             <div className="text-center">
               <div className="w-24 h-24 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
@@ -1167,23 +1250,35 @@ const Inbox: React.FC = () => {
         )}
       </div>
 
+      {/* ============================================ */}
+      {/* RIGHT SIDEBAR - Contact Info */}
+      {/* ============================================ */}
       {showContactInfo && selectedConversation && (
         <div className="w-80 bg-white border-l border-gray-200 flex flex-col overflow-hidden">
           <div className="p-4 border-b flex items-center justify-between">
             <h3 className="font-semibold text-gray-900">Contact Info</h3>
-            <button onClick={() => setShowContactInfo(false)} className="p-1 hover:bg-gray-100 rounded">
+            <button
+              onClick={() => setShowContactInfo(false)}
+              className="p-1 hover:bg-gray-100 rounded"
+            >
               <X className="w-5 h-5 text-gray-500" />
             </button>
           </div>
           <div className="p-6 text-center border-b">
             <div className="w-24 h-24 bg-gradient-to-br from-green-400 to-green-600 rounded-full flex items-center justify-center text-white text-3xl font-bold mx-auto mb-4">
               {selectedConversation.contact.avatar ? (
-                <img src={selectedConversation.contact.avatar} className="w-full h-full rounded-full object-cover" alt="" />
+                <img
+                  src={selectedConversation.contact.avatar}
+                  className="w-full h-full rounded-full object-cover"
+                  alt=""
+                />
               ) : (
                 getContactInitial(selectedConversation.contact)
               )}
             </div>
-            <h4 className="text-xl font-bold">{getContactName(selectedConversation.contact)}</h4>
+            <h4 className="text-xl font-bold">
+              {getContactName(selectedConversation.contact)}
+            </h4>
             <p className="text-gray-500 mt-1">{selectedConversation.contact.phone}</p>
           </div>
 
@@ -1196,12 +1291,17 @@ const Inbox: React.FC = () => {
             )}
 
             <div>
-              <label className="text-xs font-semibold text-gray-500 uppercase mb-2 block">Labels</label>
+              <label className="text-xs font-semibold text-gray-500 uppercase mb-2 block">
+                Labels
+              </label>
               <div className="flex flex-wrap gap-2">
                 {(selectedConversation.labels || []).map((label) => {
                   const style = getLabelStyle(label);
                   return (
-                    <span key={label} className={`inline-flex items-center px-2.5 py-1 text-xs font-medium rounded-full ${style.bg} ${style.text}`}>
+                    <span
+                      key={label}
+                      className={`inline-flex items-center px-2.5 py-1 text-xs font-medium rounded-full ${style.bg} ${style.text}`}
+                    >
                       {label}
                     </span>
                   );
@@ -1211,6 +1311,8 @@ const Inbox: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Template Modal */}
       {showTemplateModal && selectedConversation && (
         <SendTemplateModal
           isOpen={showTemplateModal}

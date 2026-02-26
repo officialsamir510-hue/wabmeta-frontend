@@ -20,7 +20,6 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { billing } from '../services/api';
 import toast from 'react-hot-toast';
-import type { User } from '../types/auth';
 
 // ============================================
 // TYPES
