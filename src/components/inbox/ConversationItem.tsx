@@ -109,8 +109,8 @@ const ConversationItem: React.FC<ConversationItemProps> = ({
     <div
       onClick={onClick}
       className={`flex items-center p-4 cursor-pointer transition-all border-b border-gray-100 ${isActive
-          ? 'bg-primary-50 border-l-4 border-l-primary-500'
-          : 'hover:bg-gray-50'
+        ? 'bg-primary-50 border-l-4 border-l-primary-500'
+        : 'hover:bg-gray-50'
         }`}
     >
       {/* Avatar */}

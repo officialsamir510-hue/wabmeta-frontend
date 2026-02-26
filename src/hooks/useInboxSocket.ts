@@ -41,7 +41,6 @@ export const useInboxSocket = (
 ) => {
     const { socket, isConnected, joinConversation, leaveConversation } = useSocket();
     const previousConversationId = useRef<string | null>(null);
-    const listenersAttached = useRef(false);
 
     // Store callbacks in refs
     const onNewMessageRef = useRef(onNewMessage);
@@ -86,8 +85,10 @@ export const useInboxSocket = (
             return;
         }
 
-        // Avoid duplicate listeners
-        if (listenersAttached.current) return;
+        // ✅ CRITICAL: Remove old listeners before adding new ones
+        socket.off('message:new');
+        socket.off('conversation:updated');
+        socket.off('message:status');
 
         const handleNewMessage = (data: any) => {
             console.log('📩 [SOCKET] message:new received:', data);
@@ -118,22 +119,20 @@ export const useInboxSocket = (
             }
         };
 
-        // Register listeners
+        // ✅ Register listeners
         socket.on('message:new', handleNewMessage);
         socket.on('conversation:updated', handleConversationUpdate);
         socket.on('message:status', handleMessageStatus);
 
-        listenersAttached.current = true;
         console.log('✅ [SOCKET] Inbox event listeners registered');
 
         return () => {
             socket.off('message:new', handleNewMessage);
             socket.off('conversation:updated', handleConversationUpdate);
             socket.off('message:status', handleMessageStatus);
-            listenersAttached.current = false;
             console.log('🔌 [SOCKET] Inbox event listeners removed');
         };
-    }, [socket]);
+    }, [socket]); // ✅ Only re-run when socket changes
 
     return { isConnected };
 };

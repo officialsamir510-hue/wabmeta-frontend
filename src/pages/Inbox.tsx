@@ -327,10 +327,10 @@ const Inbox: React.FC = () => {
     const text = textToSend || messageText;
     if (!text.trim() || !selectedConversation) return;
 
-    const tempId = `temp-${Date.now()}-${Math.random()}`;
+    const tempId = `temp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     const now = new Date().toISOString();
 
-    // ✅ Create optimistic message
+    // ✅ Create optimistic message with unique temp ID
     const tempMessage: Message = {
       id: tempId,
       content: text,
@@ -341,13 +341,14 @@ const Inbox: React.FC = () => {
       sentAt: now,
     };
 
-    // ✅ IMMEDIATELY add to UI (no await)
+    // ✅ Add to UI immediately
     setMessages((prev) => [...prev, tempMessage]);
     const sentText = text;
-    setMessageText(''); // Clear input immediately
+    setMessageText(''); // Clear input
     scrollToBottom();
 
     try {
+      // Get account
       const accountsRes = await whatsappApi.accounts();
       const accounts = accountsRes.data?.data || [];
       const connected = accounts.find((a: any) => a.status === 'CONNECTED');
@@ -355,37 +356,40 @@ const Inbox: React.FC = () => {
 
       if (!accountId) throw new Error('No WhatsApp account connected');
 
-      // ✅ Send in background
+      // ✅ Send message with tempId for tracking
       const response = await whatsappApi.sendText({
         whatsappAccountId: accountId,
         to: selectedConversation.contact.phone,
         message: sentText,
+        // ✅ Pass tempId so backend can link it
+        tempId: tempId,
       });
 
       if (response.data.success) {
         const realMessage = response.data.data;
 
-        // ✅ Update temp message with real data (checking for socket duplicates)
+        // ✅ Replace temp message with real one
         setMessages((prev) => {
-          const isAlreadyIn = prev.some(m =>
-            m.id === realMessage.id ||
-            (m.waMessageId && m.waMessageId === (realMessage.waMessageId || realMessage.wamId))
+          // Check if socket already added it
+          const socketAlreadyAdded = prev.some(
+            (m) =>
+              m.id === realMessage.id ||
+              (realMessage.waMessageId && m.waMessageId === realMessage.waMessageId) ||
+              (realMessage.wamId && m.wamId === realMessage.wamId)
           );
 
-          if (isAlreadyIn) {
-            // Socket already added it, just remove the temporary one
-            return prev.filter(m => m.id !== tempId);
+          if (socketAlreadyAdded) {
+            // Socket beat us to it, just remove temp
+            console.log('🔄 Socket already added message, removing temp');
+            return prev.filter((m) => m.id !== tempId);
           }
 
+          // Replace temp with real
           return prev.map((m) =>
             m.id === tempId
               ? {
-                ...m,
-                id: realMessage.id || tempId,
-                waMessageId: realMessage.waMessageId || realMessage.wamId,
-                wamId: realMessage.wamId || realMessage.waMessageId,
+                ...realMessage,
                 status: 'SENT',
-                sentAt: realMessage.sentAt || now,
               }
               : m
           );
@@ -395,21 +399,23 @@ const Inbox: React.FC = () => {
         setConversations((prev) =>
           prev.map((c) =>
             c.id === selectedConversation.id
-              ? { ...c, lastMessagePreview: sentText, lastMessageAt: now }
+              ? {
+                ...c,
+                lastMessagePreview: sentText.substring(0, 50),
+                lastMessageAt: now,
+              }
               : c
           )
         );
 
-        // ✅ Success feedback (subtle, no toast spam)
         console.log('✅ Message sent successfully');
       } else {
-        throw new Error(response.data.message || 'Failed to send message');
+        throw new Error(response.data.message || 'Failed to send');
       }
     } catch (e: any) {
-      // ✅ Only show error toast
       toast.error(e.response?.data?.message || e.message || 'Failed to send message');
 
-      // ✅ Mark as FAILED (don't remove message)
+      // ✅ Mark as FAILED (keep in UI so user can see error)
       setMessages((prev) =>
         prev.map((m) => (m.id === tempId ? { ...m, status: 'FAILED' } : m))
       );
@@ -634,51 +640,119 @@ const Inbox: React.FC = () => {
     } catch (e) { }
   };
 
+  // ✅ FIXED: Socket listeners with proper deduplication
   useInboxSocket(
     selectedConversation?.id || null,
+
+    // ========================================
+    // 📩 NEW MESSAGE HANDLER - FIXED
+    // ========================================
     (newMessage: any) => {
       const msg = newMessage?.message || newMessage;
       if (!msg?.conversationId) return;
 
-      if (selectedConversation?.id === msg.conversationId) {
-        // Check duplicate
+      const convId = msg.conversationId;
+
+      // ✅ FIX 1: Add to messages ONLY if it's the active conversation
+      if (selectedConversation?.id === convId) {
         setMessages((prev) => {
-          if (prev.some(m => m.id === msg.id || m.waMessageId === msg.waMessageId)) return prev;
+          // ✅ CRITICAL: Check ALL possible IDs for duplicates
+          const isDuplicate = prev.some(
+            (m) =>
+              m.id === msg.id ||
+              (msg.waMessageId && m.waMessageId === msg.waMessageId) ||
+              (msg.wamId && m.wamId === msg.wamId) ||
+              (msg.waMessageId && m.wamId === msg.waMessageId) ||
+              (msg.wamId && m.waMessageId === msg.wamId)
+          );
+
+          if (isDuplicate) {
+            console.log('🔄 Duplicate message prevented:', msg.id);
+            return prev; // ✅ Don't add duplicate
+          }
+
+          console.log('✅ New message added via socket:', msg.id);
           return [...prev, msg];
         });
+
         scrollToBottom();
-        inboxApi.markAsRead(msg.conversationId).catch(() => { });
+
+        // Mark as read if user is viewing this conversation
+        inboxApi.markAsRead(convId).catch(() => { });
       }
 
-      setConversations((prev) =>
-        prev.map((c) => {
-          if (c.id === msg.conversationId) {
-            return {
-              ...c,
-              lastMessagePreview: msg.type === 'TEMPLATE'
-                ? '📋 Template Message'
-                : (msg.content?.substring(0, 50) || 'New message'),
-              lastMessageAt: msg.createdAt || new Date().toISOString(),
-              unreadCount: selectedConversation?.id === msg.conversationId ? 0 : (c.unreadCount || 0) + 1,
-            };
-          }
-          return c;
-        })
-      );
+      // ✅ FIX 2: Update conversations list correctly
+      setConversations((prev) => {
+        const updated = prev.map((c) => {
+          if (c.id !== convId) return c;
 
-      if (msg.direction === 'INBOUND' && selectedConversation?.id !== msg.conversationId) {
+          const preview =
+            msg.type === 'TEMPLATE'
+              ? '📋 Template Message'
+              : msg.type === 'IMAGE'
+                ? '📷 Image'
+                : msg.type === 'VIDEO'
+                  ? '🎥 Video'
+                  : msg.type === 'AUDIO'
+                    ? '🎵 Audio'
+                    : msg.type === 'DOCUMENT'
+                      ? '📄 Document'
+                      : msg.content?.substring(0, 50) || 'New message';
+
+          return {
+            ...c,
+            lastMessagePreview: preview,
+            lastMessageAt: msg.createdAt || new Date().toISOString(),
+
+            // ✅ CRITICAL FIX: Unread count logic
+            unreadCount:
+              msg.direction === 'INBOUND' && selectedConversation?.id !== convId
+                ? (c.unreadCount || 0) + 1  // ✅ Increment ONLY if not viewing
+                : c.unreadCount || 0,        // ✅ Keep current if viewing OR outbound
+          };
+        });
+
+        // ✅ Sort: Pinned first, then by last message time
+        return updated.sort((a, b) => {
+          if (a.isPinned && !b.isPinned) return -1;
+          if (!a.isPinned && b.isPinned) return 1;
+          const timeA = new Date(a.lastMessageAt || 0).getTime();
+          const timeB = new Date(b.lastMessageAt || 0).getTime();
+          return timeB - timeA;
+        });
+      });
+
+      // ✅ Play sound ONLY for inbound messages in OTHER conversations
+      if (msg.direction === 'INBOUND' && selectedConversation?.id !== convId) {
         playNotificationSound();
       }
     },
+
+    // ========================================
+    // 💬 CONVERSATION UPDATE HANDLER
+    // ========================================
     (updatedConv: any) => {
-      setConversations((prev) => prev.map((c) => (c.id === updatedConv.id ? { ...c, ...updatedConv } : c)));
+      console.log('💬 Conversation updated:', updatedConv.id);
+
+      setConversations((prev) =>
+        prev.map((c) => (c.id === updatedConv.id ? { ...c, ...updatedConv } : c))
+      );
+
       if (selectedConversation?.id === updatedConv.id) {
         setSelectedConversation((prev) => (prev ? { ...prev, ...updatedConv } : prev));
       }
     },
-    // ✅ FIXED: Status update handler with better ID matching
+
+    // ========================================
+    // 📊 MESSAGE STATUS HANDLER - FIXED
+    // ========================================
     (statusUpdate: any) => {
-      console.log('🔄 [INBOX] Status Update:', statusUpdate);
+      console.log('🔄 Status update received:', {
+        messageId: statusUpdate.messageId,
+        waMessageId: statusUpdate.waMessageId,
+        wamId: statusUpdate.wamId,
+        status: statusUpdate.status,
+      });
 
       setMessages((prev) =>
         prev.map((m) => {
@@ -690,27 +764,19 @@ const Inbox: React.FC = () => {
             m.waMessageId === statusUpdate.wamId ||
             m.wamId === statusUpdate.waMessageId;
 
-          if (isMatch) {
-            console.log(`✅ Updating message ${m.id} status: ${m.status} → ${statusUpdate.status}`);
+          if (!isMatch) return m;
 
-            const newStatus = statusUpdate.status.toUpperCase() as Message['status'];
+          const newStatus = statusUpdate.status.toUpperCase() as Message['status'];
+          console.log(`✅ Updating message ${m.id}: ${m.status} → ${newStatus}`);
 
-            return {
-              ...m,
-              status: newStatus,
-              statusUpdatedAt: statusUpdate.timestamp,
-              ...(newStatus === 'SENT' && { sentAt: statusUpdate.timestamp }),
-              ...(newStatus === 'DELIVERED' && {
-                deliveredAt: statusUpdate.timestamp,
-                status: 'DELIVERED' as const
-              }),
-              ...(newStatus === 'READ' && {
-                readAt: statusUpdate.timestamp,
-                status: 'READ' as const
-              }),
-            };
-          }
-          return m;
+          return {
+            ...m,
+            status: newStatus,
+            statusUpdatedAt: statusUpdate.timestamp,
+            ...(newStatus === 'SENT' && { sentAt: statusUpdate.timestamp }),
+            ...(newStatus === 'DELIVERED' && { deliveredAt: statusUpdate.timestamp }),
+            ...(newStatus === 'READ' && { readAt: statusUpdate.timestamp }),
+          };
         })
       );
     }

@@ -631,7 +631,7 @@ export const whatsapp = {
     api.post<ApiResponse>('/whatsapp/connect', data),
   disconnect: (id: string) => api.delete<ApiResponse>(`/whatsapp/accounts/${id}`),
   setDefault: (id: string) => api.post<ApiResponse>(`/whatsapp/accounts/${id}/default`),
-  sendText: (data: { whatsappAccountId: string; to: string; message: string }) =>
+  sendText: (data: { whatsappAccountId: string; to: string; message: string; tempId?: string }) =>
     api.post<ApiResponse>('/whatsapp/send/text', data),
   sendTemplate: (data: any) => api.post<ApiResponse>('/whatsapp/send/template', data),
 };

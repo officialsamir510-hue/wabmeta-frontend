@@ -37,8 +37,8 @@ const ConversationList: React.FC<ConversationListProps> = ({
   const filteredConversations = conversations
     .filter(conv => {
       const matchesSearch = conv.contact.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                           conv.contact.phone.includes(searchQuery) ||
-                           conv.lastMessage?.content?.toLowerCase().includes(searchQuery.toLowerCase());
+        conv.contact.phone.includes(searchQuery) ||
+        conv.lastMessage?.content?.toLowerCase().includes(searchQuery.toLowerCase());
       const matchesStatus = statusFilter === 'all' || conv.status === statusFilter;
       return matchesSearch && matchesStatus;
     })
@@ -85,9 +85,8 @@ const ConversationList: React.FC<ConversationListProps> = ({
           />
           <button
             onClick={() => setShowFilters(!showFilters)}
-            className={`absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-lg transition-colors ${
-              showFilters ? 'bg-primary-100 text-primary-600' : 'text-gray-400 hover:text-gray-600'
-            }`}
+            className={`absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-lg transition-colors ${showFilters ? 'bg-primary-100 text-primary-600' : 'text-gray-400 hover:text-gray-600'
+              }`}
           >
             <Filter className="w-4 h-4" />
           </button>
@@ -102,11 +101,10 @@ const ConversationList: React.FC<ConversationListProps> = ({
               <button
                 key={filter.value}
                 onClick={() => setStatusFilter(filter.value as any)}
-                className={`flex items-center space-x-2 p-2 rounded-lg text-sm transition-colors ${
-                  statusFilter === filter.value
+                className={`flex items-center space-x-2 p-2 rounded-lg text-sm transition-colors ${statusFilter === filter.value
                     ? 'bg-primary-100 text-primary-700'
                     : 'bg-white text-gray-600 hover:bg-gray-100'
-                }`}
+                  }`}
               >
                 <filter.icon className="w-4 h-4" />
                 <span>{filter.label}</span>
@@ -123,11 +121,10 @@ const ConversationList: React.FC<ConversationListProps> = ({
           <button
             key={filter.value}
             onClick={() => setStatusFilter(filter.value as any)}
-            className={`flex-1 py-3 text-sm font-medium transition-colors relative ${
-              statusFilter === filter.value
+            className={`flex-1 py-3 text-sm font-medium transition-colors relative ${statusFilter === filter.value
                 ? 'text-primary-600'
                 : 'text-gray-500 hover:text-gray-700'
-            }`}
+              }`}
           >
             {filter.label}
             {filter.count > 0 && filter.value !== 'all' && (
@@ -158,8 +155,8 @@ const ConversationList: React.FC<ConversationListProps> = ({
             </div>
             <h3 className="text-lg font-semibold text-gray-900 mb-1">No conversations</h3>
             <p className="text-gray-500 text-sm">
-              {searchQuery 
-                ? 'Try a different search term' 
+              {searchQuery
+                ? 'Try a different search term'
                 : 'Start a new conversation to begin'
               }
             </p>

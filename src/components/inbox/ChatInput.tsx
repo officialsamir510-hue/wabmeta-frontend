@@ -66,15 +66,23 @@ const ChatInput: React.FC<ChatInputProps> = ({
       return;
     }
 
+    const textToSend = message.trim();
+    // ✅ NO try/catch here, let handleSendMessage handle it if needed
+    // or keep it for sending logic
     try {
       setSending(true);
-      await onSendMessage(message.trim());
+
+      // ✅ Call parent's onSendMessage (which handles optimistic update)
+      await onSendMessage(textToSend);
+
+      // ✅ Clear input AFTER successful send
       setMessage('');
       if (textareaRef.current) {
         textareaRef.current.style.height = 'auto';
       }
     } catch (error) {
       console.error('Send message error:', error);
+      // ✅ Don't clear message on error so user can retry
     } finally {
       setSending(false);
     }
