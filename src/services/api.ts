@@ -662,9 +662,49 @@ export const whatsapp = {
     api.post<ApiResponse>('/whatsapp/connect', data),
   disconnect: (id: string) => api.delete<ApiResponse>(`/whatsapp/accounts/${id}`),
   setDefault: (id: string) => api.post<ApiResponse>(`/whatsapp/accounts/${id}/default`),
-  sendText: (data: { whatsappAccountId: string; to: string; message: string; tempId?: string }) =>
-    api.post<ApiResponse>('/whatsapp/send/text', data),
-  sendTemplate: (data: any) => api.post<ApiResponse>('/whatsapp/send/template', data),
+  sendText: async (data: {
+    whatsappAccountId: string;
+    to: string;
+    message: string;
+    tempId?: string;
+  }) => {
+    const response = await api.post<ApiResponse>('/whatsapp/send/text', data);
+
+    // ✅ CRITICAL: Normalize response with guaranteed timestamps
+    const now = new Date().toISOString();
+
+    if (response.data?.data) {
+      const msgData = response.data.data as any;
+      response.data.data = {
+        ...msgData,
+        createdAt: msgData.createdAt || msgData.sentAt || now,
+        sentAt: msgData.sentAt || msgData.createdAt || now,
+      };
+    }
+
+    console.log('📤 Normalized send response:', response.data);
+
+    return response;
+  },
+  sendTemplate: async (data: any) => {
+    const response = await api.post<ApiResponse>('/whatsapp/send/template', data);
+
+    // ✅ CRITICAL: Normalize response with guaranteed timestamps
+    const now = new Date().toISOString();
+
+    if (response.data?.data) {
+      const msgData = response.data.data as any;
+      response.data.data = {
+        ...msgData,
+        createdAt: msgData.createdAt || msgData.sentAt || now,
+        sentAt: msgData.sentAt || msgData.createdAt || now,
+      };
+    }
+
+    console.log('📤 Normalized sendTemplate response:', response.data);
+
+    return response;
+  },
 };
 
 // ---------- META ----------
@@ -693,8 +733,26 @@ export const inbox = {
   getConversation: (id: string) => api.get<ApiResponse>(`/inbox/conversations/${id}`),
   getMessages: (conversationId: string, params?: any) =>
     api.get<ApiResponse>(`/inbox/conversations/${conversationId}/messages`, { params }),
-  sendMessage: (conversationId: string, data: { content: string; type?: string }) =>
-    api.post<ApiResponse>(`/inbox/conversations/${conversationId}/messages`, data),
+  sendMessage: async (conversationId: string, data: { content: string; type?: string }) => {
+    const response = await api.post<ApiResponse>(
+      `/inbox/conversations/${conversationId}/messages`,
+      data
+    );
+
+    // ✅ CRITICAL: Normalize response with guaranteed timestamps
+    const now = new Date().toISOString();
+
+    if (response.data?.data) {
+      const msgData = response.data.data as any;
+      response.data.data = {
+        ...msgData,
+        createdAt: msgData.createdAt || msgData.sentAt || now,
+        sentAt: msgData.sentAt || msgData.createdAt || now,
+      };
+    }
+
+    return response;
+  },
   markAsRead: (conversationId: string) =>
     api.post<ApiResponse>(`/inbox/conversations/${conversationId}/read`),
   stats: () => api.get<ApiResponse>('/inbox/stats'),
