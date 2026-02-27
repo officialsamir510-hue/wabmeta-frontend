@@ -182,31 +182,6 @@ const Inbox: React.FC = () => {
     } catch (e) { }
   };
 
-  // ============================================
-  // ✅ IMPROVED: Check for duplicate messages
-  // ============================================
-  const isDuplicateMessage = (newMsg: Message, existingMessages: Message[]): boolean => {
-    return existingMessages.some((m) => {
-      // Check by ID
-      if (m.id === newMsg.id) return true;
-
-      // Check by waMessageId
-      if (newMsg.waMessageId && m.waMessageId === newMsg.waMessageId) return true;
-
-      // Check by wamId
-      if (newMsg.wamId && m.wamId === newMsg.wamId) return true;
-
-      // Cross-check waMessageId and wamId
-      if (newMsg.waMessageId && m.wamId === newMsg.waMessageId) return true;
-      if (newMsg.wamId && m.waMessageId === newMsg.wamId) return true;
-
-      // Check pending message IDs (for optimistic updates)
-      if (pendingMessageIds.current.has(newMsg.id)) return true;
-      if (newMsg.waMessageId && pendingMessageIds.current.has(newMsg.waMessageId)) return true;
-
-      return false;
-    });
-  };
 
   // ============================================
   // FETCH CONVERSATIONS
@@ -328,8 +303,6 @@ const Inbox: React.FC = () => {
     if (!text.trim() || !selectedConversation) return;
 
     const tempId = `temp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-
-    // ✅ CRITICAL: Create timestamp at the start
     const now = new Date().toISOString();
 
     // Create optimistic message with guaranteed timestamp
@@ -341,6 +314,7 @@ const Inbox: React.FC = () => {
       status: 'PENDING',
       createdAt: now,  // ✅ Always set
       sentAt: now,     // ✅ Always set
+      metadata: { tempId } // ✅ Important: Store tempId in metadata locally too
     };
 
     console.log('📤 Creating temp message:', tempMessage);
@@ -375,55 +349,29 @@ const Inbox: React.FC = () => {
         whatsappAccountId: accountId,
         to: selectedConversation.contact.phone,
         message: text,
-        tempId: tempId,
+        tempId: tempId, // ✅ Backend must receive this
       });
 
       console.log('📤 API Response:', response.data);
 
       if (response.data.success) {
         const realMessage = response.data.data;
-        const realWaId = realMessage?.waMessageId || realMessage?.wamId;
 
-        console.log('📤 Real message from API:', realMessage);
-
-        // ✅ CRITICAL FIX: Ensure timestamp exists in real message
-        const messageTimestamp = realMessage?.createdAt || realMessage?.sentAt || now;
-
-        if (realWaId) {
-          pendingMessageIds.current.add(realWaId);
-        }
-
-        setMessages((prev) => {
-          const socketAlreadyAdded = prev.some(
-            (m) =>
-              m.id !== tempId && (
-                m.id === realMessage?.id ||
-                (realWaId && m.waMessageId === realWaId) ||
-                (realWaId && m.wamId === realWaId)
-              )
-          );
-
-          if (socketAlreadyAdded) {
-            console.log('🔄 Socket already added, removing temp');
-            return prev.filter((m) => m.id !== tempId);
-          }
-
-          return prev.map((m) =>
-            m.id === tempId
-              ? {
+        // ✅ Update state: Replace Temp with Real
+        setMessages((prev) =>
+          prev.map((m) => {
+            if (m.id === tempId) {
+              return {
                 ...m,
                 ...realMessage,
-                id: realMessage?.id || tempId,
-                waMessageId: realWaId,
-                wamId: realWaId,
-                status: 'SENT' as const,
-                // ✅ CRITICAL: Ensure timestamps NEVER undefined
-                createdAt: messageTimestamp,
-                sentAt: messageTimestamp,
-              }
-              : m
-          );
-        });
+                status: 'SENT',
+                // Preserve timestamp if backend is missing it (though we fixed that)
+                createdAt: realMessage.createdAt || m.createdAt,
+              };
+            }
+            return m;
+          })
+        );
 
         setConversations((prev) =>
           prev.map((c) =>
@@ -674,7 +622,7 @@ const Inbox: React.FC = () => {
 
       const convId = msg.conversationId;
 
-      // ✅ CRITICAL FIX: Ensure timestamp exists
+      // Ensure timestamp
       const now = new Date().toISOString();
       const messageWithTimestamp = {
         ...msg,
@@ -682,16 +630,30 @@ const Inbox: React.FC = () => {
         sentAt: msg.sentAt || msg.createdAt || now,
       };
 
-      console.log('📩 Socket message with timestamp:', messageWithTimestamp);
-
       if (selectedConversation?.id === convId) {
         setMessages((prev) => {
-          if (isDuplicateMessage(messageWithTimestamp, prev)) {
-            console.log('🔄 Duplicate prevented');
-            return prev;
+          // ✅ Step 1: Check if this message already exists (by Temp ID or Real ID)
+          const existingIndex = prev.findIndex((m) =>
+            m.id === messageWithTimestamp.id ||
+            (m.waMessageId && m.waMessageId === messageWithTimestamp.waMessageId) ||
+            (messageWithTimestamp.metadata?.tempId && m.id === messageWithTimestamp.metadata.tempId)
+          );
+
+          // ✅ Step 2: If found, UPDATE it (replace temp with real)
+          if (existingIndex !== -1) {
+            console.log('🔄 Updating existing message from socket:', messageWithTimestamp.id);
+
+            const newMessages = [...prev];
+            newMessages[existingIndex] = {
+              ...prev[existingIndex], // Keep local state
+              ...messageWithTimestamp, // Overwrite with server data
+              status: 'SENT', // Ensure status is updated
+            };
+            return newMessages;
           }
 
-          console.log('✅ Adding socket message');
+          // ✅ Step 3: If not found, ADD it
+          console.log('✅ Adding new socket message');
           return [...prev, messageWithTimestamp];
         });
 
