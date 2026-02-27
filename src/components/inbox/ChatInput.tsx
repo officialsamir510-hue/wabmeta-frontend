@@ -61,28 +61,27 @@ const ChatInput: React.FC<ChatInputProps> = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!message.trim() || sending || disabled) return;
+
     if (!windowOpen) {
       onOpenTemplateModal();
       return;
     }
 
-    const textToSend = message.trim();
-    // ✅ NO try/catch here, let handleSendMessage handle it if needed
-    // or keep it for sending logic
     try {
       setSending(true);
 
-      // ✅ Call parent's onSendMessage (which handles optimistic update)
-      await onSendMessage(textToSend);
+      // ✅ Call parent's onSendMessage
+      await onSendMessage(message.trim());
 
-      // ✅ Clear input AFTER successful send
       setMessage('');
       if (textareaRef.current) {
         textareaRef.current.style.height = 'auto';
       }
-    } catch (error) {
-      console.error('Send message error:', error);
-      // ✅ Don't clear message on error so user can retry
+    } catch (error: any) {
+      console.error('❌ Send message error:', error);
+
+      // ✅ Show user-friendly error
+      toast.error(error.message || 'Failed to send message');
     } finally {
       setSending(false);
     }

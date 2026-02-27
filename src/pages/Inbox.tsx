@@ -335,7 +335,6 @@ const Inbox: React.FC = () => {
     const text = textToSend || messageText;
     if (!text.trim() || !selectedConversation) return;
 
-    // Generate unique temp ID
     const tempId = `temp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     const now = new Date().toISOString();
 
@@ -350,42 +349,62 @@ const Inbox: React.FC = () => {
       sentAt: now,
     };
 
-    // ✅ Track this temp ID to prevent duplicates
     pendingMessageIds.current.add(tempId);
-
-    // Add to UI immediately
     setMessages((prev) => [...prev, tempMessage]);
     const sentText = text;
     setMessageText('');
     scrollToBottom();
 
     try {
+      // ✅ CRITICAL FIX: Robust account fetching
       const accountsRes = await whatsappApi.accounts();
-      const accounts = accountsRes.data?.data || [];
+      console.log('📱 Accounts response:', accountsRes.data);
+
+      // ✅ Extract accounts array safely
+      let accounts = [];
+      if (Array.isArray(accountsRes.data?.data)) {
+        accounts = accountsRes.data.data;
+      } else if (Array.isArray(accountsRes.data?.data?.accounts)) {
+        accounts = accountsRes.data.data.accounts;
+      } else {
+        console.error('❌ Invalid accounts response:', accountsRes.data);
+        throw new Error('Failed to fetch WhatsApp accounts');
+      }
+
+      console.log('📱 Extracted accounts:', accounts.length);
+
+      if (accounts.length === 0) {
+        throw new Error('No WhatsApp account connected. Please connect in Settings.');
+      }
+
+      // ✅ CRITICAL FIX: Safe find with fallback
       const connected = accounts.find((a: any) => a.status === 'CONNECTED');
       const accountId = connected?.id || accounts[0]?.id;
 
-      if (!accountId) throw new Error('No WhatsApp account connected');
+      if (!accountId) {
+        throw new Error('No valid WhatsApp account found');
+      }
 
+      console.log('📱 Using account:', accountId);
+
+      // Send message
       const response = await whatsappApi.sendText({
         whatsappAccountId: accountId,
         to: selectedConversation.contact.phone,
         message: sentText,
-        tempId: tempId, // Pass tempId for tracking
+        tempId: tempId,
       });
 
       if (response.data.success) {
         const realMessage = response.data.data;
         const realWaId = realMessage.waMessageId || realMessage.wamId;
 
-        // ✅ Track the real waMessageId too
         if (realWaId) {
           pendingMessageIds.current.add(realWaId);
         }
 
         // Replace temp message with real one
         setMessages((prev) => {
-          // Check if socket already added this message
           const socketAlreadyAdded = prev.some(
             (m) =>
               m.id !== tempId && (
@@ -396,12 +415,10 @@ const Inbox: React.FC = () => {
           );
 
           if (socketAlreadyAdded) {
-            // Remove temp, socket already has the real one
             console.log('🔄 Socket already added message, removing temp');
             return prev.filter((m) => m.id !== tempId);
           }
 
-          // Replace temp with real
           return prev.map((m) =>
             m.id === tempId
               ? {
@@ -433,6 +450,8 @@ const Inbox: React.FC = () => {
         throw new Error(response.data.message || 'Failed to send');
       }
     } catch (e: any) {
+      console.error('❌ Send message error:', e);
+
       toast.error(e.response?.data?.message || e.message || 'Failed to send message');
 
       // Mark as FAILED
@@ -440,7 +459,6 @@ const Inbox: React.FC = () => {
         prev.map((m) => (m.id === tempId ? { ...m, status: 'FAILED' } : m))
       );
 
-      // Remove from pending
       pendingMessageIds.current.delete(tempId);
     }
   };

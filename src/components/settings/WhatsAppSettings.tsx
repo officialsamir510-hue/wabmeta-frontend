@@ -12,6 +12,7 @@ import {
     Shield,
     Zap,
     Phone,
+    Clock,
     MessageSquare,
     Settings,
     Link as LinkIcon,
@@ -191,6 +192,27 @@ const WhatsAppSettings: React.FC = () => {
         }
     };
 
+    // ✅ FIXED: Token expiry check
+    const checkTokenExpiry = (account: any) => {
+        // If no expiry date, assume valid
+        if (!account.tokenExpiresAt) {
+            return {
+                isExpired: false,
+                daysRemaining: null,
+            };
+        }
+
+        const expiryDate = new Date(account.tokenExpiresAt);
+        const now = new Date();
+        const daysRemaining = Math.floor((expiryDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+
+        return {
+            isExpired: daysRemaining < 0,
+            daysRemaining: daysRemaining > 0 ? daysRemaining : 0,
+            expiryDate: expiryDate,
+        };
+    };
+
     // ============================================
     // RENDER
     // ============================================
@@ -343,6 +365,33 @@ const WhatsAppSettings: React.FC = () => {
                                                     Tier: {account.messagingLimit}
                                                 </span>
                                             )}
+
+                                            {/* ✅ FIXED: Token status display */}
+                                            {(() => {
+                                                const tokenStatus = checkTokenExpiry(account);
+                                                if (tokenStatus.isExpired) {
+                                                    return (
+                                                        <span className="flex items-center text-red-600">
+                                                            <AlertCircle className="w-3 h-3 mr-1" />
+                                                            Token expired
+                                                        </span>
+                                                    );
+                                                }
+                                                if (tokenStatus.daysRemaining !== null && tokenStatus.daysRemaining < 7) {
+                                                    return (
+                                                        <span className="flex items-center text-yellow-600">
+                                                            <Clock className="w-3 h-3 mr-1" />
+                                                            Expires in {tokenStatus.daysRemaining}d
+                                                        </span>
+                                                    );
+                                                }
+                                                return (
+                                                    <span className="flex items-center text-green-600">
+                                                        <CheckCircle className="w-3 h-3 mr-1" />
+                                                        Connected
+                                                    </span>
+                                                );
+                                            })()}
                                         </div>
                                     </div>
                                 </div>
@@ -384,7 +433,7 @@ const WhatsAppSettings: React.FC = () => {
                             )}
 
                             {/* Token expired warning */}
-                            {account.status === 'CONNECTED' && !account.hasAccessToken && (
+                            {checkTokenExpiry(account).isExpired && (
                                 <div className="mt-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg flex items-start">
                                     <AlertCircle className="w-5 h-5 text-red-600 mr-2 flex-shrink-0 mt-0.5" />
                                     <div>

@@ -7,10 +7,6 @@ import axios, {
   type AxiosResponse
 } from 'axios';
 
-// Add this helper function
-const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-
-
 // ============================================
 // TYPE DEFINITIONS
 // ============================================
@@ -630,28 +626,35 @@ export const analytics = {
 // ---------- WHATSAPP ----------
 export const whatsapp = {
   accounts: async () => {
-    // ✅ Retry logic for accounts
-    for (let attempt = 0; attempt < 3; attempt++) {
-      try {
-        const response = await api.get<ApiResponse>('/meta/accounts');
+    try {
+      const response = await api.get('/meta/accounts');
 
-        // If we got accounts, return
-        if ((response.data as any)?.data?.accounts?.length > 0) {
-          return response;
-        }
+      // ✅ CRITICAL FIX: Normalize response structure
+      let accounts = [];
 
-        // If no accounts found, wait and retry
-        if (attempt < 2) {
-          console.log(`⏳ No accounts found, retrying in ${(attempt + 1) * 1000}ms...`);
-          await sleep((attempt + 1) * 1000);
-        }
-      } catch (error) {
-        if (attempt === 2) throw error;
-        await sleep((attempt + 1) * 1000);
+      if (Array.isArray(response.data?.data)) {
+        accounts = response.data.data;
+      } else if (Array.isArray(response.data?.data?.accounts)) {
+        accounts = response.data.data.accounts;
+      } else if (response.data?.data) {
+        accounts = [response.data.data];
       }
-    }
 
-    return { data: { data: { accounts: [] } } } as any;
+      console.log('📱 Fetched accounts:', accounts.length);
+
+      return {
+        ...response,
+        data: {
+          ...response.data,
+          data: {
+            accounts: accounts,
+          }
+        }
+      } as any;
+    } catch (error) {
+      console.error('❌ Failed to fetch accounts:', error);
+      throw error;
+    }
   },
 
   getAccount: (id: string) => api.get<ApiResponse>(`/whatsapp/accounts/${id}`),
