@@ -131,12 +131,13 @@ const Templates: React.FC = () => {
 
       // Find a connected WhatsApp account only when user clicks Sync
       const accountsRes = await whatsapp.accounts();
-      const accounts = accountsRes.data?.data || accountsRes.data || [];
+      const accountsData = accountsRes.data?.data;
+      const accounts = accountsData?.accounts || (Array.isArray(accountsData) ? accountsData : []);
 
       const connected =
         (Array.isArray(accounts) &&
           (accounts.find((a: any) => a.status === 'CONNECTED' && a.isDefault) ||
-           accounts.find((a: any) => a.status === 'CONNECTED'))) ||
+            accounts.find((a: any) => a.status === 'CONNECTED'))) ||
         null;
 
       if (!connected) {
@@ -208,29 +209,29 @@ const Templates: React.FC = () => {
 
   // Stats
   const stats = [
-    { 
-      label: 'Total Templates', 
-      value: templateList.length, 
-      icon: FileText, 
-      color: 'bg-blue-100 text-blue-600 dark:bg-blue-900 dark:text-blue-300' 
+    {
+      label: 'Total Templates',
+      value: templateList.length,
+      icon: FileText,
+      color: 'bg-blue-100 text-blue-600 dark:bg-blue-900 dark:text-blue-300'
     },
-    { 
-      label: 'Approved', 
-      value: templateList.filter(t => t.status === 'approved').length, 
-      icon: CheckCircle, 
-      color: 'bg-green-100 text-green-600 dark:bg-green-900 dark:text-green-300' 
+    {
+      label: 'Approved',
+      value: templateList.filter(t => t.status === 'approved').length,
+      icon: CheckCircle,
+      color: 'bg-green-100 text-green-600 dark:bg-green-900 dark:text-green-300'
     },
-    { 
-      label: 'Pending', 
-      value: templateList.filter(t => t.status === 'pending').length, 
-      icon: Clock, 
-      color: 'bg-yellow-100 text-yellow-600 dark:bg-yellow-900 dark:text-yellow-300' 
+    {
+      label: 'Pending',
+      value: templateList.filter(t => t.status === 'pending').length,
+      icon: Clock,
+      color: 'bg-yellow-100 text-yellow-600 dark:bg-yellow-900 dark:text-yellow-300'
     },
-    { 
-      label: 'Rejected', 
-      value: templateList.filter(t => t.status === 'rejected').length, 
-      icon: XCircle, 
-      color: 'bg-red-100 text-red-600 dark:bg-red-900 dark:text-red-300' 
+    {
+      label: 'Rejected',
+      value: templateList.filter(t => t.status === 'rejected').length,
+      icon: XCircle,
+      color: 'bg-red-100 text-red-600 dark:bg-red-900 dark:text-red-300'
     },
   ];
 
@@ -274,9 +275,8 @@ const Templates: React.FC = () => {
     };
 
     return (
-      <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${
-        colors[category.toLowerCase()] || 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200'
-      }`}>
+      <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${colors[category.toLowerCase()] || 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200'
+        }`}>
         {category.toUpperCase()}
       </span>
     );
@@ -378,11 +378,10 @@ const Templates: React.FC = () => {
           {/* Filter Toggle */}
           <button
             onClick={() => setShowFilters(!showFilters)}
-            className={`inline-flex items-center px-4 py-2 border rounded-lg transition-colors ${
-              showFilters 
-                ? 'bg-gray-100 dark:bg-gray-700 border-gray-300 dark:border-gray-600' 
+            className={`inline-flex items-center px-4 py-2 border rounded-lg transition-colors ${showFilters
+                ? 'bg-gray-100 dark:bg-gray-700 border-gray-300 dark:border-gray-600'
                 : 'border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700'
-            }`}
+              }`}
           >
             <Filter className="w-5 h-5 mr-2" />
             Filters
@@ -397,21 +396,19 @@ const Templates: React.FC = () => {
           <div className="flex items-center space-x-2">
             <button
               onClick={() => setViewMode('grid')}
-              className={`p-2 rounded-lg transition-colors ${
-                viewMode === 'grid'
+              className={`p-2 rounded-lg transition-colors ${viewMode === 'grid'
                   ? 'bg-green-100 text-green-600 dark:bg-green-900 dark:text-green-400'
                   : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-400 dark:hover:bg-gray-600'
-              }`}
+                }`}
             >
               <LayoutGrid className="w-5 h-5" />
             </button>
             <button
               onClick={() => setViewMode('list')}
-              className={`p-2 rounded-lg transition-colors ${
-                viewMode === 'list'
+              className={`p-2 rounded-lg transition-colors ${viewMode === 'list'
                   ? 'bg-green-100 text-green-600 dark:bg-green-900 dark:text-green-400'
                   : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-400 dark:hover:bg-gray-600'
-              }`}
+                }`}
             >
               <List className="w-5 h-5" />
             </button>

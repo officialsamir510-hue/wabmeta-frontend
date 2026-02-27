@@ -48,8 +48,9 @@ export const useWhatsAppConnection = (): UseWhatsAppConnectionReturn => {
       const res = await whatsapp.accounts();
       setError(null);
 
-      // api.ts patterns: sometimes res.data.data, sometimes res.data
-      const list = (res.data?.data ?? res.data ?? []) as any;
+      // api.ts patterns: sometimes res.data.data.accounts, sometimes res.data.data, sometimes res.data
+      const data = res.data?.data || res.data;
+      const list = (data?.accounts || (Array.isArray(data) ? data : [])) as any;
 
       setAccounts(Array.isArray(list) ? list : []);
     } catch (e: any) {

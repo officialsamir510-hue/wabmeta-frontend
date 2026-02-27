@@ -132,7 +132,8 @@ const SendTemplateModal: React.FC<SendTemplateModalProps> = ({
 
             // Get WhatsApp account
             const accountsRes = await whatsapp.accounts();
-            const accounts = accountsRes.data.data || [];
+            const accountsData = accountsRes.data?.data;
+            const accounts = (accountsData?.accounts || (Array.isArray(accountsData) ? accountsData : [])) as any[];
             const defaultAccount = accounts.find((a: any) => a.isDefault) || accounts[0];
 
             if (!defaultAccount) {

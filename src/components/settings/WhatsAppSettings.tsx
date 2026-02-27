@@ -46,14 +46,41 @@ const WhatsAppSettings: React.FC = () => {
         fetchAccounts();
     }, []);
 
+    // ✅ Wait and refresh accounts after Meta callback
+    useEffect(() => {
+        const urlParams = new URLSearchParams(window.location.search);
+        const status = urlParams.get('status');
+
+        if (status === 'success') {
+            const handleSuccess = async () => {
+                // Wait for backend to fully process
+                await new Promise(resolve => setTimeout(resolve, 3000));
+
+                // Fetch accounts using the updated structure
+                const response = await whatsapp.accounts();
+                const accountsList = (response.data as any)?.data?.accounts || (response.data as any)?.data || [];
+                setAccounts(accountsList);
+
+                // Remove query params
+                window.history.replaceState({}, '', window.location.pathname);
+
+                toast.success('WhatsApp connected successfully!');
+            };
+
+            handleSuccess();
+        }
+    }, []);
+
     const fetchAccounts = async () => {
         try {
             setLoading(true);
             const response = await whatsapp.accounts();
 
-            if (response.data.success) {
-                setAccounts(response.data.data || []);
-            }
+            // Handle both structure types: { data: { accounts: [] } } and { data: [] }
+            const accountsData = (response.data as any)?.data;
+            const list = accountsData?.accounts || (Array.isArray(accountsData) ? accountsData : []);
+
+            setAccounts(list);
         } catch (error: any) {
             console.error('Fetch accounts error:', error);
             toast.error('Failed to load WhatsApp accounts');
@@ -197,8 +224,8 @@ const WhatsAppSettings: React.FC = () => {
 
             {/* Connection Status Card */}
             <div className={`rounded-xl border-2 p-6 ${hasConnectedAccount
-                    ? 'bg-green-50 dark:bg-green-900/10 border-green-200 dark:border-green-800'
-                    : 'bg-gray-50 dark:bg-gray-800/50 border-gray-200 dark:border-gray-700'
+                ? 'bg-green-50 dark:bg-green-900/10 border-green-200 dark:border-green-800'
+                : 'bg-gray-50 dark:bg-gray-800/50 border-gray-200 dark:border-gray-700'
                 }`}>
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div className="flex items-center">
@@ -213,8 +240,8 @@ const WhatsAppSettings: React.FC = () => {
                         )}
                         <div>
                             <h3 className={`text-lg font-semibold ${hasConnectedAccount
-                                    ? 'text-green-800 dark:text-green-200'
-                                    : 'text-gray-700 dark:text-gray-300'
+                                ? 'text-green-800 dark:text-green-200'
+                                : 'text-gray-700 dark:text-gray-300'
                                 }`}>
                                 {hasConnectedAccount
                                     ? `${connectedAccounts.length} Account${connectedAccounts.length > 1 ? 's' : ''} Connected`
@@ -222,8 +249,8 @@ const WhatsAppSettings: React.FC = () => {
                                 }
                             </h3>
                             <p className={`text-sm ${hasConnectedAccount
-                                    ? 'text-green-600 dark:text-green-400'
-                                    : 'text-gray-500 dark:text-gray-400'
+                                ? 'text-green-600 dark:text-green-400'
+                                : 'text-gray-500 dark:text-gray-400'
                                 }`}>
                                 {hasConnectedAccount
                                     ? 'Your WhatsApp Business is ready to use'
@@ -237,8 +264,8 @@ const WhatsAppSettings: React.FC = () => {
                         onClick={handleConnectWithMeta}
                         disabled={connecting}
                         className={`px-6 py-3 rounded-xl font-semibold flex items-center justify-center transition-all whitespace-nowrap ${hasConnectedAccount
-                                ? 'bg-white dark:bg-gray-800 text-green-700 dark:text-green-400 border border-green-300 dark:border-green-700 hover:bg-green-50 dark:hover:bg-green-900/20'
-                                : 'bg-green-600 text-white hover:bg-green-700 shadow-lg shadow-green-600/25'
+                            ? 'bg-white dark:bg-gray-800 text-green-700 dark:text-green-400 border border-green-300 dark:border-green-700 hover:bg-green-50 dark:hover:bg-green-900/20'
+                            : 'bg-green-600 text-white hover:bg-green-700 shadow-lg shadow-green-600/25'
                             }`}
                     >
                         {connecting ? (
@@ -281,8 +308,8 @@ const WhatsAppSettings: React.FC = () => {
                                 {/* Account Info */}
                                 <div className="flex items-start">
                                     <div className={`w-12 h-12 rounded-full flex items-center justify-center mr-4 ${account.status === 'CONNECTED'
-                                            ? 'bg-green-100 dark:bg-green-900/30'
-                                            : 'bg-gray-100 dark:bg-gray-700'
+                                        ? 'bg-green-100 dark:bg-green-900/30'
+                                        : 'bg-gray-100 dark:bg-gray-700'
                                         }`}>
                                         <Phone className={`w-6 h-6 ${account.status === 'CONNECTED' ? 'text-green-600' : 'text-gray-400'
                                             }`} />

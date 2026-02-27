@@ -7,6 +7,10 @@ import axios, {
   type AxiosResponse
 } from 'axios';
 
+// Add this helper function
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+
 // ============================================
 // TYPE DEFINITIONS
 // ============================================
@@ -625,7 +629,31 @@ export const analytics = {
 
 // ---------- WHATSAPP ----------
 export const whatsapp = {
-  accounts: () => api.get<ApiResponse>('/whatsapp/accounts'),
+  accounts: async () => {
+    // ✅ Retry logic for accounts
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const response = await api.get<ApiResponse>('/meta/accounts');
+
+        // If we got accounts, return
+        if ((response.data as any)?.data?.accounts?.length > 0) {
+          return response;
+        }
+
+        // If no accounts found, wait and retry
+        if (attempt < 2) {
+          console.log(`⏳ No accounts found, retrying in ${(attempt + 1) * 1000}ms...`);
+          await sleep((attempt + 1) * 1000);
+        }
+      } catch (error) {
+        if (attempt === 2) throw error;
+        await sleep((attempt + 1) * 1000);
+      }
+    }
+
+    return { data: { data: { accounts: [] } } } as any;
+  },
+
   getAccount: (id: string) => api.get<ApiResponse>(`/whatsapp/accounts/${id}`),
   connect: (data: { code: string; state?: string }) =>
     api.post<ApiResponse>('/whatsapp/connect', data),
