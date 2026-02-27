@@ -620,90 +620,69 @@ const Inbox: React.FC = () => {
       const msg = newMessage?.message || newMessage;
       if (!msg?.conversationId) return;
 
-      const convId = msg.conversationId;
+      const msgId = msg.id;
+      const waId = msg.waMessageId || msg.wamId;
 
-      // Ensure timestamp
-      const now = new Date().toISOString();
-      const messageWithTimestamp = {
-        ...msg,
-        createdAt: msg.createdAt || msg.sentAt || now,
-        sentAt: msg.sentAt || msg.createdAt || now,
-      };
+      // ✅ DEBUG LOG
+      console.log('📩 Socket Message:', { id: msgId, waId, dir: msg.direction });
 
-      if (selectedConversation?.id === convId) {
+      // Step 1: Ignore if OUTBOUND (Humne khud add kiya hai)
+      if (msg.direction === 'OUTBOUND') {
+        console.log('🚫 Ignoring outbound socket message');
+        return;
+      }
+
+      if (selectedConversation?.id === msg.conversationId) {
         setMessages((prev) => {
-          // ✅ Step 1: Check if this message already exists (by Temp ID or Real ID)
-          const existingIndex = prev.findIndex((m) =>
-            m.id === messageWithTimestamp.id ||
-            (m.waMessageId && m.waMessageId === messageWithTimestamp.waMessageId) ||
-            (messageWithTimestamp.metadata?.tempId && m.id === messageWithTimestamp.metadata.tempId)
-          );
+          // ✅ Step 2: Strict Duplicate Check
+          const exists = prev.some((m) => {
+            // Check Internal ID
+            if (m.id === msgId) return true;
+            // Check Meta ID (Critical for Inbound)
+            if (waId && (m.waMessageId === waId || m.wamId === waId)) return true;
+            return false;
+          });
 
-          // ✅ Step 2: If found, UPDATE it (replace temp with real)
-          if (existingIndex !== -1) {
-            console.log('🔄 Updating existing message from socket:', messageWithTimestamp.id);
-
-            const newMessages = [...prev];
-            newMessages[existingIndex] = {
-              ...prev[existingIndex], // Keep local state
-              ...messageWithTimestamp, // Overwrite with server data
-              status: 'SENT', // Ensure status is updated
-            };
-            return newMessages;
+          if (exists) {
+            console.log('🚫 Duplicate prevented:', waId);
+            return prev;
           }
 
-          // ✅ Step 3: If not found, ADD it
-          console.log('✅ Adding new socket message');
-          return [...prev, messageWithTimestamp];
+          console.log('✅ Adding inbound message');
+          return [...prev, msg];
         });
 
         scrollToBottom();
-
-        if (messageWithTimestamp.direction === 'INBOUND') {
-          inboxApi.markAsRead(convId).catch(() => { });
-        }
+        inboxApi.markAsRead(msg.conversationId).catch(() => { });
       }
 
-      // ✅ FIXED: Update conversations list with proper unread logic
-      setConversations((prev) => {
-        const updated = prev.map((c) => {
-          if (c.id !== convId) return c;
+      // Update conversation list
+      setConversations((prev) =>
+        prev.map((c) => {
+          if (c.id !== msg.conversationId) return c;
 
-          const preview =
-            msg.type === 'TEMPLATE' ? '📋 Template' :
-              msg.type === 'IMAGE' ? '📷 Image' :
-                msg.type === 'VIDEO' ? '🎥 Video' :
-                  msg.type === 'AUDIO' ? '🎵 Audio' :
-                    msg.type === 'DOCUMENT' ? '📄 Document' :
-                      msg.content?.substring(0, 50) || 'New message';
-
-          // ✅ CRITICAL: Only increment unread for INBOUND messages 
-          // when user is NOT viewing this conversation
-          const shouldIncrementUnread =
-            msg.direction === 'INBOUND' &&
-            selectedConversation?.id !== convId;
+          // Don't update if already latest
+          if (c.lastMessageAt === msg.createdAt) return c;
 
           return {
             ...c,
-            lastMessagePreview: preview,
+            lastMessagePreview: msg.content?.substring(0, 50) || 'New message',
             lastMessageAt: msg.createdAt || new Date().toISOString(),
-            unreadCount: shouldIncrementUnread
+            unreadCount: selectedConversation?.id !== msg.conversationId
               ? (c.unreadCount || 0) + 1
-              : c.unreadCount || 0,
-            isRead: !shouldIncrementUnread,
+              : 0,
+            isRead: selectedConversation?.id === msg.conversationId,
           };
-        });
-
-        // Re-sort: Pinned first, then by time
-        return updated.sort((a, b) => {
-          if (a.isPinned && !b.isPinned) return -1;
-          if (!a.isPinned && b.isPinned) return 1;
+        }).sort((a, b) => {
+          // Keep pinned sorting if it exists in the original codebase
+          // The user's snippet was simpler: .sort((a, b) => new Date(b.lastMessageAt || 0).getTime() - new Date(a.lastMessageAt || 0).getTime())
+          // I will follow the user's snippet exactly as requested for sorting.
           return new Date(b.lastMessageAt || 0).getTime() - new Date(a.lastMessageAt || 0).getTime();
-        });
-      });
+        })
+      );
 
       // ✅ Play sound for inbound messages in OTHER conversations
-      if (msg.direction === 'INBOUND' && selectedConversation?.id !== convId) {
+      if (msg.direction === 'INBOUND' && selectedConversation?.id !== msg.conversationId) {
         playNotificationSound();
       }
     },
