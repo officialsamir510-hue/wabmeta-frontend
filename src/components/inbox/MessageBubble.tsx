@@ -17,6 +17,7 @@ import {
   Image as ImageIcon,
   FileText,
 } from 'lucide-react';
+import { formatMessageTime } from '../../utils/dateHelpers';
 
 interface Message {
   id: string;
@@ -304,7 +305,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
               }`}
           >
             <span className="text-[10px]">
-              {new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              {formatMessageTime(message.createdAt)}
             </span>
             {isOutgoing && getStatusIcon(message.status)}
           </div>

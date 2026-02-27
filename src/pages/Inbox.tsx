@@ -25,6 +25,7 @@ import WindowStatus from '../components/inbox/WindowStatus';
 import ChatInput from '../components/inbox/ChatInput';
 import MessageBubble from '../components/inbox/MessageBubble';
 import SendTemplateModal from '../components/inbox/SendTemplateModal';
+import { formatMessageDateTime, safeParseDate } from '../utils/dateHelpers';
 
 // ============================================
 // SAFE DATE FORMATTING HELPERS
@@ -336,7 +337,7 @@ const Inbox: React.FC = () => {
     if (!text.trim() || !selectedConversation) return;
 
     const tempId = `temp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-    const now = new Date().toISOString();
+    const nowISO = new Date().toISOString();
 
     // Create optimistic message
     const tempMessage: Message = {
@@ -345,8 +346,8 @@ const Inbox: React.FC = () => {
       type: 'TEXT',
       direction: 'OUTBOUND',
       status: 'PENDING',
-      createdAt: now,
-      sentAt: now,
+      createdAt: nowISO,
+      sentAt: nowISO,
     };
 
     pendingMessageIds.current.add(tempId);
@@ -439,7 +440,7 @@ const Inbox: React.FC = () => {
               ? {
                 ...c,
                 lastMessagePreview: sentText.substring(0, 50),
-                lastMessageAt: now,
+                lastMessageAt: nowISO,
               }
               : c
           )
@@ -1200,26 +1201,25 @@ const Inbox: React.FC = () => {
               ) : (
                 <>
                   {messages.map((m, idx) => {
-                    const currentDate = m.createdAt ? new Date(m.createdAt) : null;
-                    const prevDate =
-                      idx > 0 && messages[idx - 1].createdAt
-                        ? new Date(messages[idx - 1].createdAt)
-                        : null;
+                    let showDate = false;
 
-                    const showDate =
-                      idx === 0 ||
-                      (currentDate &&
-                        prevDate &&
-                        !isNaN(currentDate.getTime()) &&
-                        !isNaN(prevDate.getTime()) &&
-                        currentDate.toDateString() !== prevDate.toDateString());
+                    if (idx === 0) {
+                      showDate = true;
+                    } else {
+                      const currentDate = safeParseDate(m.createdAt);
+                      const prevDate = safeParseDate(messages[idx - 1].createdAt);
+
+                      if (currentDate && prevDate) {
+                        showDate = currentDate.toDateString() !== prevDate.toDateString();
+                      }
+                    }
 
                     return (
                       <React.Fragment key={m.id}>
-                        {showDate && currentDate && !isNaN(currentDate.getTime()) && (
+                        {showDate && (
                           <div className="flex justify-center my-4">
                             <span className="px-4 py-1 bg-white text-gray-500 text-xs rounded-full shadow-sm">
-                              {safeFormatDate(m.createdAt, 'MMMM d, yyyy', 'Today')}
+                              {formatMessageDateTime(m.createdAt)}
                             </span>
                           </div>
                         )}
