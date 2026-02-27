@@ -17,7 +17,7 @@ import {
   ArchiveRestore,
   X,
 } from 'lucide-react';
-import { formatDistanceToNow, format } from 'date-fns';
+import { formatDistanceToNow } from 'date-fns';
 import { useInboxSocket } from '../hooks/useInboxSocket';
 import api, { inbox as inboxApi, whatsapp as whatsappApi } from '../services/api';
 import toast from 'react-hot-toast';
@@ -30,16 +30,7 @@ import { formatMessageDateTime, safeParseDate } from '../utils/dateHelpers';
 // ============================================
 // SAFE DATE FORMATTING HELPERS
 // ============================================
-const safeFormatDate = (date: any, formatStr: string, fallback: string = 'N/A'): string => {
-  try {
-    if (!date) return fallback;
-    const d = new Date(date);
-    if (isNaN(d.getTime())) return fallback;
-    return format(d, formatStr);
-  } catch (e) {
-    return fallback;
-  }
-};
+// ============================================
 
 const safeFormatDistance = (date: any, fallback: string = 'Just now'): string => {
   try {
@@ -337,48 +328,42 @@ const Inbox: React.FC = () => {
     if (!text.trim() || !selectedConversation) return;
 
     const tempId = `temp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-    const nowISO = new Date().toISOString();
 
-    // Create optimistic message
+    // ✅ CRITICAL: Create timestamp at the start
+    const now = new Date().toISOString();
+
+    // Create optimistic message with guaranteed timestamp
     const tempMessage: Message = {
       id: tempId,
       content: text,
       type: 'TEXT',
       direction: 'OUTBOUND',
       status: 'PENDING',
-      createdAt: nowISO,
-      sentAt: nowISO,
+      createdAt: now,  // ✅ Always set
+      sentAt: now,     // ✅ Always set
     };
+
+    console.log('📤 Creating temp message:', tempMessage);
 
     pendingMessageIds.current.add(tempId);
     setMessages((prev) => [...prev, tempMessage]);
-    const sentText = text;
     setMessageText('');
     scrollToBottom();
 
     try {
-      // ✅ CRITICAL FIX: Robust account fetching
       const accountsRes = await whatsappApi.accounts();
-      console.log('📱 Accounts response:', accountsRes.data);
 
-      // ✅ Extract accounts array safely
       let accounts = [];
       if (Array.isArray(accountsRes.data?.data)) {
         accounts = accountsRes.data.data;
       } else if (Array.isArray(accountsRes.data?.data?.accounts)) {
         accounts = accountsRes.data.data.accounts;
-      } else {
-        console.error('❌ Invalid accounts response:', accountsRes.data);
-        throw new Error('Failed to fetch WhatsApp accounts');
       }
-
-      console.log('📱 Extracted accounts:', accounts.length);
 
       if (accounts.length === 0) {
-        throw new Error('No WhatsApp account connected. Please connect in Settings.');
+        throw new Error('No WhatsApp account connected');
       }
 
-      // ✅ CRITICAL FIX: Safe find with fallback
       const connected = accounts.find((a: any) => a.status === 'CONNECTED');
       const accountId = connected?.id || accounts[0]?.id;
 
@@ -386,61 +371,67 @@ const Inbox: React.FC = () => {
         throw new Error('No valid WhatsApp account found');
       }
 
-      console.log('📱 Using account:', accountId);
-
-      // Send message
       const response = await whatsappApi.sendText({
         whatsappAccountId: accountId,
         to: selectedConversation.contact.phone,
-        message: sentText,
+        message: text,
         tempId: tempId,
       });
 
+      console.log('📤 API Response:', response.data);
+
       if (response.data.success) {
         const realMessage = response.data.data;
-        const realWaId = realMessage.waMessageId || realMessage.wamId;
+        const realWaId = realMessage?.waMessageId || realMessage?.wamId;
+
+        console.log('📤 Real message from API:', realMessage);
+
+        // ✅ CRITICAL FIX: Ensure timestamp exists in real message
+        const messageTimestamp = realMessage?.createdAt || realMessage?.sentAt || now;
 
         if (realWaId) {
           pendingMessageIds.current.add(realWaId);
         }
 
-        // Replace temp message with real one
         setMessages((prev) => {
           const socketAlreadyAdded = prev.some(
             (m) =>
               m.id !== tempId && (
-                m.id === realMessage.id ||
+                m.id === realMessage?.id ||
                 (realWaId && m.waMessageId === realWaId) ||
                 (realWaId && m.wamId === realWaId)
               )
           );
 
           if (socketAlreadyAdded) {
-            console.log('🔄 Socket already added message, removing temp');
+            console.log('🔄 Socket already added, removing temp');
             return prev.filter((m) => m.id !== tempId);
           }
 
           return prev.map((m) =>
             m.id === tempId
               ? {
+                ...m,
                 ...realMessage,
-                id: realMessage.id || tempId,
+                id: realMessage?.id || tempId,
                 waMessageId: realWaId,
                 wamId: realWaId,
-                status: 'SENT',
+                status: 'SENT' as const,
+                // ✅ CRITICAL: Ensure timestamps NEVER undefined
+                createdAt: messageTimestamp,
+                sentAt: messageTimestamp,
               }
               : m
           );
         });
 
-        // Update conversation preview
         setConversations((prev) =>
           prev.map((c) =>
             c.id === selectedConversation.id
               ? {
                 ...c,
-                lastMessagePreview: sentText.substring(0, 50),
-                lastMessageAt: nowISO,
+                lastMessagePreview: text.substring(0, 50),
+                lastMessageAt: now,
               }
               : c
           )
@@ -451,11 +442,9 @@ const Inbox: React.FC = () => {
         throw new Error(response.data.message || 'Failed to send');
       }
     } catch (e: any) {
-      console.error('❌ Send message error:', e);
+      console.error('❌ Send error:', e);
+      toast.error(e.response?.data?.message || e.message || 'Failed to send');
 
-      toast.error(e.response?.data?.message || e.message || 'Failed to send message');
-
-      // Mark as FAILED
       setMessages((prev) =>
         prev.map((m) => (m.id === tempId ? { ...m, status: 'FAILED' } : m))
       );
@@ -684,42 +673,31 @@ const Inbox: React.FC = () => {
       if (!msg?.conversationId) return;
 
       const convId = msg.conversationId;
-      const msgWaId = msg.waMessageId || msg.wamId;
 
-      console.log('📩 [SOCKET] New message received:', {
-        id: msg.id,
-        waMessageId: msgWaId,
-        direction: msg.direction,
-        conversationId: convId,
-      });
+      // ✅ CRITICAL FIX: Ensure timestamp exists
+      const now = new Date().toISOString();
+      const messageWithTimestamp = {
+        ...msg,
+        createdAt: msg.createdAt || msg.sentAt || now,
+        sentAt: msg.sentAt || msg.createdAt || now,
+      };
 
-      // ✅ Add to messages ONLY if it's the active conversation
+      console.log('📩 Socket message with timestamp:', messageWithTimestamp);
+
       if (selectedConversation?.id === convId) {
         setMessages((prev) => {
-          // ✅ CRITICAL: Comprehensive duplicate check
-          if (isDuplicateMessage(msg, prev)) {
-            console.log('🔄 Duplicate message prevented:', msg.id);
-
-            // If it's a pending message that now has real ID, update it
-            if (msg.metadata?.tempId && pendingMessageIds.current.has(msg.metadata.tempId)) {
-              return prev.map((m) =>
-                m.id === msg.metadata.tempId || m.id.startsWith('temp-')
-                  ? { ...msg, status: msg.status || 'SENT' }
-                  : m
-              );
-            }
-
+          if (isDuplicateMessage(messageWithTimestamp, prev)) {
+            console.log('🔄 Duplicate prevented');
             return prev;
           }
 
-          console.log('✅ Adding new message via socket:', msg.id);
-          return [...prev, msg];
+          console.log('✅ Adding socket message');
+          return [...prev, messageWithTimestamp];
         });
 
         scrollToBottom();
 
-        // Mark as read since user is viewing
-        if (msg.direction === 'INBOUND') {
+        if (messageWithTimestamp.direction === 'INBOUND') {
           inboxApi.markAsRead(convId).catch(() => { });
         }
       }

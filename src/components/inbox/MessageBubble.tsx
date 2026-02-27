@@ -26,6 +26,7 @@ interface Message {
   direction: 'INBOUND' | 'OUTBOUND';
   status?: 'PENDING' | 'SENT' | 'DELIVERED' | 'READ' | 'FAILED';
   createdAt: string;
+  sentAt?: string;
   mediaUrl?: string;
   templateName?: string;
   metadata?: any;
@@ -83,6 +84,9 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
   const [isPlaying, setIsPlaying] = useState(false);
 
   const isOutgoing = message.direction === 'OUTBOUND';
+
+  // ✅ Get formatted time (safe)
+  const messageTime = formatMessageTime(message.createdAt || message.sentAt);
 
   const { body, header, footer, templateName, isTemplate } = parseContent(
     message.content,
@@ -299,14 +303,15 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
           {/* Content */}
           {renderContent()}
 
-          {/* Timestamp & Status */}
+          {/* ✅ FIXED: Timestamp & Status - Only show if valid */}
           <div
             className={`flex items-center justify-end space-x-1 mt-1.5 ${isOutgoing ? 'text-white/70' : 'text-gray-400'
               }`}
           >
-            <span className="text-[10px]">
-              {formatMessageTime(message.createdAt)}
-            </span>
+            {/* ✅ Only render time if it exists */}
+            {messageTime && (
+              <span className="text-[10px]">{messageTime}</span>
+            )}
             {isOutgoing && getStatusIcon(message.status)}
           </div>
         </div>
