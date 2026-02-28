@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Menu, X } from 'lucide-react';
-import logo from '../../assets/logo.png'; // Tumhara logo import
+import logo from '../../assets/logo.png'; // Tumhara logo
 
 const Navbar: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -46,7 +46,6 @@ const Navbar: React.FC = () => {
 
   return (
     <>
-      {/* Navbar - Always visible with solid background */}
       <nav
         className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${isScrolled
             ? 'bg-white dark:bg-gray-900 shadow-lg'
@@ -56,16 +55,13 @@ const Navbar: React.FC = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16 lg:h-20">
 
-            {/* Logo */}
+            {/* Logo Only - No Text */}
             <Link to="/" className="flex items-center">
               <img
                 src={logo}
-                alt="WabMeta Logo"
-                className="h-10 w-10 lg:h-12 lg:w-12 object-contain rounded-lg"
+                alt="WabMeta"
+                className="h-12 w-auto lg:h-14 object-contain"
               />
-              <span className="ml-2 text-xl lg:text-2xl font-bold text-gray-900 dark:text-white">
-                WabMeta
-              </span>
             </Link>
 
             {/* Desktop Navigation */}
@@ -144,7 +140,7 @@ const Navbar: React.FC = () => {
         </div>
       </nav>
 
-      {/* Spacer to prevent content from hiding behind fixed navbar */}
+      {/* Spacer */}
       <div className="h-16 lg:h-20"></div>
     </>
   );

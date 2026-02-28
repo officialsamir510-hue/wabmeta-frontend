@@ -1,15 +1,17 @@
+// src/components/landing/Footer.tsx
 import React from 'react';
 import { Link } from 'react-router-dom';
 import {
-  MessageCircle,
   Mail,
   Phone,
   MapPin,
   Facebook,
   Twitter,
   Linkedin,
-  Instagram
+  Instagram,
+  MessageCircle
 } from 'lucide-react';
+import logo from '../../assets/logo.png'; // Tumhara logo
 
 const Footer: React.FC = () => {
   const currentYear = new Date().getFullYear();
@@ -52,11 +54,14 @@ const Footer: React.FC = () => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 lg:py-16">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-8 lg:gap-12">
 
-          {/* Brand Column */}
+          {/* Brand Column - Logo Only */}
           <div className="lg:col-span-2">
-            <Link to="/" className="flex items-center mb-4">
-              <MessageCircle className="h-10 w-10 text-green-500" />
-              <span className="ml-2 text-2xl font-bold">WabMeta</span>
+            <Link to="/" className="inline-block mb-6">
+              <img
+                src={logo}
+                alt="WabMeta"
+                className="h-14 lg:h-16 w-auto object-contain"
+              />
             </Link>
             <p className="text-gray-400 mb-6 max-w-sm">
               Powerful WhatsApp Business API platform for marketing, support, and automation.
@@ -174,30 +179,35 @@ const Footer: React.FC = () => {
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-gray-400 hover:text-green-500 transition-colors"
+                title="WhatsApp"
               >
                 <MessageCircle className="w-5 h-5" />
               </a>
               <a
                 href="#"
                 className="text-gray-400 hover:text-blue-500 transition-colors"
+                title="Facebook"
               >
                 <Facebook className="w-5 h-5" />
               </a>
               <a
                 href="#"
                 className="text-gray-400 hover:text-blue-400 transition-colors"
+                title="Twitter"
               >
                 <Twitter className="w-5 h-5" />
               </a>
               <a
                 href="#"
                 className="text-gray-400 hover:text-blue-600 transition-colors"
+                title="LinkedIn"
               >
                 <Linkedin className="w-5 h-5" />
               </a>
               <a
                 href="#"
                 className="text-gray-400 hover:text-pink-500 transition-colors"
+                title="Instagram"
               >
                 <Instagram className="w-5 h-5" />
               </a>
