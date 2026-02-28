@@ -22,7 +22,7 @@ interface TeamMember {
 const teamMembers: TeamMember[] = [
     {
         name: 'Ankit Verma',
-        role: 'CEO & Founder',
+        role: 'CEO',
         title: 'Chief Executive Officer',
         image: 'https://ui-avatars.com/api/?name=Ankit+Verma&size=256&background=0D9488&color=fff&bold=true&format=svg',
         description: 'Visionary entrepreneur with 8+ years of experience in tech industry. Leading WabMeta to revolutionize WhatsApp Business communication for enterprises worldwide.',
