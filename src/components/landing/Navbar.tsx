@@ -53,15 +53,15 @@ const Navbar: React.FC = () => {
           }`}
       >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-24 lg:h-28">
+          <div className="flex justify-between items-center h-28 lg:h-36">
 
-            {/* ✅ LOGO - Maximum Large (120px - 140px) */}
+            {/* ✅ LOGO - 100px mobile, 130px desktop */}
             <Link to="/" className="flex items-center">
               <img
                 src={logo}
                 alt="WabMeta"
-                style={{ height: '80px', width: '80px' }}
-                className="lg:!h-[100px] lg:!w-[100px] object-contain"
+                style={{ height: '100px', width: '100px' }}
+                className="lg:!h-[130px] lg:!w-[130px] object-contain"
               />
             </Link>
 
@@ -142,7 +142,7 @@ const Navbar: React.FC = () => {
       </nav>
 
       {/* Spacer */}
-      <div className="h-24 lg:h-28"></div>
+      <div className="h-28 lg:h-36"></div>
     </>
   );
 };
