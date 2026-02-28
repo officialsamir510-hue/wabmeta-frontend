@@ -20,6 +20,7 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { billing } from '../services/api';
 import toast from 'react-hot-toast';
+import { loadRazorpayScript } from '../utils/razorpay';
 
 // ============================================
 // TYPES
@@ -147,16 +148,16 @@ const Billing: React.FC = () => {
 
   // Check if Razorpay is loaded
   useEffect(() => {
-    const checkRazorpay = () => {
-      if (typeof window !== 'undefined' && window.Razorpay) {
+    const initRazorpay = async () => {
+      const loaded = await loadRazorpayScript();
+      if (loaded) {
         setRazorpayReady(true);
         console.log('✅ Razorpay SDK loaded');
       } else {
-        console.log('⏳ Waiting for Razorpay SDK...');
-        setTimeout(checkRazorpay, 500);
+        console.log('❌ Failed to load Razorpay SDK');
       }
     };
-    checkRazorpay();
+    initRazorpay();
   }, []);
 
   useEffect(() => {
@@ -243,11 +244,13 @@ const Billing: React.FC = () => {
 
   const handleSubscribe = async (planSlug: string) => {
     try {
-      // Check if Razorpay is loaded
-      if (!razorpayReady) {
-        toast.error('Payment gateway is loading. Please try again in a moment.');
+      // Ensure Razorpay is loaded
+      const loaded = await loadRazorpayScript();
+      if (!loaded) {
+        toast.error('Failed to load payment gateway. Please check your connection.');
         return;
       }
+      setRazorpayReady(true);
 
       setIsChangingPlan(true);
 
