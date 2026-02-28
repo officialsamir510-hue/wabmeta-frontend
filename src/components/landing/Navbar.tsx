@@ -53,14 +53,14 @@ const Navbar: React.FC = () => {
           }`}
       >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16 lg:h-20">
+          <div className="flex justify-between items-center h-20 lg:h-24">
 
-            {/* ✅ LOGO - Bigger Size */}
+            {/* ✅ LOGO - Extra Large */}
             <Link to="/" className="flex items-center">
               <img
                 src={logo}
                 alt="WabMeta"
-                className="h-12 w-12 lg:h-14 lg:w-14 object-contain"
+                className="h-16 w-16 lg:h-20 lg:w-20 object-contain"
               />
             </Link>
 
@@ -70,7 +70,7 @@ const Navbar: React.FC = () => {
                 <button
                   key={link.name}
                   onClick={() => handleNavClick(link)}
-                  className="text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-green-600 dark:hover:text-green-400 transition-colors"
+                  className="text-base font-medium text-gray-700 dark:text-gray-300 hover:text-green-600 dark:hover:text-green-400 transition-colors"
                 >
                   {link.name}
                 </button>
@@ -81,13 +81,13 @@ const Navbar: React.FC = () => {
             <div className="hidden lg:flex items-center space-x-4">
               <Link
                 to="/login"
-                className="text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-green-600 dark:hover:text-green-400 transition-colors"
+                className="text-base font-medium text-gray-700 dark:text-gray-300 hover:text-green-600 dark:hover:text-green-400 transition-colors"
               >
                 Login
               </Link>
               <Link
                 to="/signup"
-                className="bg-green-500 hover:bg-green-600 text-white px-5 py-2.5 rounded-lg text-sm font-semibold transition-colors shadow-md hover:shadow-lg"
+                className="bg-green-500 hover:bg-green-600 text-white px-6 py-3 rounded-lg text-base font-semibold transition-colors shadow-md hover:shadow-lg"
               >
                 Get Started Free
               </Link>
@@ -99,9 +99,9 @@ const Navbar: React.FC = () => {
               className="lg:hidden p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
             >
               {isOpen ? (
-                <X className="h-6 w-6 text-gray-900 dark:text-white" />
+                <X className="h-7 w-7 text-gray-900 dark:text-white" />
               ) : (
-                <Menu className="h-6 w-6 text-gray-900 dark:text-white" />
+                <Menu className="h-7 w-7 text-gray-900 dark:text-white" />
               )}
             </button>
           </div>
@@ -114,7 +114,7 @@ const Navbar: React.FC = () => {
                   <button
                     key={link.name}
                     onClick={() => handleNavClick(link)}
-                    className="block w-full text-left px-4 py-3 text-gray-700 dark:text-gray-300 hover:bg-green-50 dark:hover:bg-green-900/20 hover:text-green-600 rounded-lg transition-colors font-medium"
+                    className="block w-full text-left px-4 py-3 text-gray-700 dark:text-gray-300 hover:bg-green-50 dark:hover:bg-green-900/20 hover:text-green-600 rounded-lg transition-colors font-medium text-base"
                   >
                     {link.name}
                   </button>
@@ -141,7 +141,7 @@ const Navbar: React.FC = () => {
       </nav>
 
       {/* Spacer */}
-      <div className="h-16 lg:h-20"></div>
+      <div className="h-20 lg:h-24"></div>
     </>
   );
 };
