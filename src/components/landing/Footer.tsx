@@ -50,45 +50,47 @@ const Footer: React.FC = () => {
 
   return (
     <footer className="bg-gray-900 text-white">
-      {/* Main Footer - Same padding */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-8 lg:gap-12">
+      {/* Main Footer */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-8">
 
-          {/* ✅ BRAND COLUMN - Bigger Logo (140px mobile, 180px desktop) */}
+          {/* ✅ BRAND COLUMN - Logo with fixed height container */}
           <div className="lg:col-span-2">
-            <Link to="/" className="inline-block mb-4">
+            {/* Logo Container - Fixed height, logo overflows */}
+            <Link to="/" className="inline-block mb-4 h-16 lg:h-20 overflow-visible">
               <img
                 src={logo}
                 alt="WabMeta"
-                style={{ height: '140px', width: '140px' }}
-                className="lg:!h-[180px] lg:!w-[180px] object-contain"
+                style={{ height: '140px', width: '140px', marginTop: '-30px' }}
+                className="lg:!h-[180px] lg:!w-[180px] lg:!mt-[-40px] object-contain"
               />
             </Link>
-            <p className="text-gray-400 mb-6 max-w-sm">
+
+            <p className="text-gray-400 mb-5 max-w-sm text-sm">
               Powerful WhatsApp Business API platform for marketing, support, and automation.
               Connect with your customers like never before.
             </p>
 
             {/* Contact Info */}
-            <div className="space-y-3">
+            <div className="space-y-2">
               <a
                 href={contactInfo.whatsappLink}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center text-gray-400 hover:text-green-500 transition-colors"
+                className="flex items-center text-gray-400 hover:text-green-500 transition-colors text-sm"
               >
-                <Phone className="w-5 h-5 mr-3 text-green-500" />
+                <Phone className="w-4 h-4 mr-2 text-green-500" />
                 <span>{contactInfo.whatsapp}</span>
               </a>
               <a
                 href={`mailto:${contactInfo.email}`}
-                className="flex items-center text-gray-400 hover:text-green-500 transition-colors"
+                className="flex items-center text-gray-400 hover:text-green-500 transition-colors text-sm"
               >
-                <Mail className="w-5 h-5 mr-3 text-green-500" />
+                <Mail className="w-4 h-4 mr-2 text-green-500" />
                 <span>{contactInfo.email}</span>
               </a>
-              <div className="flex items-center text-gray-400">
-                <MapPin className="w-5 h-5 mr-3 text-green-500" />
+              <div className="flex items-center text-gray-400 text-sm">
+                <MapPin className="w-4 h-4 mr-2 text-green-500" />
                 <span>{contactInfo.location}</span>
               </div>
             </div>
@@ -96,21 +98,21 @@ const Footer: React.FC = () => {
 
           {/* Product Links */}
           <div>
-            <h3 className="text-lg font-semibold mb-4">Product</h3>
-            <ul className="space-y-3">
+            <h3 className="text-base font-semibold mb-3">Product</h3>
+            <ul className="space-y-2">
               {footerLinks.product.map((link) => (
                 <li key={link.name}>
                   {link.type === 'scroll' ? (
                     <button
                       onClick={() => handleScrollLink(link.href)}
-                      className="text-gray-400 hover:text-green-500 transition-colors"
+                      className="text-gray-400 hover:text-green-500 transition-colors text-sm"
                     >
                       {link.name}
                     </button>
                   ) : (
                     <Link
                       to={link.href}
-                      className="text-gray-400 hover:text-green-500 transition-colors"
+                      className="text-gray-400 hover:text-green-500 transition-colors text-sm"
                     >
                       {link.name}
                     </Link>
@@ -122,21 +124,21 @@ const Footer: React.FC = () => {
 
           {/* Company Links */}
           <div>
-            <h3 className="text-lg font-semibold mb-4">Company</h3>
-            <ul className="space-y-3">
+            <h3 className="text-base font-semibold mb-3">Company</h3>
+            <ul className="space-y-2">
               {footerLinks.company.map((link) => (
                 <li key={link.name}>
                   {link.type === 'scroll' ? (
                     <button
                       onClick={() => handleScrollLink(link.href)}
-                      className="text-gray-400 hover:text-green-500 transition-colors"
+                      className="text-gray-400 hover:text-green-500 transition-colors text-sm"
                     >
                       {link.name}
                     </button>
                   ) : (
                     <Link
                       to={link.href}
-                      className="text-gray-400 hover:text-green-500 transition-colors"
+                      className="text-gray-400 hover:text-green-500 transition-colors text-sm"
                     >
                       {link.name}
                     </Link>
@@ -148,13 +150,13 @@ const Footer: React.FC = () => {
 
           {/* Legal Links */}
           <div>
-            <h3 className="text-lg font-semibold mb-4">Legal</h3>
-            <ul className="space-y-3">
+            <h3 className="text-base font-semibold mb-3">Legal</h3>
+            <ul className="space-y-2">
               {footerLinks.legal.map((link) => (
                 <li key={link.name}>
                   <Link
                     to={link.href}
-                    className="text-gray-400 hover:text-green-500 transition-colors"
+                    className="text-gray-400 hover:text-green-500 transition-colors text-sm"
                   >
                     {link.name}
                   </Link>
@@ -167,8 +169,8 @@ const Footer: React.FC = () => {
 
       {/* Bottom Bar */}
       <div className="border-t border-gray-800">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          <div className="flex flex-col md:flex-row justify-between items-center space-y-4 md:space-y-0">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+          <div className="flex flex-col md:flex-row justify-between items-center space-y-3 md:space-y-0">
             <p className="text-gray-400 text-sm">
               © {currentYear} WabMeta. All rights reserved.
             </p>
