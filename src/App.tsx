@@ -25,6 +25,9 @@ import AdminLayout from './components/admin/AdminLayout';
 
 // Public
 const Landing = lazy(() => import('./pages/Landing'));
+const Contact = lazy(() => import('./pages/Contact'));
+const Documentation = lazy(() => import('./pages/Documentation'));
+const Blog = lazy(() => import('./pages/Blog'));
 
 // Auth
 const Login = lazy(() => import('./pages/Login'));
@@ -197,6 +200,9 @@ const PageTitleUpdater: React.FC = () => {
       '/admin/dashboard': 'Admin Dashboard | WabMeta',
       '/privacy': 'Privacy Policy | WabMeta',
       '/terms': 'Terms of Service | WabMeta',
+      '/contact': 'Contact Us | WabMeta',
+      '/documentation': 'Documentation | WabMeta',
+      '/blog': 'Blog | WabMeta',
       '/data-deletion': 'Data Deletion | WabMeta',
       '/404': 'Page Not Found | WabMeta',
     };
@@ -242,6 +248,9 @@ const AppRoutes: React.FC = () => {
         {/* PUBLIC ROUTES */}
         {/* ============================== */}
         <Route path="/" element={<Landing />} />
+        <Route path="/contact" element={<Contact />} />
+        <Route path="/documentation" element={<Documentation />} />
+        <Route path="/blog" element={<Blog />} />
 
         {/* ============================== */}
         {/* AUTH ROUTES (Redirect if logged in) */}
