@@ -53,7 +53,7 @@ export type ParseError = {
  * Indian phone number regex
  * Must start with 6-9 and be 10 digits (after country code)
  */
-const INDIAN_PHONE_REGEX = /^(\+91|91)?[6-9]\d{9}$/;
+const INDIAN_PHONE_REGEX = /^(\+91|91|0091|0)?[6-9]\d{9}$/;
 
 /**
  * Validate if phone number is valid Indian format
@@ -71,47 +71,35 @@ export function validateIndianPhone(phone: string): boolean {
  */
 export function normalizePhone(
   raw: string,
-  defaultCountryCode = '+91'
+  _defaultCountryCode = '+91'
 ): { phone: string; countryCode: string } {
   const input = (raw || '').trim();
 
-  // Remove all non-digit characters except +
-  let cleaned = input.replace(/[\s\-\(\)]/g, '');
+  // 1. Remove non-numeric characters EXCEPT '+'
+  let cleaned = input.replace(/[^\d+]/g, '');
 
-  // Extract country code if present
-  const countryCodeMatch = cleaned.match(/^\+(\d{1,3})/);
-  let countryCode = defaultCountryCode;
-  let digits = cleaned;
-
-  if (countryCodeMatch) {
-    countryCode = `+${countryCodeMatch[1]}`;
-    digits = cleaned.replace(/^\+\d{1,3}/, '');
+  // 2. Remove + if present
+  if (cleaned.startsWith('+')) {
+    cleaned = cleaned.substring(1);
   }
 
-  // Remove all non-digits from remaining part
-  digits = digits.replace(/\D/g, '');
+  // 3. Remove leading zeros (e.g., 098..., 0091...)
+  cleaned = cleaned.replace(/^0+/, '');
 
-  // Handle different formats
-  if (digits.length === 11 && digits.startsWith('0')) {
-    // 09876543210 -> 9876543210
-    digits = digits.slice(1);
-  } else if (digits.length === 12 && digits.startsWith('91')) {
-    // 919876543210 -> 9876543210
-    digits = digits.slice(2);
-  } else if (digits.length === 11 && digits.startsWith('91')) {
-    // Malformed 11-digit
-    digits = digits.slice(2);
+  // 4. Handle 91 prefix
+  if (cleaned.startsWith('91') && cleaned.length === 12) {
+    cleaned = cleaned.substring(2);
   }
 
-  // Validate final format: must be exactly 10 digits starting with 6-9
-  if (!/^[6-9]\d{9}$/.test(digits)) {
-    return { phone: '', countryCode: '+91' };
+  // 5. Final validation for 10-digit Indian Mobile
+  if (/^[6-9]\d{9}$/.test(cleaned)) {
+    return {
+      phone: `+91${cleaned}`,
+      countryCode: '+91',
+    };
   }
 
-  return {
-    phone: `+91${digits}`,
-    countryCode: '+91',
-  };
+  return { phone: '', countryCode: '+91' };
 }
 
 /**
@@ -357,12 +345,12 @@ export function parseCsvText(text: string): ParseResult {
  * Generate sample CSV content
  */
 export function generateSampleCsv(): string {
-  return `Name,Phone,Email,Tag
+  return `Full Name,Phone,Email,Tags
 Rahul Kumar,9876543210,rahul@example.com,customer
 Priya Sharma,+919876543211,priya@example.com,vip|lead
 Amit Patel,919876543212,amit@example.com,customer;active
-Neha Singh,9876543213,,lead
-Vikram Mehta,+91 98765 43214,vikram@example.com,vip`;
+Neha Singh,09876543213,,lead
+Vikram Mehta,00919876543214,vikram@example.com,vip`;
 }
 
 /**

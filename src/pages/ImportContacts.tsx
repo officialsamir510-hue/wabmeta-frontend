@@ -23,7 +23,19 @@ type Step = "upload" | "mapping" | "preview" | "importing" | "complete";
 
 type Failure = { row: number; error: string };
 
-const normalizePhoneDigits = (v: any) => String(v ?? "").trim().replace(/[^\d]/g, "");
+const normalizeIndianPhone = (v: any) => {
+  if (!v) return "";
+  let cleaned = String(v).trim().replace(/[^\d+]/g, "");
+  if (cleaned.startsWith("+")) cleaned = cleaned.substring(1);
+  cleaned = cleaned.replace(/^0+/, "");
+
+  if (cleaned.startsWith("91") && cleaned.length === 12) {
+    cleaned = cleaned.substring(2);
+  }
+
+  if (/^[6-9]\d{9}$/.test(cleaned)) return cleaned;
+  return "";
+};
 const isValidEmail = (v: any) => {
   const s = String(v ?? "").trim();
   if (!s) return false;
@@ -83,10 +95,10 @@ const ImportContacts: React.FC = () => {
 
           // Auto-map
           const mapped = {
-            name: autoDetectHeader(headers, ["name", "full name", "fullname", "customer name"]),
-            phone: autoDetectHeader(headers, ["phone", "mobile", "whatsapp", "number", "phone number"]),
-            email: autoDetectHeader(headers, ["email", "email address"]),
-            company: autoDetectHeader(headers, ["company", "business", "organization"]),
+            name: autoDetectHeader(headers, ["name", "full name", "fullname", "customer name", "contact name", "first name"]),
+            phone: autoDetectHeader(headers, ["phone", "mobile", "whatsapp", "number", "phone number", "mob", "contact"]),
+            email: autoDetectHeader(headers, ["email", "email address", "mail"]),
+            company: autoDetectHeader(headers, ["company", "business", "organization", "firm"]),
           };
 
           setFieldMapping((prev) => ({ ...prev, ...mapped }));
@@ -114,7 +126,7 @@ const ImportContacts: React.FC = () => {
       const rawEmail = fieldMapping.email ? row[fieldMapping.email] : "";
       const rawCompany = fieldMapping.company ? row[fieldMapping.company] : "";
 
-      const phone = normalizePhoneDigits(rawPhone); // ✅ digits only
+      const phone = normalizeIndianPhone(rawPhone); // ✅ Indian normalization
       const email = isValidEmail(rawEmail) ? String(rawEmail).trim() : undefined;
       const { firstName, lastName } = splitName(String(rawName || "").trim());
 
@@ -138,7 +150,7 @@ const ImportContacts: React.FC = () => {
   const stats = useMemo(() => {
     const total = normalizedContacts.length;
     const valid = normalizedContacts.filter(
-      (c) => c.phone && /^\d+$/.test(c.phone) && c.phone.length >= 10 && c.phone.length <= 15
+      (c) => c.phone && /^[6-9]\d{9}$/.test(c.phone)
     ).length;
     return { total, valid, invalid: total - valid };
   }, [normalizedContacts]);
@@ -170,7 +182,7 @@ const ImportContacts: React.FC = () => {
     try {
       const contacts = normalizedContacts
         .filter(
-          (c) => c.phone && /^\d+$/.test(c.phone) && c.phone.length >= 10 && c.phone.length <= 15
+          (c) => c.phone && /^[6-9]\d{9}$/.test(c.phone)
         )
         .map((c) => ({
           phone: c.phone,
@@ -399,7 +411,7 @@ const ImportContacts: React.FC = () => {
           <>
             <h2 className="text-lg font-semibold text-gray-900 mb-2">Preview Import</h2>
             <p className="text-gray-500 mb-4">
-              Phone will be stored as <span className="font-medium">digits only</span> (backend requirement). Invalid rows will be skipped.
+              Contacts will be normalized to <span className="font-medium">10-digit Indian numbers</span>. Non-Indian or invalid numbers will be skipped.
             </p>
 
             <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-6">
@@ -427,7 +439,7 @@ const ImportContacts: React.FC = () => {
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   {previewRows.map((c, idx) => {
-                    const ok = c.phone && /^\d+$/.test(c.phone) && c.phone.length >= 10 && c.phone.length <= 15;
+                    const ok = c.phone && /^[6-9]\d{9}$/.test(c.phone);
                     return (
                       <tr key={idx}>
                         <td className="px-4 py-3 text-gray-600">{c.__rowIndex}</td>
