@@ -204,6 +204,7 @@ const PageTitleUpdater: React.FC = () => {
       '/documentation': 'Documentation | WabMeta',
       '/blog': 'Blog | WabMeta',
       '/data-deletion': 'Data Deletion | WabMeta',
+      '/dashboard/help': 'Help & Support | WabMeta',
       '/404': 'Page Not Found | WabMeta',
     };
 
