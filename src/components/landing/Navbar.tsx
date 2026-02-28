@@ -53,14 +53,15 @@ const Navbar: React.FC = () => {
           }`}
       >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-20 lg:h-24">
+          <div className="flex justify-between items-center h-24 lg:h-28">
 
-            {/* ✅ LOGO - Extra Large */}
+            {/* ✅ LOGO - Maximum Large (120px - 140px) */}
             <Link to="/" className="flex items-center">
               <img
                 src={logo}
                 alt="WabMeta"
-                className="h-16 w-16 lg:h-20 lg:w-20 object-contain"
+                style={{ height: '80px', width: '80px' }}
+                className="lg:!h-[100px] lg:!w-[100px] object-contain"
               />
             </Link>
 
@@ -99,9 +100,9 @@ const Navbar: React.FC = () => {
               className="lg:hidden p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
             >
               {isOpen ? (
-                <X className="h-7 w-7 text-gray-900 dark:text-white" />
+                <X className="h-8 w-8 text-gray-900 dark:text-white" />
               ) : (
-                <Menu className="h-7 w-7 text-gray-900 dark:text-white" />
+                <Menu className="h-8 w-8 text-gray-900 dark:text-white" />
               )}
             </button>
           </div>
@@ -141,7 +142,7 @@ const Navbar: React.FC = () => {
       </nav>
 
       {/* Spacer */}
-      <div className="h-20 lg:h-24"></div>
+      <div className="h-24 lg:h-28"></div>
     </>
   );
 };
