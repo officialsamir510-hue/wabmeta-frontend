@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Menu, X } from 'lucide-react';
-import logo from '../../assets/logo.png'; // Tumhara logo
+import logo from '../../assets/logo.png';
 
 const Navbar: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -53,14 +53,14 @@ const Navbar: React.FC = () => {
           }`}
       >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16 lg:h-20">
+          <div className="flex justify-between items-center h-14 lg:h-16">
 
-            {/* Logo Only - No Text */}
+            {/* ✅ LOGO - Smaller Size */}
             <Link to="/" className="flex items-center">
               <img
                 src={logo}
                 alt="WabMeta"
-                className="h-12 w-auto lg:h-14 object-contain"
+                className="h-8 w-8 lg:h-9 lg:w-9 object-contain rounded-md"
               />
             </Link>
 
@@ -87,7 +87,7 @@ const Navbar: React.FC = () => {
               </Link>
               <Link
                 to="/signup"
-                className="bg-green-500 hover:bg-green-600 text-white px-5 py-2.5 rounded-lg text-sm font-semibold transition-colors shadow-md hover:shadow-lg"
+                className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors shadow-md hover:shadow-lg"
               >
                 Get Started Free
               </Link>
@@ -99,9 +99,9 @@ const Navbar: React.FC = () => {
               className="lg:hidden p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
             >
               {isOpen ? (
-                <X className="h-6 w-6 text-gray-900 dark:text-white" />
+                <X className="h-5 w-5 text-gray-900 dark:text-white" />
               ) : (
-                <Menu className="h-6 w-6 text-gray-900 dark:text-white" />
+                <Menu className="h-5 w-5 text-gray-900 dark:text-white" />
               )}
             </button>
           </div>
@@ -141,7 +141,7 @@ const Navbar: React.FC = () => {
       </nav>
 
       {/* Spacer */}
-      <div className="h-16 lg:h-20"></div>
+      <div className="h-14 lg:h-16"></div>
     </>
   );
 };
