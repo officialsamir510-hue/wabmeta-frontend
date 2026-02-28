@@ -54,13 +54,13 @@ const Footer: React.FC = () => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 lg:py-16">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-8 lg:gap-12">
 
-          {/* ✅ BRAND COLUMN - Medium Logo */}
+          {/* ✅ BRAND COLUMN - Bigger Logo */}
           <div className="lg:col-span-2">
             <Link to="/" className="inline-block mb-6">
               <img
                 src={logo}
                 alt="WabMeta"
-                className="h-11 w-11 lg:h-12 lg:w-12 object-contain rounded-lg"
+                className="h-14 w-14 lg:h-16 lg:w-16 object-contain"
               />
             </Link>
             <p className="text-gray-400 mb-6 max-w-sm">
