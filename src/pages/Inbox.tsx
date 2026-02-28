@@ -1145,7 +1145,7 @@ const Inbox: React.FC = () => {
 
                         <MessageBubble
                           message={m as any}
-                          onCopy={(content) => {
+                          onCopy={(content: string) => {
                             navigator.clipboard.writeText(content);
                             toast.success('Copied to clipboard');
                           }}
