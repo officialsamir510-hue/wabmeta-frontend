@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { dashboard } from '../services/api';
 import { useAuth } from '../context/AuthContext';
+import { useSocket } from '../context/SocketContext';
 import toast from 'react-hot-toast';
 import { Link } from 'react-router-dom';
 
@@ -191,9 +192,39 @@ const Dashboard: React.FC = () => {
   const [widgets, setWidgets] = useState<any>(null);
   const [dateRange, setDateRange] = useState<7 | 14 | 30>(7);
 
+  const { socket, isConnected } = useSocket();
+
   useEffect(() => {
     fetchDashboardData();
   }, [dateRange]);
+
+  // ✅ REAL-TIME UPDATES
+  useEffect(() => {
+    if (!socket || !isConnected) return;
+
+    const handleRealtimeRefresh = () => {
+      // Silently refresh stats and widgets
+      // Debounce slightly to avoid rapid refreshes
+      const timer = setTimeout(() => {
+        fetchDashboardData(false);
+      }, 500);
+      return () => clearTimeout(timer);
+    };
+
+    socket.on('message:new', handleRealtimeRefresh);
+    socket.on('campaign:update', handleRealtimeRefresh);
+    socket.on('campaign:progress', handleRealtimeRefresh);
+    socket.on('conversation:updated', handleRealtimeRefresh);
+    socket.on('account:updated', handleRealtimeRefresh);
+
+    return () => {
+      socket.off('message:new');
+      socket.off('campaign:update');
+      socket.off('campaign:progress');
+      socket.off('conversation:updated');
+      socket.off('account:updated');
+    };
+  }, [socket, isConnected]);
 
   const fetchDashboardData = async (isRefresh = false) => {
     try {

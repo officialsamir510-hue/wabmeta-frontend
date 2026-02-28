@@ -660,29 +660,56 @@ const Inbox: React.FC = () => {
       }
 
       // Update conversation list
-      setConversations((prev) =>
-        prev.map((c) => {
-          if (c.id !== msg.conversationId) return c;
+      setConversations((prev) => {
+        const index = prev.findIndex((c) => c.id === msg.conversationId);
+        let updatedList = [...prev];
 
-          // Don't update if already latest
-          if (c.lastMessageAt === msg.createdAt) return c;
-
-          return {
-            ...c,
+        if (index !== -1) {
+          // Update existing conversation
+          const existing = prev[index];
+          updatedList[index] = {
+            ...existing,
             lastMessagePreview: msg.content?.substring(0, 50) || 'New message',
             lastMessageAt: msg.createdAt || new Date().toISOString(),
             unreadCount: selectedConversation?.id !== msg.conversationId
-              ? (c.unreadCount || 0) + 1
+              ? (existing.unreadCount || 0) + 1
               : 0,
             isRead: selectedConversation?.id === msg.conversationId,
           };
-        }).sort((a, b) => {
-          // Keep pinned sorting if it exists in the original codebase
-          // The user's snippet was simpler: .sort((a, b) => new Date(b.lastMessageAt || 0).getTime() - new Date(a.lastMessageAt || 0).getTime())
-          // I will follow the user's snippet exactly as requested for sorting.
-          return new Date(b.lastMessageAt || 0).getTime() - new Date(a.lastMessageAt || 0).getTime();
-        })
-      );
+        } else {
+          // 🆕 Handle New Conversation (First time message from new contact)
+          // Note: Full conversation data might be missing from socket message,
+          // so we may need a partial update or a re-fetch.
+          // For now, if 'newMessage' has 'conversation' property (from backend update), use it.
+          const convData = newMessage?.conversation || (msg as any).conversation;
+
+          if (convData) {
+            updatedList.unshift({
+              ...convData,
+              lastMessagePreview: msg.content?.substring(0, 50) || 'New message',
+              lastMessageAt: msg.createdAt || new Date().toISOString(),
+              unreadCount: 1,
+              isRead: false,
+            });
+          } else {
+            // If No conversation data, we can't show it properly yet.
+            // Best to trigger a silent refresh of the list.
+            fetchConversations();
+            return prev;
+          }
+        }
+
+        // Always Re-sort by lastMessageAt (most recent first)
+        return updatedList.sort((a, b) => {
+          // Pins stay at top
+          if (a.isPinned && !b.isPinned) return -1;
+          if (!a.isPinned && b.isPinned) return 1;
+
+          const dateA = new Date(a.lastMessageAt || 0).getTime();
+          const dateB = new Date(b.lastMessageAt || 0).getTime();
+          return dateB - dateA;
+        });
+      });
 
       // ✅ Play sound for inbound messages in OTHER conversations
       if (msg.direction === 'INBOUND' && selectedConversation?.id !== msg.conversationId) {

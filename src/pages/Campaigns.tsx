@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { campaigns as campaignsApi } from '../services/api';
+import { useSocket } from '../context/SocketContext';
 import toast from 'react-hot-toast';
 
 // ✅ Safe number helpers
@@ -76,10 +77,59 @@ const Campaigns: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
+  const { socket, isConnected } = useSocket();
+
   useEffect(() => {
     fetchCampaigns();
     fetchStats();
   }, [statusFilter]);
+
+  // ✅ REAL-TIME UPDATES
+  useEffect(() => {
+    if (!socket || !isConnected) return;
+
+    const handleCampaignUpdate = (data: any) => {
+      console.log('📡 [REAL-TIME] Campaign update:', data);
+
+      // Update specific campaign in list
+      setCampaigns(prev => prev.map(c =>
+        c.id === data.campaignId
+          ? { ...c, status: data.status, sentCount: data.sent || c.sentCount }
+          : c
+      ));
+
+      // Refresh stats silently
+      fetchStats();
+    };
+
+    const handleCampaignProgress = (data: any) => {
+      setCampaigns(prev => prev.map(c =>
+        c.id === data.campaignId
+          ? {
+            ...c,
+            sentCount: data.sent,
+            failedCount: data.failed,
+            deliveredCount: data.delivered,
+            readCount: data.read,
+            status: data.status || c.status
+          }
+          : c
+      ));
+    };
+
+    socket.on('campaign:update', handleCampaignUpdate);
+    socket.on('campaign:progress', handleCampaignProgress);
+    socket.on('campaign:completed', (_data) => {
+      fetchCampaigns(); // Full refresh on completion
+      fetchStats();
+    });
+
+    return () => {
+      socket.off('campaign:update', handleCampaignUpdate);
+      socket.off('campaign:progress', handleCampaignProgress);
+      socket.off('campaign:completed');
+    };
+  }, [socket, isConnected]);
 
   const fetchCampaigns = async () => {
     try {
