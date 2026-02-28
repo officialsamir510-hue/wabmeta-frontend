@@ -12,6 +12,7 @@ interface Message {
     direction: string;
     status: string;
     createdAt: string;
+    timestamp?: string;
     type: string;
 }
 

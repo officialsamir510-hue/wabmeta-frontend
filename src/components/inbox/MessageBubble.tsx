@@ -577,7 +577,9 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message, onCopy }) => {
 
   const formatTime = (timestamp: string) => {
     try {
+      if (!timestamp) return '';
       const date = new Date(timestamp);
+      if (isNaN(date.getTime())) return '';
       return date.toLocaleTimeString('en-IN', {
         hour: '2-digit',
         minute: '2-digit',
@@ -613,10 +615,9 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message, onCopy }) => {
         {/* Message Content */}
         {renderContent()}
 
-        {/* Timestamp & Status */}
         <div className={`flex items-center justify-end gap-1 mt-1.5 ${isOutbound ? 'text-green-100' : 'text-gray-400'
           }`}>
-          <span className="text-[10px]">{formatTime(message.timestamp)}</span>
+          <span className="text-[10px]">{formatTime(message.timestamp || (message as any).createdAt)}</span>
           {renderStatus()}
         </div>
       </div>

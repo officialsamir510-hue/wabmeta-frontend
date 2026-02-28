@@ -12,6 +12,7 @@ interface Message {
   content: any;
   status: string;
   createdAt: string;
+  timestamp?: string;
   sentAt?: string;
   deliveredAt?: string;
   readAt?: string;
@@ -50,14 +51,14 @@ interface UseInboxReturn {
 
 export function useInbox(organizationId: string, accountId: string): UseInboxReturn {
   const { socket, isConnected, joinConversation, leaveConversation } = useSocket();
-  
+
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeConversation, setActiveConversation] = useState<Conversation | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  
+
   const activeConversationRef = useRef<string | null>(null);
 
   // Load conversations
@@ -142,10 +143,10 @@ export function useInbox(organizationId: string, accountId: string): UseInboxRet
           prev.map((c) =>
             c.id === activeConversation.id
               ? {
-                  ...c,
-                  lastMessageAt: new Date().toISOString(),
-                  lastMessageText: text.substring(0, 100),
-                }
+                ...c,
+                lastMessageAt: new Date().toISOString(),
+                lastMessageText: text.substring(0, 100),
+              }
               : c
           )
         );
@@ -223,13 +224,13 @@ export function useInbox(organizationId: string, accountId: string): UseInboxRet
         prev.map((c) =>
           c.id === data.conversationId
             ? {
-                ...c,
-                lastMessageAt: data.message.createdAt,
-                lastMessageText:
-                  data.message.content?.text?.substring(0, 100) || 'New message',
-                unreadCount:
-                  c.id === activeConversationRef.current ? 0 : c.unreadCount + 1,
-              }
+              ...c,
+              lastMessageAt: data.message.createdAt,
+              lastMessageText:
+                data.message.content?.text?.substring(0, 100) || 'New message',
+              unreadCount:
+                c.id === activeConversationRef.current ? 0 : c.unreadCount + 1,
+            }
             : c
         )
       );

@@ -25,6 +25,7 @@ interface Message {
   direction: 'INBOUND' | 'OUTBOUND';
   status: string;
   createdAt: string;
+  timestamp?: string;
   mediaUrl?: string;
 }
 

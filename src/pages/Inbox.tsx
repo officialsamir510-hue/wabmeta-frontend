@@ -67,6 +67,7 @@ interface Message {
   direction: 'INBOUND' | 'OUTBOUND';
   status?: 'PENDING' | 'SENT' | 'DELIVERED' | 'READ' | 'FAILED';
   createdAt: string;
+  timestamp?: string;
   sentAt?: string;
   deliveredAt?: string;
   readAt?: string;
@@ -313,6 +314,7 @@ const Inbox: React.FC = () => {
       direction: 'OUTBOUND',
       status: 'PENDING',
       createdAt: now,  // ✅ Always set
+      timestamp: now,  // ✅ Always set
       sentAt: now,     // ✅ Always set
       metadata: { tempId } // ✅ Important: Store tempId in metadata locally too
     };
@@ -365,8 +367,9 @@ const Inbox: React.FC = () => {
                 ...m,
                 ...realMessage,
                 status: 'SENT',
-                // Preserve timestamp if backend is missing it (though we fixed that)
+                // Preserve timestamp from real message or fallback to temp
                 createdAt: realMessage.createdAt || m.createdAt,
+                timestamp: realMessage.timestamp || m.timestamp || realMessage.createdAt || m.createdAt,
               };
             }
             return m;
