@@ -50,27 +50,27 @@ const Footer: React.FC = () => {
 
   return (
     <footer className="bg-gray-900 text-white">
-      {/* Main Footer */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 lg:py-16">
+      {/* Main Footer - Same padding */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-8 lg:gap-12">
 
-          {/* ✅ BRAND COLUMN - 120px mobile, 150px desktop */}
+          {/* ✅ BRAND COLUMN - Bigger Logo (140px mobile, 180px desktop) */}
           <div className="lg:col-span-2">
-            <Link to="/" className="inline-block mb-6">
+            <Link to="/" className="inline-block mb-4">
               <img
                 src={logo}
                 alt="WabMeta"
-                style={{ height: '120px', width: '120px' }}
-                className="lg:!h-[150px] lg:!w-[150px] object-contain"
+                style={{ height: '140px', width: '140px' }}
+                className="lg:!h-[180px] lg:!w-[180px] object-contain"
               />
             </Link>
-            <p className="text-gray-400 mb-6 max-w-sm text-base">
+            <p className="text-gray-400 mb-6 max-w-sm">
               Powerful WhatsApp Business API platform for marketing, support, and automation.
               Connect with your customers like never before.
             </p>
 
             {/* Contact Info */}
-            <div className="space-y-4">
+            <div className="space-y-3">
               <a
                 href={contactInfo.whatsappLink}
                 target="_blank"
