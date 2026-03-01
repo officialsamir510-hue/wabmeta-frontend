@@ -238,25 +238,37 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 }
 
                 // Verify with server in background
-                const isValid = await verifySession();
+                try {
+                    const isValid = await verifySession();
 
-                if (!isValid && isMounted) {
-                    console.log('❌ Session invalid - triggering logout cleanup');
-                    clearAuthData();
-                    setState({
-                        user: null,
-                        organization: null,
-                        isAuthenticated: false,
-                        isLoading: false,
-                        error: null,
-                    });
-                } else if (isMounted) {
-                    setState(prev => ({ ...prev, isLoading: false }));
+                    if (!isValid && isMounted) {
+                        console.log('❌ Session invalid - triggering logout cleanup');
+                        clearAuthData();
+                        setState({
+                            user: null,
+                            organization: null,
+                            isAuthenticated: false,
+                            isLoading: false,
+                            error: null,
+                        });
+                        navigate('/login', { replace: true });
+                    } else if (isMounted) {
+                        setState(prev => ({ ...prev, isLoading: false }));
+                    }
+                } catch (verifyError: any) {
+                    // Ignore transient network errors during server restarts
+                    if (verifyError?.code === 'NETWORK_ERROR' || verifyError?.status >= 500) {
+                        console.warn('⏱️ Server is restarting. Keeping local session.');
+                        setState(prev => ({ ...prev, isLoading: false }));
+                    } else {
+                        throw verifyError;
+                    }
                 }
             } catch (error) {
-                console.error('💥 Auth Initialization crashed:', error);
+                console.error('💥 Auth Initialization failed:', error);
                 if (isMounted) {
                     setState(prev => ({ ...prev, isLoading: false, isAuthenticated: false }));
+                    navigate('/login', { replace: true });
                 }
             }
         };
