@@ -122,11 +122,18 @@ const getAccessToken = (): string | null => {
       localStorage.getItem(TOKEN_KEYS.LEGACY_WABMETA);
   }
 
+  if (import.meta.env.DEV && !token) {
+    console.debug('📂 Storage check: Access token is missing or invalid');
+  }
+
   return token && isValidJWT(token) ? token : null;
 };
 
 const getRefreshToken = (): string | null => {
   const token = localStorage.getItem(TOKEN_KEYS.REFRESH);
+  if (!token && import.meta.env.DEV) {
+    console.debug('📂 Storage check: Refresh token is missing');
+  }
   return token && typeof token === 'string' && token.length > 0 ? token : null;
 };
 
