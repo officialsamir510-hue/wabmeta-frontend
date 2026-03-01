@@ -1,7 +1,7 @@
 // src/context/AuthProvider.tsx - PERSISTENT LOGIN FINAL
 
 import React, { useEffect, useState, useCallback, useRef } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { AuthContext, type User, type Organization } from './AuthContext';
 import api, { auth, setAuthToken, removeAuthToken } from '../services/api';
 
@@ -22,32 +22,11 @@ const TOKEN_KEYS = {
     LEGACY_WABMETA: 'wabmeta_token',
 } as const;
 
-// ✅ Public routes that don't require authentication
-const PUBLIC_ROUTES = [
-    '/',
-    '/login',
-    '/signup',
-    '/forgot-password',
-    '/reset-password',
-    '/verify-email',
-    '/verify-otp',
-    '/privacy',
-    '/terms',
-    '/data-deletion',
-    '/meta/callback',
-    '/admin/login',
-];
+// Authentication routes logic and public route definitions
 
-const isPublicRoute = (pathname: string): boolean => {
-    // Exact match
-    if (PUBLIC_ROUTES.includes(pathname)) return true;
 
-    // Prefix match for some routes
-    if (pathname.startsWith('/reset-password')) return true;
-    if (pathname.startsWith('/verify-email')) return true;
+// Removed isPublicRoute as redirection is now handled by ProtectedRoute component logic
 
-    return false;
-};
 
 // ✅ Check if JWT token is valid format
 const isValidJWT = (token: string | null): boolean => {
@@ -58,7 +37,6 @@ const isValidJWT = (token: string | null): boolean => {
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const navigate = useNavigate();
-    const location = useLocation();
 
     const [state, setState] = useState<AuthState>({
         user: null,
@@ -233,72 +211,63 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     // ✅ Initial auth check on app load
     useEffect(() => {
-        // Prevent double execution in React Strict Mode
-        if (initialCheckDone.current) return;
-        initialCheckDone.current = true;
+        let isMounted = true;
 
         const initAuth = async () => {
-            console.log('🚀 Initializing authentication...');
+            try {
+                console.log('🚀 Initializing authentication...');
+                const accessToken = getAccessToken();
 
-            const accessToken = getAccessToken();
-
-            // No token = not logged in
-            if (!accessToken) {
-                console.log('📭 No token found - user not logged in');
-                setState(prev => ({ ...prev, isLoading: false }));
-
-                // Redirect to login if on protected route
-                if (!isPublicRoute(location.pathname) && !location.pathname.startsWith('/admin')) {
-                    console.log('🔒 Protected route, redirecting to login');
-                    navigate('/login', {
-                        replace: true,
-                        state: { from: location.pathname }
-                    });
+                if (!accessToken) {
+                    console.log('📭 No token found');
+                    if (isMounted) {
+                        setState(prev => ({ ...prev, isLoading: false, isAuthenticated: false }));
+                    }
+                    return;
                 }
-                return;
-            }
 
-            // ✅ Token exists - load saved data immediately for fast UI
-            const { user: savedUser, org: savedOrg } = loadSavedData();
+                // Restore saved UI data for speed
+                const { user: savedUser, org: savedOrg } = loadSavedData();
+                if (savedUser && isMounted) {
+                    setState(prev => ({
+                        ...prev,
+                        user: savedUser,
+                        organization: savedOrg,
+                        isAuthenticated: true,
+                    }));
+                }
 
-            if (savedUser) {
-                console.log('👤 Restoring saved session:', savedUser.email);
-                setState({
-                    user: savedUser,
-                    organization: savedOrg,
-                    isAuthenticated: true,
-                    isLoading: true, // Still loading while verifying
-                    error: null,
-                });
-            }
+                // Verify with server in background
+                const isValid = await verifySession();
 
-            // ✅ Verify with server in background
-            const isValid = await verifySession();
-
-            if (!isValid) {
-                console.log('❌ Session invalid - clearing auth');
-                clearAuthData();
-
-                setState({
-                    user: null,
-                    organization: null,
-                    isAuthenticated: false,
-                    isLoading: false,
-                    error: null,
-                });
-
-                // Redirect to login if on protected route
-                if (!isPublicRoute(location.pathname) && !location.pathname.startsWith('/admin')) {
-                    navigate('/login', {
-                        replace: true,
-                        state: { from: location.pathname }
+                if (!isValid && isMounted) {
+                    console.log('❌ Session invalid - triggering logout cleanup');
+                    clearAuthData();
+                    setState({
+                        user: null,
+                        organization: null,
+                        isAuthenticated: false,
+                        isLoading: false,
+                        error: null,
                     });
+                } else if (isMounted) {
+                    setState(prev => ({ ...prev, isLoading: false }));
+                }
+            } catch (error) {
+                console.error('💥 Auth Initialization crashed:', error);
+                if (isMounted) {
+                    setState(prev => ({ ...prev, isLoading: false, isAuthenticated: false }));
                 }
             }
         };
 
-        initAuth();
-    }, []); // Empty deps - run only once on mount
+        if (!initialCheckDone.current) {
+            initialCheckDone.current = true;
+            initAuth();
+        }
+
+        return () => { isMounted = false; };
+    }, [getAccessToken, loadSavedData, verifySession, clearAuthData]);
 
     // ✅ Login function
     const login = useCallback(async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {

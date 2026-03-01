@@ -259,6 +259,13 @@ api.interceptors.response.use(
     const status = response.status;
     const url = response.config.url || '';
 
+    // 🔄 SYNC: If backend did a silent refresh (auto-healing)
+    const newAccessToken = response.headers['x-new-access-token'];
+    if (newAccessToken && isValidJWT(newAccessToken)) {
+      console.log('🛡️ Auto-healing SYNC: Updating local storage with new session token');
+      setAuthTokens(newAccessToken);
+    }
+
     if (import.meta.env.DEV) {
       console.log(`📥 ${status} ${url}`);
     }
