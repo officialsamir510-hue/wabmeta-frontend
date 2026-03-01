@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import {
   LayoutDashboard,
   Users,
@@ -21,6 +21,7 @@ import {
 import Logo from "../common/Logo";
 import { useApp } from "../../context/AppContext";
 import { usePlanAccess } from "../../hooks/usePlanAccess";
+import { useAuth } from "../../context/AuthContext";
 import type { User } from "../../types/auth";
 
 interface SidebarProps {
@@ -110,11 +111,11 @@ const getEmail = (u: User | null): string => {
 
 const Sidebar: React.FC<SidebarProps> = ({ collapsed, setCollapsed }) => {
   const location = useLocation();
-  const navigate = useNavigate();
   const [hoveredItem, setHoveredItem] = useState<string | null>(null);
 
   const { unreadCount, totalContacts } = useApp();
   const { hasAccess } = usePlanAccess();
+  const { logout } = useAuth();
 
   const [user] = useState<User | null>(() => {
     const storedUser = localStorage.getItem("wabmeta_user");
@@ -132,16 +133,8 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, setCollapsed }) => {
   const email = getEmail(user);
   const initial = (displayName?.charAt(0) || "G").toUpperCase();
 
-  const handleLogout = () => {
-    localStorage.removeItem("metaConnection");
-    localStorage.removeItem("wabmeta_connection");
-    localStorage.removeItem("wabmeta_user");
-    localStorage.removeItem("accessToken");
-    localStorage.removeItem("refreshToken");
-    localStorage.removeItem("token");
-    localStorage.removeItem("wabmeta_token");
-    sessionStorage.clear();
-    navigate("/login");
+  const handleLogout = async () => {
+    await logout();
   };
 
   const navigation: NavGroup[] = [

@@ -1,7 +1,7 @@
 // src/components/dashboard/TopBar.tsx
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import {
   Search,
   Bell,
@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { useTheme } from '../../context/ThemeContext';
+import { useAuth } from '../../context/AuthContext';
 
 interface TopBarProps {
   onMenuClick: () => void;
@@ -25,8 +26,8 @@ interface TopBarProps {
 }
 
 const TopBar: React.FC<TopBarProps> = ({ onMenuClick, sidebarCollapsed }) => {
-  const navigate = useNavigate();
   const { user } = useApp();
+  const { logout } = useAuth();
   const { resolved, toggle } = useTheme();
 
   const [showSearch, setShowSearch] = useState(false);
@@ -37,15 +38,9 @@ const TopBar: React.FC<TopBarProps> = ({ onMenuClick, sidebarCollapsed }) => {
   const profileRef = useRef<HTMLDivElement>(null);
 
   // Handle Logout
-  const handleLogout = () => {
-    localStorage.removeItem('metaConnection');
-    localStorage.removeItem('wabmeta_user');
-    localStorage.removeItem('wabmeta_token');
-    localStorage.removeItem('accessToken');
-    localStorage.removeItem('token');
-    sessionStorage.clear();
+  const handleLogout = async () => {
     setShowProfile(false);
-    navigate('/login');
+    await logout();
   };
 
   // Click outside handler
@@ -96,9 +91,8 @@ const TopBar: React.FC<TopBarProps> = ({ onMenuClick, sidebarCollapsed }) => {
 
   return (
     <header
-      className={`fixed top-0 right-0 z-30 bg-white dark:bg-slate-900 border-b border-gray-200 dark:border-slate-800 transition-all duration-300 ${
-        sidebarCollapsed ? 'left-20' : 'left-64'
-      }`}
+      className={`fixed top-0 right-0 z-30 bg-white dark:bg-slate-900 border-b border-gray-200 dark:border-slate-800 transition-all duration-300 ${sidebarCollapsed ? 'left-20' : 'left-64'
+        }`}
     >
       <div className="flex items-center justify-between h-16 px-4 lg:px-6">
         {/* Left Section */}
@@ -168,9 +162,8 @@ const TopBar: React.FC<TopBarProps> = ({ onMenuClick, sidebarCollapsed }) => {
                   {notifications.map((notification) => (
                     <div
                       key={notification.id}
-                      className={`flex items-start space-x-3 px-4 py-3 hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors cursor-pointer ${
-                        notification.unread ? 'bg-primary-50/50 dark:bg-primary-900/10' : ''
-                      }`}
+                      className={`flex items-start space-x-3 px-4 py-3 hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors cursor-pointer ${notification.unread ? 'bg-primary-50/50 dark:bg-primary-900/10' : ''
+                        }`}
                     >
                       <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center shrink-0 text-blue-600 dark:text-blue-300">
                         <Bell className="w-5 h-5" />
