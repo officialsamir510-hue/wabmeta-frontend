@@ -21,7 +21,7 @@ interface TeamMember {
 
 const teamMembers: TeamMember[] = [
     {
-        name: 'Ankit Verma',
+        name: 'Rajeev Verma',
         role: 'CEO',
         title: 'Chief Executive Officer',
         image: 'https://ui-avatars.com/api/?name=Ankit+Verma&size=256&background=0D9488&color=fff&bold=true&format=svg',
@@ -36,7 +36,7 @@ const teamMembers: TeamMember[] = [
         gradient: 'from-teal-500 to-emerald-600'
     },
     {
-        name: 'Samir Thakur',
+        name: 'Randeep Singh',
         role: 'Lead Developer',
         title: 'Full Stack Developer',
         image: 'https://ui-avatars.com/api/?name=Samir+Thakur&size=256&background=7C3AED&color=fff&bold=true&format=svg',
