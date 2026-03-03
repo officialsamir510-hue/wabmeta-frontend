@@ -28,9 +28,9 @@ const teamMembers: TeamMember[] = [
         description: 'Visionary entrepreneur with 8+ years of experience in tech industry. Leading WabMeta to revolutionize WhatsApp Business communication for enterprises worldwide.',
         skills: ['Business Strategy', 'Product Vision', 'Team Leadership', 'Growth Hacking'],
         social: {
-            linkedin: 'https://linkedin.com/in/ankitverma',
-            twitter: 'https://twitter.com/ankitverma',
-            email: 'ankit@wabmeta.com'
+            linkedin: 'https://linkedin.com/in/Rajeepverma',
+            twitter: 'https://twitter.com/rajeevverma',
+            email: 'rajeev@wabmeta.com'
         },
         icon: Briefcase,
         gradient: 'from-teal-500 to-emerald-600'
@@ -43,9 +43,9 @@ const teamMembers: TeamMember[] = [
         description: 'Passionate full-stack developer specializing in React, Node.js, and cloud architecture. Building scalable solutions that power thousands of businesses.',
         skills: ['React/TypeScript', 'Node.js', 'System Design', 'WhatsApp API'],
         social: {
-            linkedin: 'https://linkedin.com/in/samirthakur',
-            github: 'https://github.com/samirthakur',
-            email: 'samir@wabmeta.com'
+            linkedin: 'https://linkedin.com/in/randeep-singh',
+            github: 'https://github.com/Randeep Singh',
+            email: 'randeep@wabmeta.com'
         },
         icon: Code,
         gradient: 'from-violet-500 to-purple-600'
