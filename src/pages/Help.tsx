@@ -26,7 +26,7 @@ const Help: React.FC = () => {
   const [openFAQ, setOpenFAQ] = useState<number | null>(null);
 
   // ✅ CONTACT DETAILS
-  const SUPPORT_WHATSAPP = '919310010763';
+  const SUPPORT_WHATSAPP = '919211938200';
   const SUPPORT_EMAIL = 'wabmetacontact@gmail.com';
   const WHATSAPP_LINK = `https://wa.me/${SUPPORT_WHATSAPP}?text=Hi, I need help with WabMeta!`;
 
