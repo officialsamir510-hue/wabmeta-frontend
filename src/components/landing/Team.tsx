@@ -24,7 +24,7 @@ const teamMembers: TeamMember[] = [
         name: 'Rajeev Verma',
         role: 'CEO',
         title: 'Chief Executive Officer',
-        image: 'https://ui-avatars.com/api/?name=Ankit+Verma&size=256&background=0D9488&color=fff&bold=true&format=svg',
+        image: 'https://ui-avatars.com/api/?name=Rajeev+Verma&size=256&background=0D9488&color=fff&bold=true&format=svg',
         description: 'Visionary entrepreneur with 8+ years of experience in tech industry. Leading WabMeta to revolutionize WhatsApp Business communication for enterprises worldwide.',
         skills: ['Business Strategy', 'Product Vision', 'Team Leadership', 'Growth Hacking'],
         social: {
@@ -39,7 +39,7 @@ const teamMembers: TeamMember[] = [
         name: 'Randeep Singh',
         role: 'Lead Developer',
         title: 'Full Stack Developer',
-        image: 'https://ui-avatars.com/api/?name=Samir+Thakur&size=256&background=7C3AED&color=fff&bold=true&format=svg',
+        image: 'https://ui-avatars.com/api/?name=Randeep+Singh&size=256&background=7C3AED&color=fff&bold=true&format=svg',
         description: 'Passionate full-stack developer specializing in React, Node.js, and cloud architecture. Building scalable solutions that power thousands of businesses.',
         skills: ['React/TypeScript', 'Node.js', 'System Design', 'WhatsApp API'],
         social: {
