@@ -39,8 +39,8 @@ const Footer: React.FC = () => {
   };
 
   const contactInfo = {
-    whatsapp: '+91 9310010763',
-    whatsappLink: 'https://wa.me/919310010763?text=Hi, I have a query about WabMeta!',
+    whatsapp: '+91 9211938200',
+    whatsappLink: 'https://wa.me/919211938200?text=Hi, I have a query about WabMeta!',
     email: 'wabmetacontact@gmail.com',
     location: 'New Delhi, India',
   };

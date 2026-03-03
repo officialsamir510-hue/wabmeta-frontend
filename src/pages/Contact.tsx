@@ -49,8 +49,8 @@ const Contact: React.FC = () => {
         {
             icon: Phone,
             title: 'WhatsApp',
-            value: '+91 9310010763',
-            link: 'https://wa.me/919310010763?text=Hi, I have a query about WabMeta!',
+            value: '+91 9211938200',
+            link: 'https://wa.me/919211938200?text=Hi, I have a query about WabMeta!',
             color: 'text-green-500'
         },
         {
@@ -151,7 +151,7 @@ const Contact: React.FC = () => {
 
                         {/* Quick WhatsApp Button */}
                         <a
-                            href="https://wa.me/919310010763?text=Hi, I have a query about WabMeta!"
+                            href="https://wa.me/919211938200?text=Hi, I have a query about WabMeta!"
                             target="_blank"
                             rel="noopener noreferrer"
                             className="flex items-center justify-center w-full bg-green-500 hover:bg-green-600 text-white font-semibold py-4 px-6 rounded-xl transition-colors"
