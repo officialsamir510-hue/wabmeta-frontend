@@ -28,7 +28,7 @@ const teamMembers: TeamMember[] = [
         description: 'Visionary entrepreneur with 8+ years of experience in tech industry. Leading WabMeta to revolutionize WhatsApp Business communication for enterprises worldwide.',
         skills: ['Business Strategy', 'Product Vision', 'Team Leadership', 'Growth Hacking'],
         social: {
-            linkedin: 'https://linkedin.com/in/Rajeepverma',
+            linkedin: 'https://linkedin.com/in/rajeevverma',
             twitter: 'https://twitter.com/rajeevverma',
             email: 'rajeev@wabmeta.com'
         },
