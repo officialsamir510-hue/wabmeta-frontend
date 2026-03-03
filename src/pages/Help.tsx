@@ -343,7 +343,7 @@ const Help: React.FC = () => {
               <MessageCircle className="w-6 h-6 text-green-600 dark:text-green-400" />
             </div>
             <h3 className="font-semibold text-gray-900 dark:text-white mb-1">WhatsApp</h3>
-            <p className="text-green-600 dark:text-green-400 font-medium">+91 9310010763</p>
+            <p className="text-green-600 dark:text-green-400 font-medium">+91 9211938200</p>
             <span className="text-xs text-gray-500 dark:text-gray-400 mt-2">Click to chat</span>
           </a>
 
@@ -369,7 +369,7 @@ const Help: React.FC = () => {
               <Phone className="w-6 h-6 text-purple-600 dark:text-purple-400" />
             </div>
             <h3 className="font-semibold text-gray-900 dark:text-white mb-1">Phone</h3>
-            <p className="text-purple-600 dark:text-purple-400 font-medium">+91 9310010763</p>
+            <p className="text-purple-600 dark:text-purple-400 font-medium">+91 9211938200</p>
             <span className="text-xs text-gray-500 dark:text-gray-400 mt-2">Click to call</span>
           </a>
         </div>
