@@ -4,6 +4,7 @@ import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AuthContext, type User, type Organization } from './AuthContext';
 import api, { auth, setAuthToken, removeAuthToken } from '../services/api';
+import toast from 'react-hot-toast';
 
 interface AuthState {
     user: User | null;
@@ -178,6 +179,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 // Save to storage for next time
                 saveToStorage(user, org);
 
+                // ✅ Verify organization exists
+                if (!org) {
+                    console.warn('⚠️ No organization, failing session verification');
+                    return false;
+                }
+
                 // Update state
                 setState({
                     user,
@@ -293,6 +300,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             if (response.data?.success && response.data?.data) {
                 const { user, tokens, organization } = response.data.data;
 
+                // ✅ Validate organizationId
+                if (!organization) {
+                    console.error('❌ No organization received');
+                    toast.error('Login failed: Organization not assigned. Please contact support.');
+                    throw new Error('Login failed: Organization not assigned. Please contact support.');
+                }
+
                 // Save tokens
                 setAuthToken(tokens.accessToken, tokens.refreshToken);
 
@@ -375,6 +389,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
             if (response.data?.success && response.data?.data) {
                 const { user, tokens, organization } = response.data.data;
+
+                // ✅ Validate organizationId
+                if (!organization) {
+                    console.error('❌ No organization received');
+                    toast.error('Login failed: Organization not assigned. Please contact support.');
+                    throw new Error('Login failed: Organization not assigned. Please contact support.');
+                }
 
                 setAuthToken(tokens.accessToken, tokens.refreshToken);
                 saveToStorage(user, organization || null);
