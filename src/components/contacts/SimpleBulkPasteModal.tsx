@@ -1,13 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { X, Upload, Phone, Globe, CheckCircle, AlertCircle, Loader2, Info } from 'lucide-react';
+import {
+    X,
+    Upload,
+    Phone,
+    CheckCircle,
+    Loader2,
+    Plus,
+    FolderPlus
+} from 'lucide-react';
 import api from '../../services/api';
 import toast from 'react-hot-toast';
-
-interface CountryCode {
-    code: string;
-    country: string;
-    flag: string;
-}
 
 interface Props {
     isOpen: boolean;
@@ -18,27 +20,20 @@ interface Props {
 
 export default function SimpleBulkPasteModal({ isOpen, onClose, onSuccess, groups = [] }: Props) {
     const [phoneNumbers, setPhoneNumbers] = useState('');
-    const [countryCode, setCountryCode] = useState('+91');
     const [selectedGroup, setSelectedGroup] = useState('');
     const [tags, setTags] = useState('');
     const [loading, setLoading] = useState(false);
     const [result, setResult] = useState<any>(null);
-    const [countryCodes, setCountryCodes] = useState<CountryCode[]>([]);
+
+    // ✅ Create Group States
+    const [showCreateGroup, setShowCreateGroup] = useState(false);
+    const [newGroupName, setNewGroupName] = useState('');
+    const [creatingGroup, setCreatingGroup] = useState(false);
+    const [localGroups, setLocalGroups] = useState(groups);
 
     useEffect(() => {
-        if (isOpen) {
-            fetchCountryCodes();
-        }
-    }, [isOpen]);
-
-    const fetchCountryCodes = async () => {
-        try {
-            const { data } = await api.get('/contacts/country-codes');
-            setCountryCodes(data.data || []);
-        } catch (error) {
-            console.error('Failed to fetch country codes');
-        }
-    };
+        setLocalGroups(groups);
+    }, [groups]);
 
     if (!isOpen) return null;
 
@@ -48,6 +43,35 @@ export default function SimpleBulkPasteModal({ isOpen, onClose, onSuccess, group
             .split(/[\n,;\s]+/)
             .filter(n => n.trim().length > 0)
             .length;
+    };
+
+    // ✅ CREATE NEW GROUP
+    const handleCreateGroup = async () => {
+        if (!newGroupName.trim()) {
+            toast.error('Please enter group name');
+            return;
+        }
+
+        setCreatingGroup(true);
+        try {
+            const response = await api.post('/contacts/groups', {
+                name: newGroupName.trim()
+            });
+
+            const newGroup = response.data.data;
+
+            // Add to local list and select it
+            setLocalGroups(prev => [...prev, newGroup]);
+            setSelectedGroup(newGroup.id);
+            setNewGroupName('');
+            setShowCreateGroup(false);
+
+            toast.success(`Group "${newGroupName}" created`);
+        } catch (error: any) {
+            toast.error(error.response?.data?.message || 'Failed to create group');
+        } finally {
+            setCreatingGroup(false);
+        }
     };
 
     const handleSubmit = async () => {
@@ -68,7 +92,7 @@ export default function SimpleBulkPasteModal({ isOpen, onClose, onSuccess, group
         try {
             const response = await api.post('/contacts/bulk-paste', {
                 phoneNumbers,
-                countryCode,
+                // ❌ No countryCode - auto detect on backend
                 groupId: selectedGroup || undefined,
                 tags: tags.split(',').map(t => t.trim()).filter(t => t)
             });
@@ -90,6 +114,8 @@ export default function SimpleBulkPasteModal({ isOpen, onClose, onSuccess, group
     const handleClose = () => {
         setPhoneNumbers('');
         setResult(null);
+        setShowCreateGroup(false);
+        setNewGroupName('');
         onClose();
     };
 
@@ -109,7 +135,7 @@ export default function SimpleBulkPasteModal({ isOpen, onClose, onSuccess, group
                                 Simple Bulk Paste
                             </h2>
                             <p className="text-sm text-gray-500 dark:text-gray-400">
-                                Paste phone numbers to add contacts quickly
+                                Paste phone numbers with country code
                             </p>
                         </div>
                     </div>
@@ -124,16 +150,16 @@ export default function SimpleBulkPasteModal({ isOpen, onClose, onSuccess, group
                 {/* Body */}
                 <div className="p-6 space-y-5 overflow-y-auto max-h-[60vh]">
 
-                    {/* International Support Notice */}
-                    <div className="flex items-start gap-3 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-xl border border-blue-200 dark:border-blue-800">
-                        <Globe className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
+                    {/* ✅ Auto Detect Notice */}
+                    <div className="flex items-start gap-3 p-4 bg-green-50 dark:bg-green-900/20 rounded-xl border border-green-200 dark:border-green-800">
+                        <Phone className="w-5 h-5 text-green-600 shrink-0 mt-0.5" />
                         <div>
-                            <p className="font-medium text-blue-800 dark:text-blue-300">
-                                International Numbers Supported
+                            <p className="font-medium text-green-800 dark:text-green-300">
+                                Auto Country Detection
                             </p>
-                            <p className="text-sm text-blue-600 dark:text-blue-400 mt-1">
-                                You can add numbers from any country. Numbers with + prefix are auto-detected.
-                                For numbers without country code, the selected default will be applied.
+                            <p className="text-sm text-green-600 dark:text-green-400 mt-1">
+                                Include country code with each number (e.g., +91, +1, +44).
+                                Numbers will be automatically validated.
                             </p>
                         </div>
                     </div>
@@ -147,56 +173,95 @@ export default function SimpleBulkPasteModal({ isOpen, onClose, onSuccess, group
                         <textarea
                             value={phoneNumbers}
                             onChange={(e) => setPhoneNumbers(e.target.value)}
-                            placeholder={`Paste numbers here (one per line or comma/space separated)\n\nExamples:\n9876543210\n+919123456789\n+1 234 567 8900\n+44 7911 123456\n+971501234567`}
+                            placeholder={`Paste numbers with country code...
+
+Examples:
++919876543210
++14155551234
++447911123456
++971501234567
++8613912345678`}
                             className="w-full h-52 px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono text-sm resize-none"
                         />
                         <div className="flex items-center justify-between mt-2">
                             <p className="text-xs text-gray-500">
-                                💡 Supports: newlines, commas, spaces, semicolons
+                                💡 One number per line or comma separated
                             </p>
                             <span className="text-xs font-medium text-gray-600 dark:text-gray-400">
-                                Max: 5,000 numbers
+                                Max: 5,000
                             </span>
                         </div>
                     </div>
 
-                    {/* Country Code & Group */}
-                    <div className="grid grid-cols-2 gap-4">
-                        <div>
-                            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                                Default Country Code
-                            </label>
-                            <select
-                                value={countryCode}
-                                onChange={(e) => setCountryCode(e.target.value)}
-                                className="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            >
-                                {countryCodes.map(cc => (
-                                    <option key={cc.code} value={cc.code}>
-                                        {cc.flag} {cc.country} ({cc.code})
-                                    </option>
-                                ))}
-                            </select>
-                            <p className="text-xs text-gray-500 mt-1">
-                                Applied to numbers without + prefix
-                            </p>
-                        </div>
+                    {/* ✅ Group Selection with Create Option */}
+                    <div>
+                        <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                            Add to Group (Optional)
+                        </label>
 
-                        <div>
-                            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                                Add to Group (Optional)
-                            </label>
-                            <select
-                                value={selectedGroup}
-                                onChange={(e) => setSelectedGroup(e.target.value)}
-                                className="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            >
-                                <option value="">No group</option>
-                                {groups.map(group => (
-                                    <option key={group.id} value={group.id}>{group.name}</option>
-                                ))}
-                            </select>
-                        </div>
+                        {!showCreateGroup ? (
+                            <div className="flex gap-2">
+                                <select
+                                    value={selectedGroup}
+                                    onChange={(e) => setSelectedGroup(e.target.value)}
+                                    className="flex-1 px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                >
+                                    <option value="">No group</option>
+                                    {localGroups.map(group => (
+                                        <option key={group.id} value={group.id}>{group.name}</option>
+                                    ))}
+                                </select>
+
+                                {/* ✅ Create Group Button */}
+                                <button
+                                    type="button"
+                                    onClick={() => setShowCreateGroup(true)}
+                                    className="flex items-center gap-2 px-4 py-2.5 bg-green-50 dark:bg-green-900/20 text-green-600 border border-green-200 dark:border-green-800 rounded-xl hover:bg-green-100 dark:hover:bg-green-900/40 transition-colors"
+                                >
+                                    <FolderPlus className="w-4 h-4" />
+                                    <span className="hidden sm:inline">New Group</span>
+                                </button>
+                            </div>
+                        ) : (
+                            // ✅ Create Group Form
+                            <div className="flex gap-2">
+                                <input
+                                    type="text"
+                                    value={newGroupName}
+                                    onChange={(e) => setNewGroupName(e.target.value)}
+                                    placeholder="Enter group name..."
+                                    className="flex-1 px-4 py-2.5 border border-green-300 dark:border-green-700 rounded-xl bg-white dark:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-green-500"
+                                    autoFocus
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter') handleCreateGroup();
+                                        if (e.key === 'Escape') setShowCreateGroup(false);
+                                    }}
+                                />
+                                <button
+                                    type="button"
+                                    onClick={handleCreateGroup}
+                                    disabled={creatingGroup || !newGroupName.trim()}
+                                    className="flex items-center gap-2 px-4 py-2.5 bg-green-600 text-white rounded-xl hover:bg-green-700 disabled:opacity-50 transition-colors"
+                                >
+                                    {creatingGroup ? (
+                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                    ) : (
+                                        <Plus className="w-4 h-4" />
+                                    )}
+                                    Create
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setShowCreateGroup(false);
+                                        setNewGroupName('');
+                                    }}
+                                    className="px-3 py-2.5 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-xl transition-colors"
+                                >
+                                    <X className="w-4 h-4" />
+                                </button>
+                            </div>
+                        )}
                     </div>
 
                     {/* Tags */}
@@ -208,7 +273,7 @@ export default function SimpleBulkPasteModal({ isOpen, onClose, onSuccess, group
                             type="text"
                             value={tags}
                             onChange={(e) => setTags(e.target.value)}
-                            placeholder="e.g., lead, international, 2024"
+                            placeholder="e.g., lead, marketing, 2024"
                             className="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
                         />
                         <p className="text-xs text-gray-500 mt-1">
@@ -245,19 +310,19 @@ export default function SimpleBulkPasteModal({ isOpen, onClose, onSuccess, group
 
                             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                                 <div className="text-center p-3 bg-white dark:bg-gray-800 rounded-lg">
-                                    <p className="text-2xl font-bold text-gray-900 dark:text-white">{result.totalInput}</p>
-                                    <p className="text-xs text-gray-500">Total Input</p>
+                                    <p className="text-2xl font-bold text-gray-900 dark:text-white">{result.totalInput || 0}</p>
+                                    <p className="text-xs text-gray-500">Total</p>
                                 </div>
                                 <div className="text-center p-3 bg-white dark:bg-gray-800 rounded-lg">
-                                    <p className="text-2xl font-bold text-green-600">{result.created}</p>
+                                    <p className="text-2xl font-bold text-green-600">{result.created || 0}</p>
                                     <p className="text-xs text-gray-500">Created</p>
                                 </div>
                                 <div className="text-center p-3 bg-white dark:bg-gray-800 rounded-lg">
-                                    <p className="text-2xl font-bold text-yellow-600">{result.duplicatesSkipped}</p>
+                                    <p className="text-2xl font-bold text-yellow-600">{result.duplicatesSkipped || 0}</p>
                                     <p className="text-xs text-gray-500">Duplicates</p>
                                 </div>
                                 <div className="text-center p-3 bg-white dark:bg-gray-800 rounded-lg">
-                                    <p className="text-2xl font-bold text-red-600">{result.invalidNumbers}</p>
+                                    <p className="text-2xl font-bold text-red-600">{result.invalidNumbers || 0}</p>
                                     <p className="text-xs text-gray-500">Invalid</p>
                                 </div>
                             </div>
@@ -265,10 +330,10 @@ export default function SimpleBulkPasteModal({ isOpen, onClose, onSuccess, group
                             {result.invalidDetails && result.invalidDetails.length > 0 && (
                                 <div className="mt-4 p-3 bg-red-50 dark:bg-red-900/20 rounded-lg">
                                     <p className="text-sm font-medium text-red-700 dark:text-red-400 mb-2">
-                                        Invalid numbers (first 10):
+                                        Invalid numbers:
                                     </p>
-                                    <div className="text-xs text-red-600 dark:text-red-400 font-mono space-y-1">
-                                        {result.invalidDetails.map((item: any, i: number) => (
+                                    <div className="text-xs text-red-600 dark:text-red-400 font-mono space-y-1 max-h-24 overflow-y-auto">
+                                        {result.invalidDetails.slice(0, 10).map((item: any, i: number) => (
                                             <div key={i}>{item.input}: {item.error}</div>
                                         ))}
                                     </div>

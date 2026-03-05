@@ -1,5 +1,15 @@
-import React, { useState, useCallback, useEffect } from 'react';
-import { X, FileSpreadsheet, Upload, Download, CheckCircle, AlertCircle, Loader2, Globe } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import {
+    X,
+    FileSpreadsheet,
+    Upload,
+    Download,
+    CheckCircle,
+    Loader2,
+    Phone,
+    Plus,
+    FolderPlus
+} from 'lucide-react';
 import api from '../../services/api';
 import toast from 'react-hot-toast';
 
@@ -10,36 +20,23 @@ interface Props {
     groups?: Array<{ id: string; name: string }>;
 }
 
-interface CountryCode {
-    code: string;
-    country: string;
-    flag: string;
-}
-
 export default function CsvUploadModal({ isOpen, onClose, onSuccess, groups = [] }: Props) {
     const [file, setFile] = useState<File | null>(null);
     const [parsedData, setParsedData] = useState<any[]>([]);
-    const [countryCode, setCountryCode] = useState('+91');
     const [selectedGroup, setSelectedGroup] = useState('');
     const [tags, setTags] = useState('');
     const [loading, setLoading] = useState(false);
     const [result, setResult] = useState<any>(null);
-    const [countryCodes, setCountryCodes] = useState<CountryCode[]>([]);
+
+    // ✅ Create Group States
+    const [showCreateGroup, setShowCreateGroup] = useState(false);
+    const [newGroupName, setNewGroupName] = useState('');
+    const [creatingGroup, setCreatingGroup] = useState(false);
+    const [localGroups, setLocalGroups] = useState(groups);
 
     useEffect(() => {
-        if (isOpen) {
-            fetchCountryCodes();
-        }
-    }, [isOpen]);
-
-    const fetchCountryCodes = async () => {
-        try {
-            const { data } = await api.get('/contacts/country-codes');
-            setCountryCodes(data.data || []);
-        } catch (error) {
-            console.error('Failed to fetch country codes');
-        }
-    };
+        setLocalGroups(groups);
+    }, [groups]);
 
     if (!isOpen) return null;
 
@@ -81,7 +78,6 @@ export default function CsvUploadModal({ isOpen, onClose, onSuccess, groups = []
 
                 return obj;
             }).filter(row => {
-                // Filter rows that have at least a phone number
                 const phone = row.phone || row.phonenumber || row.mobile || row.number;
                 return phone && phone.length > 0;
             });
@@ -90,6 +86,34 @@ export default function CsvUploadModal({ isOpen, onClose, onSuccess, groups = []
             toast.success(`${data.length} contacts found in CSV`);
         };
         reader.readAsText(file);
+    };
+
+    // ✅ CREATE NEW GROUP
+    const handleCreateGroup = async () => {
+        if (!newGroupName.trim()) {
+            toast.error('Please enter group name');
+            return;
+        }
+
+        setCreatingGroup(true);
+        try {
+            const response = await api.post('/contacts/groups', {
+                name: newGroupName.trim()
+            });
+
+            const newGroup = response.data.data;
+
+            setLocalGroups(prev => [...prev, newGroup]);
+            setSelectedGroup(newGroup.id);
+            setNewGroupName('');
+            setShowCreateGroup(false);
+
+            toast.success(`Group "${newGroupName}" created`);
+        } catch (error: any) {
+            toast.error(error.response?.data?.message || 'Failed to create group');
+        } finally {
+            setCreatingGroup(false);
+        }
     };
 
     const handleSubmit = async () => {
@@ -104,7 +128,7 @@ export default function CsvUploadModal({ isOpen, onClose, onSuccess, groups = []
         try {
             const response = await api.post('/contacts/csv-upload', {
                 contacts: parsedData,
-                defaultCountryCode: countryCode,
+                // ❌ No defaultCountryCode - auto detect
                 groupId: selectedGroup || undefined,
                 tags: tags.split(',').map(t => t.trim()).filter(t => t)
             });
@@ -127,11 +151,13 @@ export default function CsvUploadModal({ isOpen, onClose, onSuccess, groups = []
         setFile(null);
         setParsedData([]);
         setResult(null);
+        setShowCreateGroup(false);
+        setNewGroupName('');
         onClose();
     };
 
     const downloadTemplate = () => {
-        const template = 'phone,firstName,lastName,email\n+919876543210,John,Doe,john@example.com\n+14155551234,Jane,Smith,jane@example.com';
+        const template = 'phone,firstName,lastName,email\n+919876543210,John,Doe,john@example.com\n+14155551234,Jane,Smith,jane@example.com\n+447911123456,Bob,Wilson,bob@example.com';
         const blob = new Blob([template], { type: 'text/csv' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -157,7 +183,7 @@ export default function CsvUploadModal({ isOpen, onClose, onSuccess, groups = []
                                 Import CSV
                             </h2>
                             <p className="text-sm text-gray-500 dark:text-gray-400">
-                                Upload contacts from a CSV file
+                                Upload contacts from CSV file
                             </p>
                         </div>
                     </div>
@@ -169,15 +195,16 @@ export default function CsvUploadModal({ isOpen, onClose, onSuccess, groups = []
                 {/* Body */}
                 <div className="p-6 space-y-5 overflow-y-auto max-h-[60vh]">
 
-                    {/* International Notice */}
+                    {/* ✅ Auto Detect Notice */}
                     <div className="flex items-start gap-3 p-4 bg-purple-50 dark:bg-purple-900/20 rounded-xl border border-purple-200 dark:border-purple-800">
-                        <Globe className="w-5 h-5 text-purple-600 shrink-0 mt-0.5" />
+                        <Phone className="w-5 h-5 text-purple-600 shrink-0 mt-0.5" />
                         <div>
                             <p className="font-medium text-purple-800 dark:text-purple-300">
-                                International Numbers Supported
+                                Auto Country Detection
                             </p>
                             <p className="text-sm text-purple-600 dark:text-purple-400 mt-1">
-                                Include country code in phone numbers (e.g., +1, +44, +91). Numbers without + will use the default country code.
+                                Include country code in phone column (e.g., +91, +1, +44).
+                                Numbers will be automatically validated.
                             </p>
                         </div>
                     </div>
@@ -271,40 +298,75 @@ export default function CsvUploadModal({ isOpen, onClose, onSuccess, groups = []
                         </div>
                     )}
 
-                    {/* Options */}
-                    <div className="grid grid-cols-2 gap-4">
-                        <div>
-                            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                                Default Country Code
-                            </label>
-                            <select
-                                value={countryCode}
-                                onChange={(e) => setCountryCode(e.target.value)}
-                                className="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-purple-500"
-                            >
-                                {countryCodes.map(cc => (
-                                    <option key={cc.code} value={cc.code}>
-                                        {cc.flag} {cc.country} ({cc.code})
-                                    </option>
-                                ))}
-                            </select>
-                        </div>
+                    {/* ✅ Group Selection with Create Option */}
+                    <div>
+                        <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                            Add to Group (Optional)
+                        </label>
 
-                        <div>
-                            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                                Add to Group
-                            </label>
-                            <select
-                                value={selectedGroup}
-                                onChange={(e) => setSelectedGroup(e.target.value)}
-                                className="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-purple-500"
-                            >
-                                <option value="">No group</option>
-                                {groups.map(group => (
-                                    <option key={group.id} value={group.id}>{group.name}</option>
-                                ))}
-                            </select>
-                        </div>
+                        {!showCreateGroup ? (
+                            <div className="flex gap-2">
+                                <select
+                                    value={selectedGroup}
+                                    onChange={(e) => setSelectedGroup(e.target.value)}
+                                    className="flex-1 px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                                >
+                                    <option value="">No group</option>
+                                    {localGroups.map(group => (
+                                        <option key={group.id} value={group.id}>{group.name}</option>
+                                    ))}
+                                </select>
+
+                                {/* ✅ Create Group Button */}
+                                <button
+                                    type="button"
+                                    onClick={() => setShowCreateGroup(true)}
+                                    className="flex items-center gap-2 px-4 py-2.5 bg-purple-50 dark:bg-purple-900/20 text-purple-600 border border-purple-200 dark:border-purple-800 rounded-xl hover:bg-purple-100 dark:hover:bg-purple-900/40 transition-colors"
+                                >
+                                    <FolderPlus className="w-4 h-4" />
+                                    <span className="hidden sm:inline">New Group</span>
+                                </button>
+                            </div>
+                        ) : (
+                            // ✅ Create Group Form
+                            <div className="flex gap-2">
+                                <input
+                                    type="text"
+                                    value={newGroupName}
+                                    onChange={(e) => setNewGroupName(e.target.value)}
+                                    placeholder="Enter group name..."
+                                    className="flex-1 px-4 py-2.5 border border-purple-300 dark:border-purple-700 rounded-xl bg-white dark:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                                    autoFocus
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter') handleCreateGroup();
+                                        if (e.key === 'Escape') setShowCreateGroup(false);
+                                    }}
+                                />
+                                <button
+                                    type="button"
+                                    onClick={handleCreateGroup}
+                                    disabled={creatingGroup || !newGroupName.trim()}
+                                    className="flex items-center gap-2 px-4 py-2.5 bg-purple-600 text-white rounded-xl hover:bg-purple-700 disabled:opacity-50 transition-colors"
+                                >
+                                    {creatingGroup ? (
+                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                    ) : (
+                                        <Plus className="w-4 h-4" />
+                                    )}
+                                    Create
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setShowCreateGroup(false);
+                                        setNewGroupName('');
+                                    }}
+                                    className="px-3 py-2.5 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-xl transition-colors"
+                                >
+                                    <X className="w-4 h-4" />
+                                </button>
+                            </div>
+                        )}
                     </div>
 
                     {/* Tags */}
@@ -333,19 +395,19 @@ export default function CsvUploadModal({ isOpen, onClose, onSuccess, groups = []
 
                             <div className="grid grid-cols-4 gap-3">
                                 <div className="text-center p-3 bg-white dark:bg-gray-800 rounded-lg">
-                                    <p className="text-2xl font-bold text-gray-900 dark:text-white">{result.totalProcessed}</p>
+                                    <p className="text-2xl font-bold text-gray-900 dark:text-white">{result.totalProcessed || 0}</p>
                                     <p className="text-xs text-gray-500">Processed</p>
                                 </div>
                                 <div className="text-center p-3 bg-white dark:bg-gray-800 rounded-lg">
-                                    <p className="text-2xl font-bold text-green-600">{result.created}</p>
+                                    <p className="text-2xl font-bold text-green-600">{result.created || 0}</p>
                                     <p className="text-xs text-gray-500">Created</p>
                                 </div>
                                 <div className="text-center p-3 bg-white dark:bg-gray-800 rounded-lg">
-                                    <p className="text-2xl font-bold text-blue-600">{result.updated}</p>
+                                    <p className="text-2xl font-bold text-blue-600">{result.updated || 0}</p>
                                     <p className="text-xs text-gray-500">Updated</p>
                                 </div>
                                 <div className="text-center p-3 bg-white dark:bg-gray-800 rounded-lg">
-                                    <p className="text-2xl font-bold text-yellow-600">{result.skipped}</p>
+                                    <p className="text-2xl font-bold text-yellow-600">{result.skipped || 0}</p>
                                     <p className="text-xs text-gray-500">Skipped</p>
                                 </div>
                             </div>
