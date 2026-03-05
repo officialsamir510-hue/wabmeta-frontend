@@ -16,9 +16,11 @@ import {
   Loader2,
   AlertCircle,
   RefreshCw,
-  BarChart3
+  BarChart3,
+  UserPlus
 } from 'lucide-react';
 import { admin } from '../../services/api';
+import { formatINR } from '../../utils/currency';
 import { Link } from 'react-router-dom';
 
 // ============================================
@@ -31,6 +33,7 @@ interface DashboardStats {
     pending: number;
     suspended: number;
     newThisMonth: number;
+    todayUsers: number;
   };
   organizations: {
     total: number;
@@ -345,7 +348,8 @@ const AdminDashboard: React.FC = () => {
       active: 0,
       pending: 0,
       suspended: 0,
-      newThisMonth: 0
+      newThisMonth: 0,
+      todayUsers: 0
     },
     organizations: {
       total: 0,
@@ -376,6 +380,7 @@ const AdminDashboard: React.FC = () => {
       pending: dashboardStats.users?.pending ?? 0,
       suspended: dashboardStats.users?.suspended ?? 0,
       newThisMonth: dashboardStats.users?.newThisMonth ?? 0,
+      todayUsers: dashboardStats.users?.todayUsers ?? 0,
     },
     organizations: {
       total: dashboardStats.organizations?.total ?? 0,
@@ -419,7 +424,7 @@ const AdminDashboard: React.FC = () => {
       </div>
 
       {/* Main Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
         <StatCard
           title="Total Users"
           value={safeStats.users.total}
@@ -429,6 +434,13 @@ const AdminDashboard: React.FC = () => {
           iconBg="bg-blue-100"
           iconColor="text-blue-600"
           link="/admin/users"
+        />
+        <StatCard
+          title="New Users Today"
+          value={safeStats.users.todayUsers || 0}
+          icon={UserPlus}
+          iconBg="bg-emerald-100"
+          iconColor="text-emerald-600"
         />
         <StatCard
           title="Organizations"
@@ -449,7 +461,7 @@ const AdminDashboard: React.FC = () => {
         />
         <StatCard
           title="Monthly Revenue"
-          value={`$${safeStats.revenue.mrr.toLocaleString()}`}
+          value={formatINR(safeStats.revenue.mrr)}
           icon={CreditCard}
           iconBg="bg-orange-100"
           iconColor="text-orange-600"
@@ -481,10 +493,10 @@ const AdminDashboard: React.FC = () => {
             <p className="text-gray-400 text-sm font-medium">Annual Recurring Revenue (ARR)</p>
             {/* ✅ FIXED: Safe toLocaleString */}
             <p className="text-4xl font-bold mt-2">
-              ${(safeStats.revenue.arr || 0).toLocaleString()}
+              {formatINR(safeStats.revenue.arr || 0)}
             </p>
             <p className="text-gray-400 text-sm mt-2">
-              Based on ${(safeStats.revenue.mrr || 0).toLocaleString()} MRR
+              Based on {formatINR(safeStats.revenue.mrr || 0)} MRR
             </p>
           </div>
           <div className="hidden md:block">

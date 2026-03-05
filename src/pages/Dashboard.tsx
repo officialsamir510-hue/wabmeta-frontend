@@ -17,7 +17,8 @@ import {
   FileText,
   BarChart3,
 } from 'lucide-react';
-import { dashboard } from '../services/api';
+import api, { dashboard } from '../services/api';
+import ConnectionStatus from '../components/dashboard/ConnectionStatus';
 import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
 import toast from 'react-hot-toast';
@@ -191,12 +192,60 @@ const Dashboard: React.FC = () => {
   const [stats, setStats] = useState<any>(null);
   const [widgets, setWidgets] = useState<any>(null);
   const [dateRange, setDateRange] = useState<7 | 14 | 30>(7);
+  const [whatsappConnection, setWhatsappConnection] = useState({
+    isConnected: false,
+    status: 'DISCONNECTED',
+    accounts: [] as any[]
+  });
+  const [disconnectLoading, setDisconnectLoading] = useState(false);
 
   const { socket, isConnected } = useSocket();
 
   useEffect(() => {
     fetchDashboardData();
+    fetchWhatsAppStatus();
   }, [dateRange]);
+
+  const fetchWhatsAppStatus = async () => {
+    try {
+      const { data } = await api.get('/meta/accounts');
+
+      const accounts = Array.isArray(data.data) ? data.data : (data.data?.accounts || []);
+      const connected = accounts.filter((a: any) => a.status === 'CONNECTED');
+
+      setWhatsappConnection({
+        isConnected: connected.length > 0,
+        status: connected.length > 0 ? 'CONNECTED' : 'DISCONNECTED',
+        accounts: connected.map((a: any) => ({
+          id: a.id,
+          phoneNumber: a.phoneNumber,
+          displayName: a.displayName || a.verifiedName || 'WhatsApp Business',
+          status: a.status,
+          isDefault: a.isDefault || false
+        }))
+      });
+    } catch (error) {
+      console.error('Failed to fetch WhatsApp status:', error);
+    }
+  };
+
+  const handleDisconnect = async () => {
+    const defaultAccount = whatsappConnection.accounts.find(a => a.isDefault) || whatsappConnection.accounts[0];
+    if (!defaultAccount) return;
+
+    if (!window.confirm('Are you sure you want to disconnect this WhatsApp account?')) return;
+
+    setDisconnectLoading(true);
+    try {
+      await api.post(`/meta/accounts/${defaultAccount.id}/disconnect`);
+      toast.success('WhatsApp account disconnected');
+      fetchWhatsAppStatus();
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || 'Failed to disconnect');
+    } finally {
+      setDisconnectLoading(false);
+    }
+  };
 
   // ✅ REAL-TIME UPDATES
   useEffect(() => {
@@ -304,6 +353,14 @@ const Dashboard: React.FC = () => {
             <RefreshCw className={`w-5 h-5 ${refreshing ? 'animate-spin' : ''}`} />
           </button>
         </div>
+      </div>
+
+      <div className="mb-6">
+        <ConnectionStatus
+          connection={whatsappConnection}
+          onDisconnect={handleDisconnect}
+          disconnectLoading={disconnectLoading}
+        />
       </div>
 
       {/* Stats Cards */}

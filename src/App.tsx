@@ -76,6 +76,8 @@ const AdminDashboard = lazy(() => import('./pages/admin/AdminDashboard'));
 const UserManagement = lazy(() => import('./pages/admin/UserManagement'));
 const SubscriptionManagement = lazy(() => import('./pages/admin/SubscriptionManagement'));
 const SystemSettings = lazy(() => import('./pages/admin/SystemSettings'));
+const WhatsAppConnections = lazy(() => import('./pages/admin/WhatsAppConnections'));
+const OrganizationFeatures = lazy(() => import('./pages/admin/OrganizationFeatures'));
 
 // ============================================
 // ROUTE GUARDS
@@ -364,6 +366,8 @@ const AppRoutes: React.FC = () => {
           <Route path="/admin/users" element={<UserManagement />} />
           <Route path="/admin/subscriptions" element={<SubscriptionManagement />} />
           <Route path="/admin/settings" element={<SystemSettings />} />
+          <Route path="/admin/whatsapp" element={<WhatsAppConnections />} />
+          <Route path="/admin/organizations/:organizationId/features" element={<OrganizationFeatures />} />
         </Route>
 
         {/* ============================== */}

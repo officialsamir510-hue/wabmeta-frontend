@@ -900,6 +900,12 @@ export const admin = {
   updateSubscription: (id: string, data: any) =>
     api.put<ApiResponse>(`/admin/organizations/${id}/subscription`, data),
 
+  getOrganizationFeatures: (id: string) =>
+    api.get<ApiResponse>(`/admin/organizations/${id}/features`),
+
+  updateOrganizationFeatures: (id: string, data: any) =>
+    api.put<ApiResponse>(`/admin/organizations/${id}/features`, data),
+
   // ============================================
   // SUBSCRIPTION MANAGEMENT
   // ============================================
@@ -971,6 +977,11 @@ export const admin = {
 
   updateSettings: (data: any) =>
     api.put<ApiResponse>('/admin/settings', data),
+
+  // WhatsApp Connections
+  getWhatsAppConnections: () => api.get<ApiResponse>('/admin/whatsapp-connections'),
+  disconnectWhatsApp: (accountId: string) =>
+    api.post<ApiResponse>(`/admin/whatsapp-connections/${accountId}/disconnect`),
 };
 
 // ============================================

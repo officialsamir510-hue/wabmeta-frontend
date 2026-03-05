@@ -5,7 +5,9 @@ import {
   Users,
   CreditCard,
   Settings,
-  LogOut} from 'lucide-react';
+  LogOut,
+  Phone
+} from 'lucide-react';
 import Logo from '../common/Logo';
 
 const AdminSidebar: React.FC = () => {
@@ -14,6 +16,7 @@ const AdminSidebar: React.FC = () => {
 
   const navigation = [
     { name: 'Dashboard', href: '/admin/dashboard', icon: LayoutDashboard },
+    { name: 'WhatsApp', href: '/admin/whatsapp', icon: Phone },
     { name: 'Users', href: '/admin/users', icon: Users },
     { name: 'Subscriptions', href: '/admin/subscriptions', icon: CreditCard },
     { name: 'Settings', href: '/admin/settings', icon: Settings },
@@ -43,11 +46,10 @@ const AdminSidebar: React.FC = () => {
               <Link
                 key={item.name}
                 to={item.href}
-                className={`flex items-center px-4 py-3 rounded-xl transition-all ${
-                  isActive
-                    ? 'bg-primary-600 text-white'
-                    : 'text-gray-400 hover:bg-gray-800 hover:text-white'
-                }`}
+                className={`flex items-center px-4 py-3 rounded-xl transition-all ${isActive
+                  ? 'bg-primary-600 text-white'
+                  : 'text-gray-400 hover:bg-gray-800 hover:text-white'
+                  }`}
               >
                 <item.icon className="w-5 h-5 mr-3" />
                 <span className="font-medium">{item.name}</span>

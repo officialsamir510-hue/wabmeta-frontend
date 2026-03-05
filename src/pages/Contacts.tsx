@@ -29,12 +29,19 @@ import {
   AlertTriangle,
   Layers,
   ArrowLeft,
+  FileSpreadsheet,
+  Lock,
+  Crown
 } from 'lucide-react';
 
 import AddContactModal from '../components/contacts/AddContactModal';
 import ImportUploader from '../components/contacts/ImportUploader';
+import SimpleBulkPasteModal from '../components/contacts/SimpleBulkPasteModal';
+import CsvUploadModal from '../components/contacts/CsvUploadModal';
+import UpgradeModal from '../components/common/UpgradeModal';
 import api from '../services/api';
 import { useApp } from '../context/AppContext';
+import { useContactFeatures } from '../hooks/useContactFeatures';
 import { formatPhoneForDisplay, validateIndianPhone } from '../utils/csvContacts';
 
 // ============================================
@@ -330,7 +337,6 @@ const Contacts: React.FC = () => {
   const navigate = useNavigate();
   const { refreshStats } = useApp();
 
-  // State
   const [activeTab, setActiveTab] = useState<'contacts' | 'groups'>('contacts');
   const [activeGroup, setActiveGroup] = useState<Group | null>(null);
   const [groups, setGroups] = useState<Group[]>([]);
@@ -353,6 +359,14 @@ const Contacts: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [whatsappFilter, setWhatsappFilter] = useState<string>('all');
   const [selectedContacts, setSelectedContacts] = useState<string[]>([]);
+
+  // Feature access & Modals
+  const { features, loading: featuresLoading, refetch: refetchFeatures } = useContactFeatures();
+  const [showBulkPaste, setShowBulkPaste] = useState(false);
+  const [showCsvUpload, setShowCsvUpload] = useState(false);
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+  const [upgradeFeature, setUpgradeFeature] = useState('');
+  const [upgradeMinPlan, setUpgradeMinPlan] = useState('');
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
@@ -516,6 +530,26 @@ const Contacts: React.FC = () => {
   // ============================================
   // HANDLERS
   // ============================================
+
+  const handleBulkPasteClick = () => {
+    if (!features.simpleBulkPaste) {
+      setUpgradeFeature('Simple Bulk Paste');
+      setUpgradeMinPlan('QUARTERLY');
+      setShowUpgradeModal(true);
+      return;
+    }
+    setShowBulkPaste(true);
+  };
+
+  const handleCsvUploadClick = () => {
+    if (!features.csvUpload) {
+      setUpgradeFeature('CSV Import');
+      setUpgradeMinPlan('MONTHLY');
+      setShowUpgradeModal(true);
+      return;
+    }
+    setShowCsvUpload(true);
+  };
 
   const handleSelectContact = (id: string) => {
     setSelectedContacts((prev) =>
@@ -778,7 +812,7 @@ const Contacts: React.FC = () => {
           </p>
         </div>
 
-        <div className="flex items-center space-x-3">
+        <div className="flex flex-wrap items-center gap-3">
           <button
             onClick={fetchAll}
             className="p-2.5 bg-gray-100 rounded-xl hover:bg-gray-200 text-gray-700 transition-colors"
@@ -787,12 +821,42 @@ const Contacts: React.FC = () => {
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
           </button>
 
+          {/* Simple Bulk Paste */}
           <button
-            onClick={() => setShowImportModal(true)}
-            className="flex items-center space-x-2 px-4 py-2.5 bg-gray-100 rounded-xl hover:bg-gray-200 text-gray-700 font-medium transition-colors"
+            onClick={handleBulkPasteClick}
+            disabled={featuresLoading}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium transition-all ${features.simpleBulkPaste
+              ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/30 border border-blue-200 dark:border-blue-800'
+              : 'bg-gray-100 dark:bg-gray-800 text-gray-400 cursor-not-allowed border border-gray-200 dark:border-gray-700'
+              }`}
           >
+            {!features.simpleBulkPaste && <Lock className="w-4 h-4" />}
             <Upload className="w-4 h-4" />
-            <span>Import</span>
+            <span className="hidden sm:inline">Bulk Paste</span>
+            {!features.simpleBulkPaste && (
+              <span className="text-xs bg-yellow-100 text-yellow-700 px-1.5 py-0.5 rounded-full">
+                ₹2,500+
+              </span>
+            )}
+          </button>
+
+          {/* CSV Import */}
+          <button
+            onClick={handleCsvUploadClick}
+            disabled={featuresLoading}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium transition-all ${features.csvUpload
+              ? 'bg-purple-50 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400 hover:bg-purple-100 dark:hover:bg-purple-900/30 border border-purple-200 dark:border-purple-800'
+              : 'bg-gray-100 dark:bg-gray-800 text-gray-400 cursor-not-allowed border border-gray-200 dark:border-gray-700'
+              }`}
+          >
+            {!features.csvUpload && <Lock className="w-4 h-4" />}
+            <FileSpreadsheet className="w-4 h-4" />
+            <span className="hidden sm:inline">CSV Import</span>
+            {!features.csvUpload && (
+              <span className="text-xs bg-yellow-100 text-yellow-700 px-1.5 py-0.5 rounded-full">
+                ₹899+
+              </span>
+            )}
           </button>
 
           <button
@@ -803,18 +867,64 @@ const Contacts: React.FC = () => {
             <span>Export</span>
           </button>
 
+          {/* Add Contact */}
           <button
             onClick={() => {
               setEditingContact(null);
               setShowAddModal(true);
             }}
-            className="flex items-center space-x-2 px-4 py-2.5 bg-primary-500 hover:bg-primary-600 text-white font-medium rounded-xl transition-colors"
+            className="flex items-center space-x-2 px-4 py-2.5 bg-green-600 hover:bg-green-700 text-white font-medium rounded-xl transition-colors"
           >
             <Plus className="w-4 h-4" />
-            <span>Add Contact</span>
+            <span className="hidden sm:inline">Add Contact</span>
           </button>
         </div>
       </div>
+
+      {/* Upgrade Banner (if no features) */}
+      {!featuresLoading && features.upgradeRequired && (
+        <div className="bg-gradient-to-r from-purple-600 via-blue-600 to-green-500 rounded-2xl p-6 text-white shadow-lg">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <div className="w-14 h-14 bg-white/20 rounded-2xl flex items-center justify-center shrink-0">
+                <Crown className="w-7 h-7" />
+              </div>
+              <div>
+                <h3 className="font-bold text-xl">Unlock Bulk Upload Features</h3>
+                <p className="text-white/80 mt-1">
+                  {features.upgradeMessage || 'Upgrade to unlock bulk contacts paste, CSV imports, and advanced targeting.'}
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => {
+                setUpgradeFeature('Bulk Upload');
+                setUpgradeMinPlan('MONTHLY');
+                setShowUpgradeModal(true);
+              }}
+              className="px-6 py-3 bg-white text-purple-600 rounded-xl font-bold hover:bg-gray-100 transition-colors shadow-md shrink-0"
+            >
+              View Plans
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Feature Access Info (for eligible users) */}
+      {!featuresLoading && !features.upgradeRequired && (
+        <div className="flex items-center gap-4 p-4 bg-green-50 dark:bg-green-900/20 rounded-xl border border-green-200 dark:border-green-800">
+          <Users className="w-5 h-5 text-green-600" />
+          <div className="text-sm">
+            <span className="font-medium text-green-800 dark:text-green-400">
+              Plan: {features.currentPlan}
+            </span>
+            <span className="text-green-600 dark:text-green-500 ml-2">
+              • Bulk Paste: {features.simpleBulkPaste ? '✅' : '❌'}
+              • CSV Import: {features.csvUpload ? '✅' : '❌'}
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* Error Banner */}
       {error && (
@@ -1138,6 +1248,34 @@ const Contacts: React.FC = () => {
         isOpen={showImportModal}
         onClose={() => setShowImportModal(false)}
         onImport={handleImport}
+      />
+
+      {/* New Modals */}
+      <SimpleBulkPasteModal
+        isOpen={showBulkPaste}
+        onClose={() => setShowBulkPaste(false)}
+        onSuccess={() => {
+          fetchContacts();
+          refetchFeatures();
+        }}
+        groups={groups}
+      />
+
+      <CsvUploadModal
+        isOpen={showCsvUpload}
+        onClose={() => setShowCsvUpload(false)}
+        onSuccess={() => {
+          fetchContacts();
+          refetchFeatures();
+        }}
+        groups={groups}
+      />
+
+      <UpgradeModal
+        isOpen={showUpgradeModal}
+        onClose={() => setShowUpgradeModal(false)}
+        feature={upgradeFeature}
+        minimumPlan={upgradeMinPlan}
       />
     </div>
   );
