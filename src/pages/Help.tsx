@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import {
   HelpCircle,
   PlayCircle,
@@ -122,7 +122,7 @@ export default function Help() {
         {/* Video Player Modal */}
         {selectedVideo && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <div 
+            <div
               className="absolute inset-0 bg-black/80"
               onClick={() => setSelectedVideo(null)}
             />
@@ -142,7 +142,7 @@ export default function Help() {
                   ✕
                 </button>
               </div>
-              
+
               {/* Video Player */}
               <div className="aspect-video bg-black">
                 <video
@@ -155,7 +155,7 @@ export default function Help() {
                   Your browser does not support the video tag.
                 </video>
               </div>
-              
+
               {/* Video Description */}
               <div className="p-4">
                 <p className="text-gray-600 dark:text-gray-400">
@@ -190,7 +190,7 @@ export default function Help() {
                         </div>
                       </div>
                     )}
-                    
+
                     {/* Duration Badge */}
                     <div className="absolute bottom-2 right-2 px-2 py-1 bg-black/70 text-white text-xs rounded flex items-center gap-1">
                       <Clock className="w-3 h-3" />
@@ -205,7 +205,7 @@ export default function Help() {
                       </div>
                     )}
                   </div>
-                  
+
                   {/* Info */}
                   <div className="p-4">
                     <h4 className="font-semibold text-gray-900 dark:text-white mb-1 line-clamp-1">
@@ -250,7 +250,7 @@ export default function Help() {
                   <ChevronDown className="w-5 h-5 text-gray-500 shrink-0" />
                 )}
               </button>
-              
+
               {expandedFaq === index && (
                 <div className="px-5 pb-5">
                   <p className="text-gray-600 dark:text-gray-400 leading-relaxed">
