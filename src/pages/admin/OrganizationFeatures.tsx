@@ -176,7 +176,7 @@ export default function OrganizationFeatures() {
                                             CSV Import
                                         </p>
                                         <p className="text-sm text-gray-500">
-                                            Import contacts from CSV files • Normally requires ₹899+ plan
+                                            Import contacts from CSV files
                                         </p>
                                     </div>
                                 </div>

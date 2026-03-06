@@ -23,6 +23,15 @@ const WhatsAppConnectionBadge: React.FC<ConnectionBadgeProps> = ({
       iconColor: 'text-green-600 dark:text-green-500',
       recommended: true,
     },
+    WHATSAPP_BUSINESS_APP: {
+      label: 'Business App',
+      icon: Smartphone,
+      bgColor: 'bg-orange-100 dark:bg-orange-900/30',
+      textColor: 'text-orange-700 dark:text-orange-400',
+      borderColor: 'border-orange-200 dark:border-orange-800',
+      iconColor: 'text-orange-600 dark:text-orange-500',
+      recommended: false,
+    },
     BUSINESS_APP: {
       label: 'Business App',
       icon: Smartphone,
@@ -43,7 +52,7 @@ const WhatsAppConnectionBadge: React.FC<ConnectionBadgeProps> = ({
     },
   };
 
-  const config = configs[type];
+  const config = configs[type] || configs.CLOUD_API;
   const Icon = config.icon;
   const StatusIcon = status === 'active' ? CheckCircle : AlertCircle;
 

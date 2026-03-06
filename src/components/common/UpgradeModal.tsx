@@ -22,9 +22,9 @@ export default function UpgradeModal({ isOpen, onClose, feature, minimumPlan, me
             price: '₹899',
             period: '/month',
             features: [
-                'CSV Import ✅',
-                'Simple Bulk Paste ❌',
-                '2,500 Contacts',
+                'Bulk CSV Import (Unlimited)',
+                'Automated Message Queue',
+                '2,500 Contacts Limit',
                 '5,000 Messages/month',
                 '1 WhatsApp Account'
             ],
@@ -36,9 +36,9 @@ export default function UpgradeModal({ isOpen, onClose, feature, minimumPlan, me
             price: '₹2,500',
             period: '/3 months',
             features: [
-                'CSV Import ✅',
-                'Simple Bulk Paste ✅',
-                '10,000 Contacts',
+                'Unlimited CSV Imports',
+                'Smart Bulk Paste Enabled',
+                '10,000 Contacts Limit',
                 '25,000 Messages/month',
                 '2 WhatsApp Accounts',
                 'Priority Support'
@@ -52,7 +52,7 @@ export default function UpgradeModal({ isOpen, onClose, feature, minimumPlan, me
             price: '₹8,000',
             period: '/year',
             features: [
-                'All Features ✅',
+                'Enterprise Scale Limits',
                 'Unlimited Contacts',
                 'Unlimited Messages',
                 '5 WhatsApp Accounts',

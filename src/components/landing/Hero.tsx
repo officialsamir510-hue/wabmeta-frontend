@@ -10,7 +10,8 @@ import {
   CheckCircle,
   Play,
   Star,
-  Shield
+  Shield,
+  BarChart3
 } from 'lucide-react';
 
 const Hero: React.FC = () => {
@@ -151,183 +152,192 @@ const Hero: React.FC = () => {
                 
                 
                 {/* High-Fidelity Dashboard UI */}
-                <div className="bg-white dark:bg-gray-800 h-full p-6">
+                <div className="bg-white dark:bg-gray-800 h-full p-6 shadow-inner">
                   {/* Browser-like Header */}
                   <div className="flex items-center gap-2 mb-6 border-b border-gray-100 dark:border-gray-700 pb-4">
                     <div className="flex gap-1.5">
-                      <div className="w-3 h-3 rounded-full bg-red-400" />
-                      <div className="w-3 h-3 rounded-full bg-yellow-400" />
-                      <div className="w-3 h-3 rounded-full bg-green-400" />
+                      <div className="w-3 h-3 rounded-full bg-red-400/80 shadow-sm" />
+                      <div className="w-3 h-3 rounded-full bg-yellow-400/80 shadow-sm" />
+                      <div className="w-3 h-3 rounded-full bg-green-400/80 shadow-sm" />
                     </div>
-                    <div className="flex-1 max-w-xs h-6 bg-gray-100 dark:bg-gray-700 rounded-md mx-auto" />
+                    <div className="flex-1 max-w-xs h-6 bg-gray-100/80 dark:bg-gray-700/50 rounded-lg mx-auto border border-gray-200/20" />
                   </div>
 
                   <div className="space-y-6">
                     {/* Stats Summary */}
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-4">
-                        <div className="w-14 h-14 bg-green-100 dark:bg-green-900/30 rounded-2xl flex items-center justify-center shadow-inner">
+                        <div className="w-14 h-14 bg-green-500/10 dark:bg-green-500/20 rounded-2xl flex items-center justify-center shadow-sm border border-green-500/20">
                           <MessageCircle className="w-7 h-7 text-green-600" />
                         </div>
                         <div>
-                          <h3 className="text-sm font-medium text-gray-500 uppercase tracking-wider">Campaign Performance</h3>
+                          <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-[2px]">Engagement Overview</h3>
                           <div className="flex items-baseline gap-2">
-                            <span className="text-3xl font-bold text-gray-900 dark:text-white">125,432</span>
-                            <span className="text-sm font-semibold text-green-500">↑ 12.5%</span>
+                            <span className="text-3xl font-black text-gray-900 dark:text-white tracking-tight">125,432</span>
+                            <span className="text-sm font-bold text-green-500 bg-green-500/10 px-1.5 py-0.5 rounded-md">↑ 12.5%</span>
                           </div>
                         </div>
                       </div>
                       
                       <div className="hidden sm:flex flex-col items-end">
-                        <div className="flex items-center gap-2 px-3 py-1 bg-green-50 dark:bg-green-900/20 text-green-600 rounded-full text-xs font-bold border border-green-100 dark:border-green-800">
+                        <div className="flex items-center gap-2 px-3 py-1.5 bg-green-50 dark:bg-green-900/30 text-green-600 rounded-full text-[10px] font-bold border border-green-100 dark:border-green-800/50">
                           <span className="relative flex h-2 w-2">
                             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                            <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+                            <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500 shadow-sm"></span>
                           </span>
-                          Live Analytics
+                          LIVE STREAMING
                         </div>
-                        <p className="text-[10px] text-gray-400 mt-1">Real-time tracking</p>
                       </div>
                     </div>
                     
-                    {/* Primary Analytics Graph Area */}
-                    <div className="relative group bg-gray-50/50 dark:bg-gray-900/20 rounded-2xl p-4 border border-gray-100 dark:border-gray-800">
-                      <div className="h-40 relative">
+                    {/* Primary Analytics Graph Area - MODIFIED GRAPH */}
+                    <div className="relative group bg-gray-50/50 dark:bg-gray-900/30 rounded-2xl p-5 border border-gray-100 dark:border-gray-800/50 shadow-sm overflow-hidden">
+                      <div className="absolute top-0 right-0 p-4">
+                        <BarChart3 className="w-5 h-5 text-gray-300 dark:text-gray-600" />
+                      </div>
+                      
+                      <div className="h-44 relative">
                         {/* Grid Lines */}
-                        <div className="absolute inset-0 flex flex-col justify-between">
-                          {[0, 1, 2, 3].map(i => (
-                            <div key={i} className="border-t border-gray-200/50 dark:border-gray-700/50 w-full h-px" />
+                        <div className="absolute inset-0 flex flex-col justify-between py-2">
+                          {[0, 1, 2, 3, 4].map(i => (
+                            <div key={i} className="border-t border-gray-200/30 dark:border-gray-700/30 w-full h-px" />
                           ))}
                         </div>
 
                         {/* SVG Line Graph */}
                         <svg className="absolute inset-0 w-full h-full overflow-visible" viewBox="0 0 400 160">
                           <defs>
-                            <linearGradient id="lineGradient" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="0%" stopColor="#22C55E" stopOpacity="0.4" />
-                              <stop offset="100%" stopColor="#22C55E" stopOpacity="0" />
+                            <linearGradient id="lineFill" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="0%" stopColor="#10B981" stopOpacity="0.3" />
+                              <stop offset="100%" stopColor="#10B981" stopOpacity="0" />
                             </linearGradient>
                           </defs>
                           
-                          {/* Area under line */}
+                          {/* Animated Area under line */}
                           <path 
-                            d="M 0,160 L 0,80 C 40,90 80,40 120,60 C 160,80 200,20 240,40 C 280,60 320,10 360,30 L 400,20 L 400,160 Z" 
-                            fill="url(#lineGradient)" 
-                            className="animate-pulse"
+                            d="M 0,160 L 0,100 C 50,110 80,40 130,70 C 180,100 220,10 270,50 C 320,80 350,20 400,30 L 400,160 Z" 
+                            fill="url(#lineFill)" 
+                            className="transition-all duration-1000 ease-in-out"
                           />
                           
-                          {/* Main Line */}
+                          {/* Main Line with Pulse Effect */}
                           <path 
-                            d="M 0,80 C 40,90 80,40 120,60 C 160,80 200,20 240,40 C 280,60 320,10 360,30 L 400,20" 
+                            d="M 0,100 C 50,110 80,40 130,70 C 180,100 220,10 270,50 C 320,80 350,20 400,30" 
                             fill="none" 
-                            stroke="#22C55E" 
-                            strokeWidth="3" 
+                            stroke="#10B981" 
+                            strokeWidth="4" 
                             strokeLinecap="round" 
                             strokeLinejoin="round" 
-                            className="drop-shadow-lg"
+                            className="drop-shadow-[0_0_8px_rgba(16,185,129,0.5)]"
                           />
 
-                          {/* Data Points */}
+                          {/* Interactive Points */}
                           {[
-                            {x: 0, y: 80}, {x: 120, y: 60}, {x: 240, y: 40}, {x: 400, y: 20}
+                            {x: 0, y: 100}, {x: 130, y: 70}, {x: 270, y: 50}, {x: 400, y: 30}
                           ].map((p, i) => (
-                            <circle key={i} cx={p.x} cy={p.y} r="4" fill="white" stroke="#22C55E" strokeWidth="2" className="animate-bounce" style={{animationDelay: `${i * 200}ms`}} />
+                            <g key={i} className="cursor-pointer group/dot">
+                              <circle cx={p.x} cy={p.y} r="10" fill="#10B981" fillOpacity="0.1" className="animate-ping" style={{animationDuration: '3s', animationDelay: `${i * 500}ms`}} />
+                              <circle cx={p.x} cy={p.y} r="5" fill="white" stroke="#10B981" strokeWidth="3" />
+                            </g>
                           ))}
                         </svg>
                       </div>
                       
-                      {/* X-Axis labels */}
-                      <div className="flex justify-between mt-3 text-[10px] text-gray-400 font-bold px-1 uppercase tracking-tighter">
-                        <span>Mon</span>
-                        <span>Tue</span>
-                        <span>Wed</span>
-                        <span>Thu</span>
-                        <span>Fri</span>
-                        <span>Sat</span>
-                        <span>Sun</span>
+                      <div className="flex justify-between mt-4 text-[9px] text-gray-400 font-black px-1 uppercase tracking-widest">
+                        <span>MAY 01</span>
+                        <span>MAY 02</span>
+                        <span>MAY 03</span>
+                        <span>MAY 04</span>
+                        <span>MAY 05</span>
+                        <span>MAY 06</span>
+                        <span>MAY 07</span>
                       </div>
                     </div>
 
-                    {/* Recent Activity Simulation */}
-                    <div className="space-y-3 pt-4 border-t border-gray-100 dark:border-gray-700">
-                      <h4 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Recent Activity</h4>
+                    {/* Recent Broadcasts simulation */}
+                    <div className="space-y-3 pt-6 border-t border-gray-100 dark:border-gray-700">
+                      <div className="flex items-center justify-between mb-2">
+                        <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Global Dispatch</h4>
+                        <div className="flex items-center gap-1 text-[9px] font-bold text-green-500 uppercase tracking-tighter">
+                          <CheckCircle className="w-2.5 h-2.5" />
+                          Authenticated
+                        </div>
+                      </div>
                       {[
-                        { name: "Rahul S.", status: "Delivered", time: "2s ago", color: "bg-green-500" },
-                        { name: "Priya K.", status: "Read", time: "1m ago", color: "bg-blue-500" },
-                        { name: "Amit H.", status: "Sending...", time: "Now", color: "bg-yellow-500" },
+                        { name: "Rahul Sharma", status: "Delivered", time: "Just now", color: "bg-green-500", progress: 100 },
+                        { name: "Priya Kapoor", status: "Read", time: "2m ago", color: "bg-blue-500", progress: 100 },
+                        { name: "Amit Hegde", status: "Sending", time: "In progress", color: "bg-yellow-500", progress: 65 },
                       ].map((msg, idx) => (
-                        <div key={idx} className="flex items-center justify-between p-2 rounded-lg bg-gray-50/50 dark:bg-gray-900/40 border border-gray-100 dark:border-gray-800/50 animate-pulse" style={{ animationDelay: `${idx * 150}ms` }}>
-                          <div className="flex items-center gap-2">
-                            <div className={`w-2 h-2 rounded-full ${msg.color}`} />
-                            <span className="text-xs font-semibold text-gray-700 dark:text-gray-200">{msg.name}</span>
+                        <div key={idx} className="group relative flex flex-col p-3 rounded-xl bg-gray-50/80 dark:bg-gray-900/40 border border-gray-100 dark:border-gray-800/50 hover:border-green-500/30 transition-all duration-300">
+                           <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-3">
+                              <div className={`w-2.5 h-2.5 rounded-full ${msg.color} shadow-sm shadow-inherit`} />
+                              <span className="text-xs font-bold text-gray-900 dark:text-white">{msg.name}</span>
+                            </div>
+                            <span className="text-[10px] text-gray-400 font-bold uppercase tracking-tighter">{msg.time}</span>
                           </div>
-                          <div className="flex items-center gap-2">
-                            <span className="text-[10px] text-gray-400 font-medium">• {msg.time}</span>
+                          <div className="h-1.5 w-full bg-gray-200 dark:bg-gray-800 rounded-full overflow-hidden">
+                            <div 
+                              className={`h-full ${msg.color} rounded-full transition-all duration-1000`} 
+                              style={{ width: `${msg.progress}%` }} 
+                            />
                           </div>
                         </div>
                       ))}
-                    </div>
-
-                    {/* Secondary Metrics */}
-                    <div className="grid grid-cols-2 gap-4 pt-4 border-t border-gray-100 dark:border-gray-700">
-                      <div className="p-3 rounded-xl bg-gray-50 dark:bg-gray-900/40 border border-gray-100 dark:border-gray-700/50">
-                        <p className="text-xs text-gray-400 mb-1">Response Rate</p>
-                        <p className="text-lg font-bold text-gray-900 dark:text-white">42.8%</p>
-                      </div>
-                      <div className="p-3 rounded-xl bg-gray-50 dark:bg-gray-900/40 border border-gray-100 dark:border-gray-700/50">
-                        <p className="text-xs text-gray-400 mb-1">Avg. CTR</p>
-                        <p className="text-lg font-bold text-gray-900 dark:text-white">18.4%</p>
-                      </div>
                     </div>
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* Floating Stats Cards */}
-            <div className="absolute -top-10 -left-10 z-30 bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 p-4 animate-bounce">
+            {/* ✅ FLOATING CARDS - BROUGHT FORWARD WITH HIGHER Z-INDEX AND SCALE */}
+            <div className="absolute -top-12 -left-12 z-[40] bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-gray-100 dark:border-gray-700 p-5 transform hover:scale-105 transition-transform duration-500 group">
               <div className="flex items-center gap-4">
                 <div className="flex -space-x-3">
                   {[1, 2, 3].map(i => (
-                    <div key={i} className="w-10 h-10 rounded-full border-2 border-white dark:border-gray-800 bg-gray-200 overflow-hidden">
+                    <div key={i} className="w-11 h-11 rounded-full border-2 border-white dark:border-gray-800 bg-gray-100 overflow-hidden shadow-sm group-hover:-translate-y-1 transition-transform" style={{ transitionDelay: `${i * 100}ms` }}>
                       <img src={`https://i.pravatar.cc/100?img=${i+10}`} alt="User" />
                     </div>
                   ))}
+                  <div className="w-11 h-11 rounded-full border-2 border-white dark:border-gray-800 bg-green-500 flex items-center justify-center text-white text-[10px] font-black shadow-sm">+12k</div>
                 </div>
                 <div>
-                  <p className="text-sm font-bold text-gray-900 dark:text-white">Active Users</p>
-                  <p className="text-[10px] text-green-500 font-bold uppercase tracking-tighter">Live Now</p>
+                  <p className="text-sm font-black text-gray-900 dark:text-white">Live Agents</p>
+                  <p className="text-[10px] text-green-500 font-bold uppercase tracking-widest">Active Conversations</p>
                 </div>
               </div>
             </div>
 
-            <div className="absolute -top-6 -right-6 z-20 bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-gray-200 dark:border-gray-700 p-4 animate-float">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 bg-green-500 rounded-full flex items-center justify-center">
-                  <Zap className="w-6 h-6 text-white" />
+            <div className="absolute top-10 -right-16 z-[30] bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-gray-100 dark:border-gray-700 p-5 animate-float transform hover:rotate-3 transition-all">
+              <div className="flex items-center gap-4">
+                <div className="w-14 h-14 bg-gradient-to-br from-green-400 to-green-600 rounded-2xl flex items-center justify-center shadow-lg shadow-green-500/20">
+                  <Zap className="w-7 h-7 text-white" />
                 </div>
                 <div>
-                  <p className="text-xl font-bold text-gray-900 dark:text-white">98.5%</p>
-                  <p className="text-sm text-gray-500">Delivery Rate</p>
+                  <p className="text-2xl font-black text-gray-900 dark:text-white tracking-tighter">98.5%</p>
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Instant Delivery</p>
                 </div>
               </div>
             </div>
 
-            <div className="absolute -bottom-6 -left-6 z-20 bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-gray-200 dark:border-gray-700 p-4 animate-float" style={{ animationDelay: '0.5s' }}>
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 bg-blue-500 rounded-full flex items-center justify-center">
-                  <Users className="w-6 h-6 text-white" />
+            <div className="absolute -bottom-10 -right-8 z-[35] bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-gray-100 dark:border-gray-700 p-5 animate-float transition-transform" style={{ animationDelay: '0.7s' }}>
+              <div className="flex items-center gap-4">
+                <div className="w-14 h-14 bg-gradient-to-br from-blue-400 to-blue-600 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-500/20">
+                  <Users className="w-7 h-7 text-white" />
                 </div>
                 <div>
-                  <p className="text-xl font-bold text-gray-900 dark:text-white">10,000+</p>
-                  <p className="text-sm text-gray-500">Active Users</p>
+                  <p className="text-2xl font-black text-gray-900 dark:text-white tracking-tighter">1.2M+</p>
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Contacts Managed</p>
                 </div>
               </div>
             </div>
 
-            {/* Meta Verified Badge */}
-            <div className="absolute top-1/2 right-0 transform translate-x-1/2 -translate-y-1/2 z-20 bg-white dark:bg-gray-800 rounded-full shadow-lg border border-gray-200 dark:border-gray-700 p-3 animate-float" style={{ animationDelay: '1s' }}>
-              <Shield className="w-8 h-8 text-blue-600" />
+            {/* Meta Verified Badge - Enlarged and popped out */}
+            <div className="absolute top-1/2 -right-8 transform translate-x-1/2 -translate-y-1/2 z-[45] bg-white dark:bg-gray-800 rounded-3xl shadow-2xl border-4 border-white dark:border-gray-700 p-4 animate-pulse">
+              <div className="flex flex-col items-center gap-2">
+                <Shield className="w-10 h-10 text-blue-600" />
+                <span className="text-[9px] font-black text-blue-600 uppercase tracking-tighter">Verified</span>
+              </div>
             </div>
           </div>
         </div>
