@@ -68,6 +68,8 @@ const CampaignDetails: React.FC = () => {
         ...prev,
         sentCount: progress.sent,
         failedCount: progress.failed,
+        deliveredCount: progress.delivered ?? prev.deliveredCount,
+        readCount: progress.read ?? prev.readCount,
         status: progress.status || prev.status,
       }));
     }
