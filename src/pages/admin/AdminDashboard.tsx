@@ -22,6 +22,7 @@ import {
 import { admin } from '../../services/api';
 import { formatINR } from '../../utils/currency';
 import { Link } from 'react-router-dom';
+import WhatsAppConnectionStats from '../../components/admin/WhatsAppConnectionStats';
 
 // ============================================
 // TYPES
@@ -469,7 +470,7 @@ const AdminDashboard: React.FC = () => {
       </div>
 
       {/* Secondary Stats */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* User Status Breakdown */}
         <UserStatusBreakdown stats={safeStats.users} />
 
@@ -484,6 +485,9 @@ const AdminDashboard: React.FC = () => {
           whatsapp={safeStats.whatsapp}
           messages={safeStats.messages}
         />
+
+        {/* WhatsApp Connection Stats */}
+        <WhatsAppConnectionStats />
       </div>
 
       {/* Revenue Card */}

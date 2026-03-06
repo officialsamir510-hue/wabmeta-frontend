@@ -4,10 +4,11 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   Search, Ban, Trash2, Mail, CheckCircle, RefreshCw,
   Loader2, AlertCircle, Users,
-  UserX, UserCheck, XCircle, ArrowRightLeft
+  UserX, UserCheck, XCircle, ArrowRightLeft, Eye, X
 } from 'lucide-react';
 import api, { admin } from '../../services/api';
 import toast from 'react-hot-toast';
+import WhatsAppConnectionBadge from '../../components/admin/WhatsAppConnectionBadge';
 
 // ============================================
 // TYPES
@@ -16,6 +17,18 @@ interface Organization {
   id: string;
   name: string;
   role: string;
+}
+
+interface WhatsAppAccount {
+  id: string;
+  verifiedName: string | null;
+  displayPhoneNumber: string;
+  connectionType: 'CLOUD_API' | 'BUSINESS_APP' | 'ON_PREMISE';
+  status: 'active' | 'inactive';
+  isDefault: boolean;
+  qualityRating: string | null;
+  phoneNumberId: string;
+  createdAt: string;
 }
 
 interface User {
@@ -30,6 +43,12 @@ interface User {
   createdAt: string;
   lastLoginAt?: string | null;
   organizations?: Organization[];
+  whatsappAccounts?: WhatsAppAccount[];
+  whatsappSummary?: {
+    cloudApiAccounts: number;
+    businessAppAccounts: number;
+    activeAccounts: number;
+  };
 }
 
 interface PaginationState {
@@ -252,6 +271,149 @@ const ConfirmModal: React.FC<ConfirmModalProps> = ({
 };
 
 // ============================================
+// USER DETAILS MODAL
+// ============================================
+interface UserDetailsModalProps {
+  isOpen: boolean;
+  user: User | null;
+  onClose: () => void;
+}
+
+const UserDetailsModal: React.FC<UserDetailsModalProps> = ({ isOpen, user, onClose }) => {
+  if (!isOpen || !user) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
+      <div className="relative bg-white dark:bg-gray-900 rounded-2xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6">
+        <button
+          onClick={onClose}
+          className="absolute top-4 right-4 p-2 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
+        >
+          <X className="w-5 h-5" />
+        </button>
+
+        <div className="mb-6 flex space-x-4 items-center border-b border-gray-100 dark:border-gray-800 pb-4">
+          <div className="w-16 h-16 bg-gradient-to-br from-primary-400 to-primary-600 rounded-full flex items-center justify-center text-white font-bold text-2xl">
+            {getUserInitials(user)}
+          </div>
+          <div>
+            <h2 className="text-xl font-bold text-gray-900 dark:text-white">
+              {getUserDisplayName(user)}
+            </h2>
+            <p className="text-gray-500 dark:text-gray-400">{user.email}</p>
+          </div>
+        </div>
+
+        <div className="space-y-4">
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+            WhatsApp Accounts ({user.whatsappAccounts?.length || 0})
+          </h3>
+
+          {!user.whatsappAccounts || user.whatsappAccounts.length === 0 ? (
+            <div className="text-center py-8 bg-gray-50 dark:bg-gray-800/50 rounded-lg">
+              <p className="text-gray-500 dark:text-gray-400">
+                No WhatsApp accounts connected
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {user.whatsappAccounts.map((account) => (
+                <div
+                  key={account.id}
+                  className="p-4 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700"
+                >
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-2">
+                        <h4 className="font-semibold text-gray-900 dark:text-white">
+                          {account.verifiedName || 'Unnamed Account'}
+                        </h4>
+                        {account.isDefault && (
+                          <span className="text-xs bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 px-2 py-0.5 rounded-full">
+                            Default
+                          </span>
+                        )}
+                      </div>
+                      
+                      <p className="text-sm text-gray-600 dark:text-gray-400">
+                        {account.displayPhoneNumber}
+                      </p>
+                    </div>
+
+                    {/* ✅ CONNECTION TYPE BADGE */}
+                    <WhatsAppConnectionBadge
+                      type={account.connectionType}
+                      status={account.status}
+                      showRecommended={true}
+                    />
+                  </div>
+
+                  {/* Additional Info */}
+                  <div className="grid grid-cols-2 gap-4 mt-3 pt-3 border-t border-gray-100 dark:border-gray-700">
+                    <div>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">Quality Rating</p>
+                      <p className="text-sm font-medium text-gray-900 dark:text-white">
+                        {account.qualityRating || 'N/A'}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">Phone Number ID</p>
+                      <p className="text-sm font-mono text-gray-900 dark:text-white">
+                        {account.phoneNumberId.slice(0, 12)}...
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* ✅ Connection Type Details */}
+                  <div className="mt-3 pt-3 border-t border-gray-100 dark:border-gray-700">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-gray-500 dark:text-gray-400">
+                        Connected: {new Date(account.createdAt).toLocaleDateString()}
+                      </span>
+                      
+                      {account.connectionType === 'BUSINESS_APP' && (
+                        <span className="text-orange-600 dark:text-orange-400 font-medium">
+                          ⚠️ Consider upgrading to Cloud API
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* ✅ WhatsApp Summary Stats */}
+          <div className="grid grid-cols-3 gap-3 mt-4">
+            <div className="p-3 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
+              <p className="text-xs text-green-600 dark:text-green-400 mb-1">Cloud API</p>
+              <p className="text-xl font-bold text-green-700 dark:text-green-300">
+                {user.whatsappSummary?.cloudApiAccounts || 0}
+              </p>
+            </div>
+            
+            <div className="p-3 bg-orange-50 dark:bg-orange-900/20 rounded-lg border border-orange-200 dark:border-orange-800">
+              <p className="text-xs text-orange-600 dark:text-orange-400 mb-1">Business App</p>
+              <p className="text-xl font-bold text-orange-700 dark:text-orange-300">
+                {user.whatsappSummary?.businessAppAccounts || 0}
+              </p>
+            </div>
+            
+            <div className="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+              <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">Active</p>
+              <p className="text-xl font-bold text-gray-700 dark:text-gray-300">
+                {user.whatsappSummary?.activeAccounts || 0}
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ============================================
 // MAIN COMPONENT
 // ============================================
 const UserManagement: React.FC = () => {
@@ -267,6 +429,8 @@ const UserManagement: React.FC = () => {
     total: 0,
     totalPages: 0
   });
+  
+  const [detailsModalUser, setDetailsModalUser] = useState<User | null>(null);
 
   // Confirmation modal state
   const [confirmModal, setConfirmModal] = useState<{
@@ -503,6 +667,13 @@ const UserManagement: React.FC = () => {
         loading={!!actionLoading}
       />
 
+      {/* User Details Modal */}
+      <UserDetailsModal
+        isOpen={!!detailsModalUser}
+        user={detailsModalUser}
+        onClose={() => setDetailsModalUser(null)}
+      />
+
       {/* ✅ ADD DELETE OPTIONS MODAL (JSX) */}
       {deleteModal.isOpen && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
@@ -731,6 +902,15 @@ const UserManagement: React.FC = () => {
                       {/* Actions Column */}
                       <td className="px-6 py-4 text-right">
                         <div className="flex items-center justify-end space-x-1">
+                          {/* View Details Button */}
+                          <button
+                            onClick={() => setDetailsModalUser(user)}
+                            className="p-2 text-gray-400 hover:bg-primary-50 rounded-lg hover:text-primary-600 transition-colors"
+                            title="View Details"
+                          >
+                            <Eye className="w-4 h-4" />
+                          </button>
+
                           {/* Email Button */}
                           <a
                             href={`mailto:${user.email}`}
