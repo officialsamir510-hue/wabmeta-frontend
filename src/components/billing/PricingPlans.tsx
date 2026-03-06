@@ -36,7 +36,7 @@ const PricingPlans: React.FC<PricingPlansProps> = ({ isOpen, onClose, onSelect }
       features: [
         { name: '100 Messages', included: true },
         { name: 'Limited Campaigns (1)', included: true },
-        { name: 'Limited Contacts (50)', included: true },
+        { name: 'Limited Contacts (1,000)', included: true },
         { name: 'Automation', included: false },
         { name: 'Campaign Retry', included: false },
         { name: 'Webhooks', included: false },

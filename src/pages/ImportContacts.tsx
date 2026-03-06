@@ -12,6 +12,7 @@ import {
   Upload,
   AlertTriangle,
   Crown,
+  Info,
 } from "lucide-react";
 import api from "../services/api";
 
@@ -337,7 +338,7 @@ const ImportContacts: React.FC = () => {
                 {importStats.remainingSlots} / {importStats.maxContacts}
               </p>
             </div>
-            {importStats.planName.toLowerCase().includes('free') && (
+            {(importStats.planName.toLowerCase().includes('free') && importStats.remainingSlots < 100) && (
               <Link
                 to="/dashboard/billing"
                 className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-yellow-500 to-orange-500 text-white rounded-xl hover:shadow-lg transition-all"
@@ -372,16 +373,16 @@ const ImportContacts: React.FC = () => {
         </div>
       )}
 
-      {/* ✅ Free Plan Import Limit Warning */}
+      {/* ✅ Free Plan Info (Not Warning) */}
       {importStats && importStats.planName.toLowerCase().includes('free') && importStats.canImport && (
-        <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4">
+        <div className="bg-primary-50 border border-primary-100 rounded-xl p-4">
           <div className="flex items-center gap-3">
-            <AlertCircle className="w-5 h-5 text-yellow-600" />
+            <Info className="w-5 h-5 text-primary-600" />
             <div className="flex-1">
-              <p className="font-semibold text-yellow-900">Free Plan Limit</p>
-              <p className="text-sm text-yellow-700">
-                You can import maximum <strong>{importStats.maxPerImport} contacts per upload</strong>. 
-                Upgrade to import up to 10,000 contacts at once.
+              <p className="font-semibold text-primary-900">Trial Plan</p>
+              <p className="text-sm text-primary-700">
+                You can import up to <strong>{importStats.maxPerImport} contacts</strong> in this batch. 
+                You have <strong>{importStats.remainingSlots}</strong> total slots remaining.
               </p>
             </div>
           </div>
