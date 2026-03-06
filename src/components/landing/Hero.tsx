@@ -239,7 +239,7 @@ const Hero: React.FC = () => {
             </div>
 
             {/* Floating Stats Cards */}
-            <div className="absolute -top-6 -right-6 bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-gray-200 dark:border-gray-700 p-4 animate-float">
+            <div className="absolute -top-6 -right-6 z-20 bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-gray-200 dark:border-gray-700 p-4 animate-float">
               <div className="flex items-center gap-3">
                 <div className="w-12 h-12 bg-green-500 rounded-full flex items-center justify-center">
                   <Zap className="w-6 h-6 text-white" />
@@ -251,7 +251,7 @@ const Hero: React.FC = () => {
               </div>
             </div>
 
-            <div className="absolute -bottom-6 -left-6 bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-gray-200 dark:border-gray-700 p-4 animate-float" style={{ animationDelay: '0.5s' }}>
+            <div className="absolute -bottom-6 -left-6 z-20 bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-gray-200 dark:border-gray-700 p-4 animate-float" style={{ animationDelay: '0.5s' }}>
               <div className="flex items-center gap-3">
                 <div className="w-12 h-12 bg-blue-500 rounded-full flex items-center justify-center">
                   <Users className="w-6 h-6 text-white" />
@@ -264,7 +264,7 @@ const Hero: React.FC = () => {
             </div>
 
             {/* Meta Verified Badge */}
-            <div className="absolute top-1/2 right-0 transform translate-x-1/2 -translate-y-1/2 bg-white dark:bg-gray-800 rounded-full shadow-lg border border-gray-200 dark:border-gray-700 p-3 animate-float" style={{ animationDelay: '1s' }}>
+            <div className="absolute top-1/2 right-0 transform translate-x-1/2 -translate-y-1/2 z-20 bg-white dark:bg-gray-800 rounded-full shadow-lg border border-gray-200 dark:border-gray-700 p-3 animate-float" style={{ animationDelay: '1s' }}>
               <Shield className="w-8 h-8 text-blue-600" />
             </div>
           </div>
