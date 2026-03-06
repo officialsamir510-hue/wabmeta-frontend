@@ -138,41 +138,100 @@ const Hero: React.FC = () => {
           <div className="relative">
             {/* Main Dashboard Card */}
             <div className="relative z-10 bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 overflow-hidden">
-              {/* Dashboard Preview Image */}
-              <div className="aspect-video bg-gradient-to-br from-green-100 to-emerald-100 dark:from-gray-700 dark:to-gray-800">
+              {/* Dashboard Preview Window */}
+              <div className="relative bg-white dark:bg-gray-800">
                 <img
                   src="/dashboard-preview.png"
                   alt="WabMeta Dashboard Preview"
-                  className="w-full h-full object-cover"
+                  className="w-full h-auto hidden" // Keep it hidden if you want to use the CSS UI
                   onError={(e) => {
                     e.currentTarget.style.display = 'none';
                   }}
                 />
                 
-                {/* Fallback Dashboard UI */}
-                <div className="p-6 space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="w-12 h-12 bg-green-100 dark:bg-green-900/30 rounded-xl flex items-center justify-center">
-                        <MessageCircle className="w-6 h-6 text-green-600" />
+                
+                {/* High-Fidelity Dashboard UI */}
+                <div className="bg-white dark:bg-gray-800 h-full p-6">
+                  {/* Browser-like Header */}
+                  <div className="flex items-center gap-2 mb-6 border-b border-gray-100 dark:border-gray-700 pb-4">
+                    <div className="flex gap-1.5">
+                      <div className="w-3 h-3 rounded-full bg-red-400" />
+                      <div className="w-3 h-3 rounded-full bg-yellow-400" />
+                      <div className="w-3 h-3 rounded-full bg-green-400" />
+                    </div>
+                    <div className="flex-1 max-w-xs h-6 bg-gray-100 dark:bg-gray-700 rounded-md mx-auto" />
+                  </div>
+
+                  <div className="space-y-6">
+                    {/* Stats Summary */}
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-4">
+                        <div className="w-14 h-14 bg-green-100 dark:bg-green-900/30 rounded-2xl flex items-center justify-center shadow-inner">
+                          <MessageCircle className="w-7 h-7 text-green-600" />
+                        </div>
+                        <div>
+                          <h3 className="text-sm font-medium text-gray-500 uppercase tracking-wider">Campaign Performance</h3>
+                          <div className="flex items-baseline gap-2">
+                            <span className="text-3xl font-bold text-gray-900 dark:text-white">125,432</span>
+                            <span className="text-sm font-semibold text-green-500">↑ 12.5%</span>
+                          </div>
+                        </div>
                       </div>
-                      <div>
-                        <p className="font-semibold text-gray-900 dark:text-white">Messages Sent</p>
-                        <p className="text-sm text-gray-500">Last 30 days</p>
+                      
+                      <div className="hidden sm:flex flex-col items-end">
+                        <div className="flex items-center gap-2 px-3 py-1 bg-green-50 dark:bg-green-900/20 text-green-600 rounded-full text-xs font-bold border border-green-100 dark:border-green-800">
+                          <span className="relative flex h-2 w-2">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                            <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+                          </span>
+                          Live Analytics
+                        </div>
+                        <p className="text-[10px] text-gray-400 mt-1">Real-time tracking</p>
                       </div>
                     </div>
-                    <p className="text-3xl font-bold text-green-600">125,432</p>
-                  </div>
-                  
-                  <div className="h-32 bg-gradient-to-t from-green-100 to-transparent dark:from-green-900/20 rounded-lg flex items-end justify-center pb-4">
-                    <div className="flex items-end gap-2">
-                      {[40, 65, 45, 80, 55, 90, 75].map((h, i) => (
-                        <div
-                          key={i}
-                          className="w-8 bg-green-500 rounded-t transition-all duration-500 hover:bg-green-600"
-                          style={{ height: `${h}%` }}
-                        />
-                      ))}
+                    
+                    {/* Primary Bar Chart Area */}
+                    <div className="relative group">
+                      <div className="h-40 flex items-end justify-between gap-2.5">
+                        {[45, 62, 55, 85, 48, 92, 72, 58, 78, 65].map((h, i) => (
+                          <div key={i} className="flex-1 flex flex-col justify-end group">
+                            <div 
+                              className="w-full bg-green-500/10 dark:bg-green-500/5 rounded-t-lg transition-all duration-500 hover:bg-green-500/20 relative"
+                              style={{ height: '100%' }}
+                            >
+                              <div 
+                                className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-green-600 to-green-400 rounded-t-lg transition-all duration-700 delay-[50ms]"
+                                style={{ height: `${h}%` }}
+                              >
+                                {/* Tooltip on Hover */}
+                                <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-gray-900 text-white text-[10px] py-1 px-2 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-20 pointer-events-none">
+                                  {h}k Sent
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      
+                      {/* X-Axis labels placeholder */}
+                      <div className="flex justify-between mt-3 text-[10px] text-gray-400 font-medium px-1">
+                        <span>Mon</span>
+                        <span>Wed</span>
+                        <span>Fri</span>
+                        <span>Sun</span>
+                      </div>
+                    </div>
+
+                    {/* Secondary Metrics */}
+                    <div className="grid grid-cols-2 gap-4 pt-4 border-t border-gray-100 dark:border-gray-700">
+                      <div className="p-3 rounded-xl bg-gray-50 dark:bg-gray-900/40 border border-gray-100 dark:border-gray-700/50">
+                        <p className="text-xs text-gray-400 mb-1">Response Rate</p>
+                        <p className="text-lg font-bold text-gray-900 dark:text-white">42.8%</p>
+                      </div>
+                      <div className="p-3 rounded-xl bg-gray-50 dark:bg-gray-900/40 border border-gray-100 dark:border-gray-700/50">
+                        <p className="text-xs text-gray-400 mb-1">Avg. CTR</p>
+                        <p className="text-lg font-bold text-gray-900 dark:text-white">18.4%</p>
+                      </div>
                     </div>
                   </div>
                 </div>
