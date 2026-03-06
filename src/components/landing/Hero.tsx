@@ -190,36 +190,82 @@ const Hero: React.FC = () => {
                       </div>
                     </div>
                     
-                    {/* Primary Bar Chart Area */}
-                    <div className="relative group">
-                      <div className="h-40 flex items-end justify-between gap-2.5">
-                        {[45, 62, 55, 85, 48, 92, 72, 58, 78, 65].map((h, i) => (
-                          <div key={i} className="flex-1 flex flex-col justify-end group">
-                            <div 
-                              className="w-full bg-green-500/10 dark:bg-green-500/5 rounded-t-lg transition-all duration-500 hover:bg-green-500/20 relative"
-                              style={{ height: '100%' }}
-                            >
-                              <div 
-                                className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-green-600 to-green-400 rounded-t-lg transition-all duration-700 delay-[50ms]"
-                                style={{ height: `${h}%` }}
-                              >
-                                {/* Tooltip on Hover */}
-                                <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-gray-900 text-white text-[10px] py-1 px-2 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-20 pointer-events-none">
-                                  {h}k Sent
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        ))}
+                    {/* Primary Analytics Graph Area */}
+                    <div className="relative group bg-gray-50/50 dark:bg-gray-900/20 rounded-2xl p-4 border border-gray-100 dark:border-gray-800">
+                      <div className="h-40 relative">
+                        {/* Grid Lines */}
+                        <div className="absolute inset-0 flex flex-col justify-between">
+                          {[0, 1, 2, 3].map(i => (
+                            <div key={i} className="border-t border-gray-200/50 dark:border-gray-700/50 w-full h-px" />
+                          ))}
+                        </div>
+
+                        {/* SVG Line Graph */}
+                        <svg className="absolute inset-0 w-full h-full overflow-visible" viewBox="0 0 400 160">
+                          <defs>
+                            <linearGradient id="lineGradient" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="0%" stopColor="#22C55E" stopOpacity="0.4" />
+                              <stop offset="100%" stopColor="#22C55E" stopOpacity="0" />
+                            </linearGradient>
+                          </defs>
+                          
+                          {/* Area under line */}
+                          <path 
+                            d="M 0,160 L 0,80 C 40,90 80,40 120,60 C 160,80 200,20 240,40 C 280,60 320,10 360,30 L 400,20 L 400,160 Z" 
+                            fill="url(#lineGradient)" 
+                            className="animate-pulse"
+                          />
+                          
+                          {/* Main Line */}
+                          <path 
+                            d="M 0,80 C 40,90 80,40 120,60 C 160,80 200,20 240,40 C 280,60 320,10 360,30 L 400,20" 
+                            fill="none" 
+                            stroke="#22C55E" 
+                            strokeWidth="3" 
+                            strokeLinecap="round" 
+                            strokeLinejoin="round" 
+                            className="drop-shadow-lg"
+                          />
+
+                          {/* Data Points */}
+                          {[
+                            {x: 0, y: 80}, {x: 120, y: 60}, {x: 240, y: 40}, {x: 400, y: 20}
+                          ].map((p, i) => (
+                            <circle key={i} cx={p.x} cy={p.y} r="4" fill="white" stroke="#22C55E" strokeWidth="2" className="animate-bounce" style={{animationDelay: `${i * 200}ms`}} />
+                          ))}
+                        </svg>
                       </div>
                       
-                      {/* X-Axis labels placeholder */}
-                      <div className="flex justify-between mt-3 text-[10px] text-gray-400 font-medium px-1">
+                      {/* X-Axis labels */}
+                      <div className="flex justify-between mt-3 text-[10px] text-gray-400 font-bold px-1 uppercase tracking-tighter">
                         <span>Mon</span>
+                        <span>Tue</span>
                         <span>Wed</span>
+                        <span>Thu</span>
                         <span>Fri</span>
+                        <span>Sat</span>
                         <span>Sun</span>
                       </div>
+                    </div>
+
+                    {/* Recent Activity Simulation */}
+                    <div className="space-y-3 pt-4 border-t border-gray-100 dark:border-gray-700">
+                      <h4 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Recent Activity</h4>
+                      {[
+                        { name: "Rahul S.", status: "Delivered", time: "2s ago", color: "bg-green-500" },
+                        { name: "Priya K.", status: "Read", time: "1m ago", color: "bg-blue-500" },
+                        { name: "Amit H.", status: "Sending...", time: "Now", color: "bg-yellow-500" },
+                      ].map((msg, idx) => (
+                        <div key={idx} className="flex items-center justify-between p-2 rounded-lg bg-gray-50/50 dark:bg-gray-900/40 border border-gray-100 dark:border-gray-800/50 animate-pulse" style={{ animationDelay: `${idx * 150}ms` }}>
+                          <div className="flex items-center gap-2">
+                            <div className={`w-2 h-2 rounded-full ${msg.color}`} />
+                            <span className="text-xs font-semibold text-gray-700 dark:text-gray-200">{msg.name}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] text-gray-400 font-medium">• {msg.time}</span>
+                          </div>
+                        </div>
+                      ))}
                     </div>
 
                     {/* Secondary Metrics */}
@@ -239,6 +285,22 @@ const Hero: React.FC = () => {
             </div>
 
             {/* Floating Stats Cards */}
+            <div className="absolute -top-10 -left-10 z-30 bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 p-4 animate-bounce">
+              <div className="flex items-center gap-4">
+                <div className="flex -space-x-3">
+                  {[1, 2, 3].map(i => (
+                    <div key={i} className="w-10 h-10 rounded-full border-2 border-white dark:border-gray-800 bg-gray-200 overflow-hidden">
+                      <img src={`https://i.pravatar.cc/100?img=${i+10}`} alt="User" />
+                    </div>
+                  ))}
+                </div>
+                <div>
+                  <p className="text-sm font-bold text-gray-900 dark:text-white">Active Users</p>
+                  <p className="text-[10px] text-green-500 font-bold uppercase tracking-tighter">Live Now</p>
+                </div>
+              </div>
+            </div>
+
             <div className="absolute -top-6 -right-6 z-20 bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-gray-200 dark:border-gray-700 p-4 animate-float">
               <div className="flex items-center gap-3">
                 <div className="w-12 h-12 bg-green-500 rounded-full flex items-center justify-center">

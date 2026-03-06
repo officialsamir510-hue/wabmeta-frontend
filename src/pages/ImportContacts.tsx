@@ -333,12 +333,12 @@ const ImportContacts: React.FC = () => {
         {importStats && (
           <div className="flex items-center gap-3">
             <div className="text-right">
-              <p className="text-sm text-gray-500">Available Slots</p>
+              <p className="text-sm text-gray-500">Contact Status</p>
               <p className="text-lg font-bold text-primary-600">
-                {importStats.remainingSlots} / {importStats.maxContacts}
+                {importStats.totalContacts} Contacts
               </p>
             </div>
-            {(importStats.planName.toLowerCase().includes('free') && importStats.remainingSlots < 100) && (
+            {importStats.remainingSlots < 100 && (
               <Link
                 to="/dashboard/billing"
                 className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-yellow-500 to-orange-500 text-white rounded-xl hover:shadow-lg transition-all"

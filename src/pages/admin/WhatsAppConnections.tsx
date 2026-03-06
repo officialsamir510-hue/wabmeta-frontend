@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Phone, Trash2, CheckCircle, XCircle, Building2, RefreshCw } from 'lucide-react';
 import { admin } from '../../services/api';
 import toast from 'react-hot-toast';
+import WhatsAppConnectionBadge from '../../components/admin/WhatsAppConnectionBadge';
 
 interface Connection {
     id: string;
@@ -146,9 +147,10 @@ export default function WhatsAppConnections() {
                                     </span>
                                 </td>
                                 <td className="px-6 py-4">
-                                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                                        {conn.connectionType || 'CLOUD_API'}
-                                    </span>
+                                    <WhatsAppConnectionBadge 
+                                        type={conn.connectionType as any || 'CLOUD_API'} 
+                                        status={conn.status === 'CONNECTED' && conn.isActive ? 'active' : 'inactive'}
+                                    />
                                 </td>
                                 <td className="px-6 py-4">
                                     {conn.status === 'CONNECTED' && conn.isActive ? (
