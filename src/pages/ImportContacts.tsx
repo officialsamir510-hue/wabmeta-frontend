@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import Papa from "papaparse";
 import {
@@ -10,7 +10,10 @@ import {
   Download,
   RefreshCw,
   Upload,
+  AlertTriangle,
+  Crown,
 } from "lucide-react";
+import api from "../services/api";
 
 interface ImportResult {
   total: number;      // total rows in CSV
@@ -36,11 +39,13 @@ const normalizeIndianPhone = (v: any) => {
   if (/^[6-9]\d{9}$/.test(cleaned)) return cleaned;
   return "";
 };
+
 const isValidEmail = (v: any) => {
   const s = String(v ?? "").trim();
   if (!s) return false;
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
 };
+
 const splitName = (full: string) => {
   const s = String(full || "").trim();
   if (!s) return { firstName: undefined, lastName: undefined };
@@ -66,6 +71,30 @@ const ImportContacts: React.FC = () => {
     email: "",
     company: "",
   });
+
+  // ✅ NEW: Import limits state
+  const [importStats, setImportStats] = useState<{
+    totalContacts: number;
+    maxContacts: number;
+    remainingSlots: number;
+    planName: string;
+    canImport: boolean;
+    maxPerImport: number;
+  } | null>(null);
+
+  // ✅ Fetch import stats on mount
+  useEffect(() => {
+    fetchImportStats();
+  }, []);
+
+  const fetchImportStats = async () => {
+    try {
+      const response = await api.get('/contacts/import-stats');
+      setImportStats(response.data.data);
+    } catch (error) {
+      console.error('Failed to fetch import stats:', error);
+    }
+  };
 
   const autoDetectHeader = (headers: string[], candidates: string[]) => {
     const lower = headers.map((h) => h.toLowerCase().trim());
@@ -126,17 +155,17 @@ const ImportContacts: React.FC = () => {
       const rawEmail = fieldMapping.email ? row[fieldMapping.email] : "";
       const rawCompany = fieldMapping.company ? row[fieldMapping.company] : "";
 
-      const phone = normalizeIndianPhone(rawPhone); // ✅ Indian normalization
+      const phone = normalizeIndianPhone(rawPhone);
       const email = isValidEmail(rawEmail) ? String(rawEmail).trim() : undefined;
       const { firstName, lastName } = splitName(String(rawName || "").trim());
 
       return {
-        __rowIndex: idx + 2, // +2 because CSV header is row 1, data starts row 2
+        __rowIndex: idx + 2,
         phone,
         countryCode: "+91",
         firstName,
         lastName,
-        email, // undefined if invalid
+        email,
         tags: ["Imported"],
         customFields: rawCompany
           ? { company: String(rawCompany).trim(), source: "csv" }
@@ -174,22 +203,37 @@ const ImportContacts: React.FC = () => {
     URL.revokeObjectURL(url);
   };
 
-  // Bulk Import
+  // ✅ Update handleStartImport to check limits
   const handleStartImport = async () => {
+    if (!importStats) {
+      alert('Unable to fetch import limits. Please try again.');
+      return;
+    }
+
+    if (!importStats.canImport) {
+      alert(`Contact limit reached (${importStats.totalContacts}/${importStats.maxContacts}). Please upgrade your plan.`);
+      return;
+    }
+
+    if (stats.valid > importStats.remainingSlots) {
+      if (!confirm(`You can only import ${importStats.remainingSlots} more contacts. Only the first ${importStats.remainingSlots} valid contacts will be imported. Continue?`)) {
+        return;
+      }
+    }
+
     setStep("importing");
     setFailures([]);
 
     try {
       const contacts = normalizedContacts
-        .filter(
-          (c) => c.phone && /^[6-9]\d{9}$/.test(c.phone)
-        )
+        .filter(c => c.phone && /^[6-9]\d{9}$/.test(c.phone))
+        .slice(0, importStats.remainingSlots) // Limit to available slots
         .map((c) => ({
           phone: c.phone,
           countryCode: c.countryCode || "+91",
           firstName: c.firstName,
           lastName: c.lastName,
-          ...(c.email ? { email: c.email } : {}), // ✅ don’t send empty email
+          ...(c.email ? { email: c.email } : {}),
           tags: c.tags || ["Imported"],
           customFields: c.customFields || {},
         }));
@@ -219,22 +263,20 @@ const ImportContacts: React.FC = () => {
         throw new Error(json?.error || json?.message || "Import failed");
       }
 
-      const data = json.data as {
-        imported: number;
-        skipped: number;
-        failed: number;
-        errors: Failure[];
-      };
+      const data = json.data;
 
       setImportResult({
         total: stats.total,
         imported: data.imported || 0,
         duplicates: data.skipped || 0,
-        errors: (data.failed || 0) + stats.invalid, // include local invalid count too
+        errors: (data.failed || 0) + stats.invalid,
       });
 
       setFailures(data.errors || []);
       setStep("complete");
+      
+      // Refresh stats after import
+      fetchImportStats();
     } catch (e: any) {
       alert(e?.message || "Import failed");
       setStep("preview");
@@ -250,14 +292,12 @@ const ImportContacts: React.FC = () => {
     setFieldMapping({ name: "", phone: "", email: "", company: "" });
   };
 
-  // Progress step UI helper
   const visualStepIndex = useMemo(() => {
     const steps: Step[] = ["upload", "mapping", "preview", "importing", "complete"];
     const idx = steps.indexOf(step);
     return step === "importing" ? 2 : idx;
   }, [step]);
 
-  // Download Sample CSV
   const downloadSampleCsv = () => {
     const header = "Name,Phone,Email,Company\n";
     const rows = [
@@ -283,11 +323,70 @@ const ImportContacts: React.FC = () => {
         <Link to="/dashboard/contacts" className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
           <ArrowLeft className="w-5 h-5 text-gray-600" />
         </Link>
-        <div>
+        <div className="flex-1">
           <h1 className="text-2xl font-bold text-gray-900">Import Contacts</h1>
           <p className="text-gray-500 mt-1">Upload and import contacts from CSV</p>
         </div>
+
+        {/* ✅ Import Stats Badge */}
+        {importStats && (
+          <div className="flex items-center gap-3">
+            <div className="text-right">
+              <p className="text-sm text-gray-500">Available Slots</p>
+              <p className="text-lg font-bold text-primary-600">
+                {importStats.remainingSlots} / {importStats.maxContacts}
+              </p>
+            </div>
+            {importStats.planName.toLowerCase().includes('free') && (
+              <Link
+                to="/dashboard/billing"
+                className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-yellow-500 to-orange-500 text-white rounded-xl hover:shadow-lg transition-all"
+              >
+                <Crown className="w-4 h-4" />
+                Upgrade
+              </Link>
+            )}
+          </div>
+        )}
       </div>
+
+      {/* ✅ Limit Warning Banner */}
+      {importStats && !importStats.canImport && (
+        <div className="bg-red-50 border border-red-200 rounded-xl p-4">
+          <div className="flex items-center gap-3">
+            <AlertTriangle className="w-5 h-5 text-red-600" />
+            <div className="flex-1">
+              <p className="font-semibold text-red-900">Contact Limit Reached</p>
+              <p className="text-sm text-red-700">
+                You have {importStats.totalContacts}/{importStats.maxContacts} contacts. 
+                Please upgrade your plan to import more.
+              </p>
+            </div>
+            <Link
+              to="/dashboard/billing"
+              className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium"
+            >
+              Upgrade Now
+            </Link>
+          </div>
+        </div>
+      )}
+
+      {/* ✅ Free Plan Import Limit Warning */}
+      {importStats && importStats.planName.toLowerCase().includes('free') && importStats.canImport && (
+        <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4">
+          <div className="flex items-center gap-3">
+            <AlertCircle className="w-5 h-5 text-yellow-600" />
+            <div className="flex-1">
+              <p className="font-semibold text-yellow-900">Free Plan Limit</p>
+              <p className="text-sm text-yellow-700">
+                You can import maximum <strong>{importStats.maxPerImport} contacts per upload</strong>. 
+                Upgrade to import up to 10,000 contacts at once.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Progress Steps */}
       <div className="bg-white rounded-2xl p-6 border border-gray-200">
@@ -324,7 +423,6 @@ const ImportContacts: React.FC = () => {
 
       {/* Content */}
       <div className="bg-white rounded-2xl p-6 border border-gray-200">
-        {/* Upload */}
         {step === "upload" && (
           <>
             <div className="flex items-center justify-between mb-6">
@@ -338,7 +436,6 @@ const ImportContacts: React.FC = () => {
                 Sample CSV
               </button>
             </div>
-            {/* Simple File Input for now to avoid prop mismatch */}
             <div className="border-2 border-dashed border-gray-200 rounded-2xl p-12 text-center hover:bg-gray-50 transition-all cursor-pointer group"
               onClick={() => document.getElementById('file-upload')?.click()}>
               <input
@@ -360,7 +457,6 @@ const ImportContacts: React.FC = () => {
           </>
         )}
 
-        {/* Mapping */}
         {step === "mapping" && (
           <>
             <h2 className="text-lg font-semibold text-gray-900 mb-2">Map Columns</h2>
@@ -406,7 +502,6 @@ const ImportContacts: React.FC = () => {
           </>
         )}
 
-        {/* Preview */}
         {step === "preview" && (
           <>
             <h2 className="text-lg font-semibold text-gray-900 mb-2">Preview Import</h2>
@@ -424,6 +519,22 @@ const ImportContacts: React.FC = () => {
                 <span className="font-medium">{stats.invalid} invalid</span>
               </div>
             </div>
+
+            {/* ✅ Partial Import Warning */}
+            {importStats && stats.valid > importStats.remainingSlots && (
+              <div className="bg-orange-50 border border-orange-200 rounded-xl p-4 mb-6">
+                <div className="flex items-center gap-3">
+                  <AlertTriangle className="w-5 h-5 text-orange-600" />
+                  <div>
+                    <p className="font-semibold text-orange-900">Partial Import</p>
+                    <p className="text-sm text-orange-700">
+                      Only {importStats.remainingSlots} of {stats.valid} valid contacts will be imported 
+                      due to your plan limit ({importStats.maxContacts} total contacts).
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
 
             <div className="overflow-x-auto rounded-xl border border-gray-200 max-h-96">
               <table className="w-full">
@@ -469,14 +580,16 @@ const ImportContacts: React.FC = () => {
               <button onClick={() => setStep("mapping")} className="px-5 py-2.5 text-gray-700 rounded-xl hover:bg-gray-100">
                 Back
               </button>
-              <button onClick={handleStartImport} className="px-5 py-2.5 bg-primary-500 hover:bg-primary-600 text-white rounded-xl">
-                Import {stats.valid} Contacts
+              <button 
+                onClick={handleStartImport} 
+                className="px-5 py-2.5 bg-primary-500 hover:bg-primary-600 text-white rounded-xl"
+              >
+                Import {Math.min(stats.valid, importStats?.remainingSlots || 0)} Contacts
               </button>
             </div>
           </>
         )}
 
-        {/* Importing */}
         {step === "importing" && (
           <div className="py-16 text-center">
             <Loader2 className="w-16 h-16 text-primary-500 animate-spin mx-auto mb-6" />
@@ -485,7 +598,6 @@ const ImportContacts: React.FC = () => {
           </div>
         )}
 
-        {/* Complete */}
         {step === "complete" && importResult && (
           <div className="py-6">
             <div className="text-center">
@@ -532,7 +644,6 @@ const ImportContacts: React.FC = () => {
               </div>
             </div>
 
-            {/* Errors list */}
             {failures.length > 0 && (
               <div className="mt-10">
                 <div className="flex items-center justify-between mb-3">

@@ -271,21 +271,17 @@ body {
 }
 
 /* Landing Page Animations */
-@keyframes bounce-slow {
+@keyframes float {
   0%, 100% {
-    transform: translateY(0);
+    transform: translateY(0px);
   }
   50% {
     transform: translateY(-10px);
   }
 }
 
-.animate-bounce-slow {
-  animation: bounce-slow 3s ease-in-out infinite;
-}
-
-.delay-500 {
-  animation-delay: 0.5s;
+.animate-float {
+  animation: float 3s ease-in-out infinite;
 }
 
 @keyframes scroll {
@@ -301,4 +297,10 @@ body {
 
 .animate-scroll {
   animation: scroll 1.5s ease-in-out infinite;
+}
+
+@layer utilities {
+  .animate-pulse {
+    animation: pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
 }
