@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Cloud, Smartphone, Server, TrendingUp } from 'lucide-react';
-import api from '../../services/api';
+import { admin } from '../../services/api';
 
 interface ConnectionStats {
   cloudApi: { active: number; inactive: number; total: number };
@@ -18,8 +18,8 @@ const WhatsAppConnectionStats: React.FC = () => {
 
   const fetchStats = async () => {
     try {
-      const response = await api.get('/admin/whatsapp-stats');
-      setStats(response.data);
+      const response = await admin.getWhatsAppStats();
+      setStats(response.data?.data || response.data);
     } catch (error) {
       console.error('Failed to fetch WhatsApp stats:', error);
     } finally {
@@ -39,11 +39,11 @@ const WhatsAppConnectionStats: React.FC = () => {
   }
 
   const totalConnections = stats
-    ? stats.cloudApi.total + stats.businessApp.total + stats.onPremise.total
+    ? (stats.cloudApi?.total || 0) + (stats.businessApp?.total || 0) + (stats.onPremise?.total || 0)
     : 0;
 
-  const cloudApiPercentage = stats
-    ? Math.round((stats.cloudApi.total / totalConnections) * 100)
+  const cloudApiPercentage = stats && totalConnections > 0
+    ? Math.round(((stats.cloudApi?.total || 0) / totalConnections) * 100)
     : 0;
 
   return (
@@ -65,13 +65,13 @@ const WhatsAppConnectionStats: React.FC = () => {
             <div>
               <p className="font-semibold text-gray-900 dark:text-white">Cloud API</p>
               <p className="text-xs text-green-600 dark:text-green-400">
-                {stats?.cloudApi.active} active
+                {stats?.cloudApi?.active || 0} active
               </p>
             </div>
           </div>
           <div className="text-right">
             <p className="text-2xl font-bold text-green-700 dark:text-green-300">
-              {stats?.cloudApi.total || 0}
+              {stats?.cloudApi?.total || 0}
             </p>
             <p className="text-xs text-green-600 dark:text-green-400">
               {cloudApiPercentage}% of total
@@ -88,13 +88,13 @@ const WhatsAppConnectionStats: React.FC = () => {
             <div>
               <p className="font-semibold text-gray-900 dark:text-white">Business App</p>
               <p className="text-xs text-orange-600 dark:text-orange-400">
-                {stats?.businessApp.active} active
+                {stats?.businessApp?.active || 0} active
               </p>
             </div>
           </div>
           <div className="text-right">
             <p className="text-2xl font-bold text-orange-700 dark:text-orange-300">
-              {stats?.businessApp.total || 0}
+              {stats?.businessApp?.total || 0}
             </p>
             <p className="text-xs text-orange-600 dark:text-orange-400">Legacy</p>
           </div>
@@ -110,13 +110,13 @@ const WhatsAppConnectionStats: React.FC = () => {
               <div>
                 <p className="font-semibold text-gray-900 dark:text-white">On-Premise</p>
                 <p className="text-xs text-blue-600 dark:text-blue-400">
-                  {stats.onPremise.active} active
+                  {stats.onPremise?.active || 0} active
                 </p>
               </div>
             </div>
             <div className="text-right">
               <p className="text-2xl font-bold text-blue-700 dark:text-blue-300">
-                {stats.onPremise.total}
+                {stats.onPremise?.total || 0}
               </p>
               <p className="text-xs text-blue-600 dark:text-blue-400">Enterprise</p>
             </div>

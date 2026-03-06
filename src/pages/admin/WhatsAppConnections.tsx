@@ -12,6 +12,7 @@ interface Connection {
     status: string;
     isActive: boolean;
     createdAt: string;
+    connectionType?: string;
     organization: {
         id: string;
         name: string;
@@ -97,6 +98,9 @@ export default function WhatsAppConnections() {
                                 Quality
                             </th>
                             <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase">
+                                Type
+                            </th>
+                            <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase">
                                 Status
                             </th>
                             <th className="px-6 py-4 text-right text-xs font-semibold text-gray-500 uppercase">
@@ -139,6 +143,11 @@ export default function WhatsAppConnections() {
                                                 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
                                         }`}>
                                         {conn.qualityRating}
+                                    </span>
+                                </td>
+                                <td className="px-6 py-4">
+                                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                                        {conn.connectionType || 'CLOUD_API'}
                                     </span>
                                 </td>
                                 <td className="px-6 py-4">

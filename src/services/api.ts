@@ -980,6 +980,9 @@ export const admin = {
 
   // WhatsApp Connections
   getWhatsAppConnections: () => api.get<ApiResponse>('/admin/whatsapp-connections'),
+  getWhatsAppStats: () => api.get<ApiResponse>('/admin/whatsapp-stats'),
+  updateWhatsAppConnectionType: (accountId: string, connectionType: string) =>
+    api.patch<ApiResponse>(`/admin/whatsapp-connections/${accountId}/connection-type`, { connectionType }),
   disconnectWhatsApp: (accountId: string) =>
     api.post<ApiResponse>(`/admin/whatsapp-connections/${accountId}/disconnect`),
 };
