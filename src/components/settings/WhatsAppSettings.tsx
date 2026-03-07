@@ -1,338 +1,560 @@
+// src/components/settings/WhatsAppSettings.tsx - SIMPLIFIED VERSION
+
 import React, { useState, useEffect } from 'react';
 import {
-    Phone,
-    Wifi,
-    WifiOff,
-    CheckCircle,
-    AlertTriangle,
-    Settings,
-    Trash2,
-    RefreshCw,
-    Loader2,
-    Star,
-    Cloud,
     Smartphone,
-    Plus
+    CheckCircle,
+    XCircle,
+    RefreshCw,
+    AlertCircle,
+    Loader2,
+    ExternalLink,
+    Shield,
+    Zap,
+    Phone,
+    Clock,
+    MessageSquare,
+    Settings,
+    Link as LinkIcon,
+    Unlink,
 } from 'lucide-react';
-import api from '../../services/api';
+import { whatsapp, meta } from '../../services/api';
 import toast from 'react-hot-toast';
 
 interface WhatsAppAccount {
     id: string;
     phoneNumber: string;
     displayName: string;
-    verifiedName: string;
-    qualityRating: string;
-    status: string;
-    connectionType: 'CLOUD_API' | 'WHATSAPP_BUSINESS_APP';
+    phoneNumberId: string;
+    wabaId: string;
+    status: 'CONNECTED' | 'DISCONNECTED' | 'PENDING' | 'BANNED' | 'RESTRICTED';
+    qualityRating?: string;
+    verifiedName?: string;
+    messagingLimit?: string;
     isDefault: boolean;
+    hasAccessToken: boolean;
     createdAt: string;
+    updatedAt: string;
 }
 
-export default function WhatsAppSettings() {
-    const [accounts, setAccounts] = useState<WhatsAppAccount[]>([]);
+const WhatsAppSettings: React.FC = () => {
     const [loading, setLoading] = useState(true);
     const [connecting, setConnecting] = useState(false);
-    const [selectedConnectionType, setSelectedConnectionType] = useState<'CLOUD_API' | 'WHATSAPP_BUSINESS_APP'>('CLOUD_API');
+    const [accounts, setAccounts] = useState<WhatsAppAccount[]>([]);
+    const [disconnecting, setDisconnecting] = useState<string | null>(null);
 
     useEffect(() => {
         fetchAccounts();
     }, []);
 
+    // ✅ Wait and refresh accounts after Meta callback
+    useEffect(() => {
+        const urlParams = new URLSearchParams(window.location.search);
+        const status = urlParams.get('status');
+
+        if (status === 'success') {
+            const handleSuccess = async () => {
+                // Wait for backend to fully process
+                await new Promise(resolve => setTimeout(resolve, 3000));
+
+                // Fetch accounts using the updated structure
+                const response = await whatsapp.accounts();
+                const accountsList = (response.data as any)?.data?.accounts || (response.data as any)?.data || [];
+                setAccounts(accountsList);
+
+                // Remove query params
+                window.history.replaceState({}, '', window.location.pathname);
+
+                toast.success('WhatsApp connected successfully!');
+            };
+
+            handleSuccess();
+        }
+    }, []);
+
     const fetchAccounts = async () => {
         try {
-            const { data } = await api.get('/meta/accounts');
-            setAccounts(data.data || []);
-        } catch (error) {
-            console.error('Failed to fetch accounts:', error);
+            setLoading(true);
+            const response = await whatsapp.accounts();
+
+            // Handle both structure types: { data: { accounts: [] } } and { data: [] }
+            const accountsData = (response.data as any)?.data;
+            const list = accountsData?.accounts || (Array.isArray(accountsData) ? accountsData : []);
+
+            setAccounts(list);
+        } catch (error: any) {
+            console.error('Fetch accounts error:', error);
+            toast.error('Failed to load WhatsApp accounts');
         } finally {
             setLoading(false);
         }
     };
 
-    const handleConnect = async (type: 'CLOUD_API' | 'WHATSAPP_BUSINESS_APP') => {
-        setSelectedConnectionType(type);
-        setConnecting(true);
+    // ============================================
+    // CONNECT WITH META
+    // ============================================
 
+    const handleConnectWithMeta = async () => {
         try {
-            // Get OAuth URL with connection type
-            const { data } = await api.get('/meta/oauth-url', {
-                params: { connectionType: type }
-            });
+            setConnecting(true);
 
-            // Store connection type for callback
-            localStorage.setItem('wabmeta_connection_type', type);
+            const orgData = localStorage.getItem('wabmeta_org');
+            const org = orgData ? JSON.parse(orgData) : null;
+            const organizationId = org?.id || localStorage.getItem('currentOrganizationId');
 
-            // Redirect to OAuth
-            window.location.href = data.data.url;
+            if (!organizationId) {
+                toast.error('Organization not found. Please refresh and try again.');
+                setConnecting(false);
+                return;
+            }
+
+            const response = await meta.getOAuthUrl(organizationId);
+
+            if (response.data.success && response.data.data?.url) {
+                if (response.data.data.state) {
+                    localStorage.setItem('meta_oauth_state', response.data.data.state);
+                }
+
+                window.location.href = response.data.data.url;
+            } else {
+                throw new Error(response.data.message || 'Failed to get OAuth URL');
+            }
         } catch (error: any) {
-            toast.error(error.response?.data?.message || 'Failed to start connection');
+            console.error('Connect error:', error);
+            toast.error(error.message || 'Failed to start connection');
             setConnecting(false);
         }
     };
 
+    // ============================================
+    // DISCONNECT ACCOUNT
+    // ============================================
+
     const handleDisconnect = async (accountId: string) => {
-        if (!confirm('Are you sure you want to disconnect this account?')) return;
-
-        try {
-            await api.post(`/meta/accounts/${accountId}/disconnect`);
-            toast.success('Account disconnected');
-            fetchAccounts();
-        } catch (error: any) {
-            toast.error(error.response?.data?.message || 'Failed to disconnect');
-        }
-    };
-
-    const handleSetDefault = async (accountId: string) => {
-        try {
-            await api.post(`/meta/accounts/${accountId}/set-default`);
-            toast.success('Default account updated');
-            fetchAccounts();
-        } catch (error: any) {
-            toast.error(error.response?.data?.message || 'Failed to set default');
-        }
-    };
-
-    const getConnectionIcon = (type: string) => {
-        if (type === 'WHATSAPP_BUSINESS_APP') {
-            return <Smartphone className="w-5 h-5 text-green-600" />;
-        }
-        return <Cloud className="w-5 h-5 text-blue-600" />;
-    };
-
-    const getConnectionLabel = (type: string) => {
-        if (type === 'WHATSAPP_BUSINESS_APP') {
-            return 'WhatsApp Business App';
-        }
-        return 'Cloud API';
-    };
-
-    const getConnectionBadgeColor = (type: string) => {
-        if (type === 'WHATSAPP_BUSINESS_APP') {
-            return 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400';
-        }
-        return 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400';
-    };
-
-    if (loading) {
-        return (
-            <div className="flex justify-center items-center h-64">
-                <Loader2 className="w-8 h-8 animate-spin text-green-600" />
-            </div>
+        const confirmed = window.confirm(
+            'Are you sure you want to disconnect this WhatsApp account?\n\n' +
+            '• Your message history will be preserved\n' +
+            '• You can reconnect anytime\n' +
+            '• Active campaigns will be paused'
         );
-    }
+
+        if (!confirmed) return;
+
+        try {
+            setDisconnecting(accountId);
+
+            const response = await whatsapp.disconnect(accountId);
+
+            if (response.data.success) {
+                toast.success('WhatsApp account disconnected');
+                fetchAccounts();
+            } else {
+                throw new Error(response.data.message);
+            }
+        } catch (error: any) {
+            console.error('Disconnect error:', error);
+            toast.error(error.message || 'Failed to disconnect');
+        } finally {
+            setDisconnecting(null);
+        }
+    };
+
+    // ============================================
+    // HELPERS
+    // ============================================
+
+    const getStatusColor = (status: string) => {
+        switch (status) {
+            case 'CONNECTED':
+                return 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400';
+            case 'DISCONNECTED':
+                return 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400';
+            case 'PENDING':
+                return 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400';
+            case 'BANNED':
+            case 'RESTRICTED':
+                return 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400';
+            default:
+                return 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-400';
+        }
+    };
+
+    const getQualityColor = (quality?: string) => {
+        switch (quality?.toUpperCase()) {
+            case 'GREEN':
+                return 'text-green-600';
+            case 'YELLOW':
+                return 'text-yellow-600';
+            case 'RED':
+                return 'text-red-600';
+            default:
+                return 'text-gray-500';
+        }
+    };
+
+    // ✅ FIXED: Token expiry check
+    const checkTokenExpiry = (account: any) => {
+        // If no expiry date, assume valid
+        if (!account.tokenExpiresAt) {
+            return {
+                isExpired: false,
+                daysRemaining: null,
+            };
+        }
+
+        const expiryDate = new Date(account.tokenExpiresAt);
+        const now = new Date();
+        const daysRemaining = Math.floor((expiryDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+
+        return {
+            isExpired: daysRemaining < 0,
+            daysRemaining: daysRemaining > 0 ? daysRemaining : 0,
+            expiryDate: expiryDate,
+        };
+    };
+
+    // ============================================
+    // RENDER
+    // ============================================
 
     const connectedAccounts = accounts.filter(a => a.status === 'CONNECTED');
-    const cloudApiAccount = connectedAccounts.find(a => a.connectionType === 'CLOUD_API');
-    const businessAppAccount = connectedAccounts.find(a => a.connectionType === 'WHATSAPP_BUSINESS_APP');
+    const hasConnectedAccount = connectedAccounts.length > 0;
 
     return (
         <div className="space-y-6">
-            <div>
-                <h2 className="text-xl font-bold text-gray-900 dark:text-white">WhatsApp Connections</h2>
-                <p className="text-gray-500 mt-1">Connect your WhatsApp accounts to send messages</p>
-            </div>
-
-            {/* ✅ Connection Options */}
-            <div className="grid md:grid-cols-2 gap-6">
-
-                {/* Cloud API Connection */}
-                <div className={`p-6 rounded-2xl border-2 transition-all ${cloudApiAccount
-                        ? 'border-blue-300 bg-blue-50 dark:border-blue-700 dark:bg-blue-900/20'
-                        : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800'
-                    }`}>
-                    <div className="flex items-start justify-between mb-4">
-                        <div className="flex items-center gap-3">
-                            <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900/50 rounded-xl flex items-center justify-center">
-                                <Cloud className="w-6 h-6 text-blue-600" />
-                            </div>
-                            <div>
-                                <h3 className="font-bold text-gray-900 dark:text-white">Cloud API</h3>
-                                <p className="text-sm text-gray-500">Meta's official Cloud API</p>
-                            </div>
-                        </div>
-                        {cloudApiAccount && (
-                            <span className="px-2.5 py-1 bg-blue-200 text-blue-800 dark:bg-blue-900/50 dark:text-blue-300 text-xs font-semibold rounded-full flex items-center gap-1">
-                                <CheckCircle className="w-3 h-3" />
-                                Connected
-                            </span>
-                        )}
-                    </div>
-
-                    {cloudApiAccount ? (
-                        <div className="space-y-3">
-                            <div className="flex items-center gap-2 text-gray-700 dark:text-gray-300">
-                                <Phone className="w-4 h-4 text-blue-600" />
-                                <span className="font-mono font-semibold">{cloudApiAccount.phoneNumber}</span>
-                                {cloudApiAccount.isDefault && (
-                                    <Star className="w-4 h-4 text-yellow-500 fill-yellow-500" />
-                                )}
-                            </div>
-                            <p className="text-sm text-gray-500">{cloudApiAccount.displayName || cloudApiAccount.verifiedName}</p>
-
-                            <div className="flex items-center gap-2 mt-4">
-                                <button
-                                    onClick={() => handleDisconnect(cloudApiAccount.id)}
-                                    className="flex items-center gap-2 px-3 py-2 text-red-600 bg-red-50 dark:bg-red-900/20 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/40 text-sm"
-                                >
-                                    <Trash2 className="w-4 h-4" />
-                                    Disconnect
-                                </button>
-                                {!cloudApiAccount.isDefault && (
-                                    <button
-                                        onClick={() => handleSetDefault(cloudApiAccount.id)}
-                                        className="flex items-center gap-2 px-3 py-2 text-blue-600 bg-blue-50 dark:bg-blue-900/20 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/40 text-sm"
-                                    >
-                                        <Star className="w-4 h-4" />
-                                        Set Default
-                                    </button>
-                                )}
-                            </div>
-                        </div>
-                    ) : (
-                        <div>
-                            <p className="text-sm text-gray-500 mb-4">
-                                Connect using Meta's Cloud API for high-volume messaging with advanced features.
-                            </p>
-                            <button
-                                onClick={() => handleConnect('CLOUD_API')}
-                                disabled={connecting}
-                                className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 disabled:opacity-50 font-semibold"
-                            >
-                                {connecting && selectedConnectionType === 'CLOUD_API' ? (
-                                    <Loader2 className="w-5 h-5 animate-spin" />
-                                ) : (
-                                    <Plus className="w-5 h-5" />
-                                )}
-                                Connect Cloud API
-                            </button>
-                        </div>
-                    )}
+            {/* Header */}
+            <div className="flex items-center justify-between">
+                <div>
+                    <h2 className="text-xl font-semibold text-gray-900 dark:text-white flex items-center">
+                        <Smartphone className="w-6 h-6 mr-2 text-green-600" />
+                        WhatsApp Connection
+                    </h2>
+                    <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                        Connect and manage your WhatsApp Business accounts
+                    </p>
                 </div>
 
-                {/* WhatsApp Business App Connection */}
-                <div className={`p-6 rounded-2xl border-2 transition-all ${businessAppAccount
-                        ? 'border-green-300 bg-green-50 dark:border-green-700 dark:bg-green-900/20'
-                        : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800'
-                    }`}>
-                    <div className="flex items-start justify-between mb-4">
-                        <div className="flex items-center gap-3">
-                            <div className="w-12 h-12 bg-green-100 dark:bg-green-900/50 rounded-xl flex items-center justify-center">
-                                <Smartphone className="w-6 h-6 text-green-600" />
+                <button
+                    onClick={() => fetchAccounts()}
+                    disabled={loading}
+                    className="p-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                    title="Refresh"
+                >
+                    <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
+                </button>
+            </div>
+
+            {/* Connection Status Card */}
+            <div className={`rounded-xl border-2 p-6 ${hasConnectedAccount
+                ? 'bg-green-50 dark:bg-green-900/10 border-green-200 dark:border-green-800'
+                : 'bg-gray-50 dark:bg-gray-800/50 border-gray-200 dark:border-gray-700'
+                }`}>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="flex items-center">
+                        {hasConnectedAccount ? (
+                            <div className="w-12 h-12 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mr-4">
+                                <CheckCircle className="w-7 h-7 text-green-600" />
                             </div>
-                            <div>
-                                <h3 className="font-bold text-gray-900 dark:text-white">WhatsApp Business App</h3>
-                                <p className="text-sm text-gray-500">Direct app connection</p>
+                        ) : (
+                            <div className="w-12 h-12 bg-gray-200 dark:bg-gray-700 rounded-full flex items-center justify-center mr-4">
+                                <XCircle className="w-7 h-7 text-gray-400" />
                             </div>
-                        </div>
-                        {businessAppAccount && (
-                            <span className="px-2.5 py-1 bg-green-200 text-green-800 dark:bg-green-900/50 dark:text-green-300 text-xs font-semibold rounded-full flex items-center gap-1">
-                                <CheckCircle className="w-3 h-3" />
-                                Connected
-                            </span>
                         )}
+                        <div>
+                            <h3 className={`text-lg font-semibold ${hasConnectedAccount
+                                ? 'text-green-800 dark:text-green-200'
+                                : 'text-gray-700 dark:text-gray-300'
+                                }`}>
+                                {hasConnectedAccount
+                                    ? `${connectedAccounts.length} Account${connectedAccounts.length > 1 ? 's' : ''} Connected`
+                                    : 'No WhatsApp Account Connected'
+                                }
+                            </h3>
+                            <p className={`text-sm ${hasConnectedAccount
+                                ? 'text-green-600 dark:text-green-400'
+                                : 'text-gray-500 dark:text-gray-400'
+                                }`}>
+                                {hasConnectedAccount
+                                    ? 'Your WhatsApp Business is ready to use'
+                                    : 'Connect your WhatsApp Business Account to get started'
+                                }
+                            </p>
+                        </div>
                     </div>
 
-                    {businessAppAccount ? (
-                        <div className="space-y-3">
-                            <div className="flex items-center gap-2 text-gray-700 dark:text-gray-300">
-                                <Phone className="w-4 h-4 text-green-600" />
-                                <span className="font-mono font-semibold">{businessAppAccount.phoneNumber}</span>
-                                {businessAppAccount.isDefault && (
-                                    <Star className="w-4 h-4 text-yellow-500 fill-yellow-500" />
-                                )}
-                            </div>
-                            <p className="text-sm text-gray-500">{businessAppAccount.displayName || businessAppAccount.verifiedName}</p>
-
-                            <div className="flex items-center gap-2 mt-4">
-                                <button
-                                    onClick={() => handleDisconnect(businessAppAccount.id)}
-                                    className="flex items-center gap-2 px-3 py-2 text-red-600 bg-red-50 dark:bg-red-900/20 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/40 text-sm"
-                                >
-                                    <Trash2 className="w-4 h-4" />
-                                    Disconnect
-                                </button>
-                                {!businessAppAccount.isDefault && (
-                                    <button
-                                        onClick={() => handleSetDefault(businessAppAccount.id)}
-                                        className="flex items-center gap-2 px-3 py-2 text-green-600 bg-green-50 dark:bg-green-900/20 rounded-lg hover:bg-green-100 dark:hover:bg-green-900/40 text-sm"
-                                    >
-                                        <Star className="w-4 h-4" />
-                                        Set Default
-                                    </button>
-                                )}
-                            </div>
-                        </div>
-                    ) : (
-                        <div>
-                            <p className="text-sm text-gray-500 mb-4">
-                                Connect your existing WhatsApp Business App for seamless integration.
-                            </p>
-                            <button
-                                onClick={() => handleConnect('WHATSAPP_BUSINESS_APP')}
-                                disabled={connecting}
-                                className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-green-600 text-white rounded-xl hover:bg-green-700 disabled:opacity-50 font-semibold"
-                            >
-                                {connecting && selectedConnectionType === 'WHATSAPP_BUSINESS_APP' ? (
-                                    <Loader2 className="w-5 h-5 animate-spin" />
-                                ) : (
-                                    <Plus className="w-5 h-5" />
-                                )}
-                                Connect Business App
-                            </button>
-                        </div>
-                    )}
+                    <button
+                        onClick={handleConnectWithMeta}
+                        disabled={connecting}
+                        className={`px-6 py-3 rounded-xl font-semibold flex items-center justify-center transition-all whitespace-nowrap ${hasConnectedAccount
+                            ? 'bg-white dark:bg-gray-800 text-green-700 dark:text-green-400 border border-green-300 dark:border-green-700 hover:bg-green-50 dark:hover:bg-green-900/20'
+                            : 'bg-green-600 text-white hover:bg-green-700 shadow-lg shadow-green-600/25'
+                            }`}
+                    >
+                        {connecting ? (
+                            <>
+                                <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                                Connecting...
+                            </>
+                        ) : hasConnectedAccount ? (
+                            <>
+                                <LinkIcon className="w-5 h-5 mr-2" />
+                                Add Another Account
+                            </>
+                        ) : (
+                            <>
+                                <Zap className="w-5 h-5 mr-2" />
+                                Connect with Meta
+                            </>
+                        )}
+                    </button>
                 </div>
             </div>
 
-            {/* All Connected Accounts Summary */}
-            {connectedAccounts.length > 0 && (
-                <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-6">
-                    <h3 className="font-bold text-gray-900 dark:text-white mb-4">All Connected Accounts</h3>
+            {/* Connected Accounts List */}
+            {loading ? (
+                <div className="flex items-center justify-center py-12">
+                    <Loader2 className="w-8 h-8 animate-spin text-green-600" />
+                </div>
+            ) : accounts.length > 0 ? (
+                <div className="space-y-4">
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                        Your Accounts
+                    </h3>
 
-                    <div className="space-y-3">
-                        {connectedAccounts.map((account) => (
-                            <div
-                                key={account.id}
-                                className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-900/50 rounded-xl"
-                            >
-                                <div className="flex items-center gap-4">
-                                    {getConnectionIcon(account.connectionType)}
+                    {accounts.map((account) => (
+                        <div
+                            key={account.id}
+                            className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5"
+                        >
+                            <div className="flex items-start justify-between">
+                                {/* Account Info */}
+                                <div className="flex items-start">
+                                    <div className={`w-12 h-12 rounded-full flex items-center justify-center mr-4 ${account.status === 'CONNECTED'
+                                        ? 'bg-green-100 dark:bg-green-900/30'
+                                        : 'bg-gray-100 dark:bg-gray-700'
+                                        }`}>
+                                        <Phone className={`w-6 h-6 ${account.status === 'CONNECTED' ? 'text-green-600' : 'text-gray-400'
+                                            }`} />
+                                    </div>
+
                                     <div>
-                                        <div className="flex items-center gap-2">
-                                            <span className="font-semibold text-gray-900 dark:text-white">
-                                                {account.phoneNumber}
+                                        <div className="flex flex-wrap items-center gap-2">
+                                            <h4 className="font-semibold text-gray-900 dark:text-white">
+                                                {account.displayName || account.verifiedName || 'WhatsApp Business'}
+                                            </h4>
+                                            <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${getStatusColor(account.status)}`}>
+                                                {account.status}
                                             </span>
-                                            {account.isDefault && (
-                                                <span className="px-2 py-0.5 bg-yellow-100 text-yellow-700 text-xs rounded-full">
-                                                    Default
+                                        </div>
+
+                                        <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                                            +{account.phoneNumber}
+                                        </p>
+
+                                        {/* Additional Info */}
+                                        <div className="flex flex-wrap items-center gap-4 mt-2 text-xs text-gray-500 dark:text-gray-400">
+                                            {account.qualityRating && (
+                                                <span className="flex items-center">
+                                                    <Shield className={`w-3 h-3 mr-1 ${getQualityColor(account.qualityRating)}`} />
+                                                    Quality: {account.qualityRating}
                                                 </span>
                                             )}
+                                            {account.messagingLimit && (
+                                                <span className="flex items-center">
+                                                    <MessageSquare className="w-3 h-3 mr-1" />
+                                                    Tier: {account.messagingLimit}
+                                                </span>
+                                            )}
+
+                                            {/* ✅ FIXED: Token status display */}
+                                            {(() => {
+                                                const tokenStatus = checkTokenExpiry(account);
+                                                if (tokenStatus.isExpired) {
+                                                    return (
+                                                        <span className="flex items-center text-red-600">
+                                                            <AlertCircle className="w-3 h-3 mr-1" />
+                                                            Token expired
+                                                        </span>
+                                                    );
+                                                }
+                                                if (tokenStatus.daysRemaining !== null && tokenStatus.daysRemaining < 7) {
+                                                    return (
+                                                        <span className="flex items-center text-yellow-600">
+                                                            <Clock className="w-3 h-3 mr-1" />
+                                                            Expires in {tokenStatus.daysRemaining}d
+                                                        </span>
+                                                    );
+                                                }
+                                                return (
+                                                    <span className="flex items-center text-green-600">
+                                                        <CheckCircle className="w-3 h-3 mr-1" />
+                                                        Connected
+                                                    </span>
+                                                );
+                                            })()}
                                         </div>
-                                        <p className="text-sm text-gray-500">
-                                            {account.displayName || account.verifiedName}
-                                        </p>
                                     </div>
                                 </div>
 
-                                <div className="flex items-center gap-3">
-                                    <span className={`px-3 py-1 rounded-full text-xs font-semibold ${getConnectionBadgeColor(account.connectionType)}`}>
-                                        {getConnectionLabel(account.connectionType)}
-                                    </span>
-                                    <span className={`px-2 py-1 rounded-full text-xs font-semibold ${account.qualityRating === 'GREEN'
-                                            ? 'bg-green-100 text-green-700'
-                                            : account.qualityRating === 'YELLOW'
-                                                ? 'bg-yellow-100 text-yellow-700'
-                                                : 'bg-red-100 text-red-700'
-                                        }`}>
-                                        {account.qualityRating}
-                                    </span>
-                                </div>
+                                {/* Disconnect Button */}
+                                <button
+                                    onClick={() => handleDisconnect(account.id)}
+                                    disabled={disconnecting === account.id}
+                                    className="p-2 text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                                    title="Disconnect"
+                                >
+                                    {disconnecting === account.id ? (
+                                        <Loader2 className="w-5 h-5 animate-spin" />
+                                    ) : (
+                                        <Unlink className="w-5 h-5" />
+                                    )}
+                                </button>
                             </div>
-                        ))}
+
+                            {/* Warning for disconnected */}
+                            {account.status === 'DISCONNECTED' && (
+                                <div className="mt-4 p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg flex items-start">
+                                    <AlertCircle className="w-5 h-5 text-yellow-600 mr-2 flex-shrink-0 mt-0.5" />
+                                    <div>
+                                        <p className="text-sm text-yellow-800 dark:text-yellow-200 font-medium">
+                                            Account Disconnected
+                                        </p>
+                                        <p className="text-xs text-yellow-700 dark:text-yellow-300 mt-0.5">
+                                            Reconnect to resume messaging and campaigns.
+                                        </p>
+                                        <button
+                                            onClick={handleConnectWithMeta}
+                                            className="mt-2 text-sm text-yellow-700 dark:text-yellow-300 font-medium hover:underline"
+                                        >
+                                            Reconnect Now →
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Token expired warning */}
+                            {checkTokenExpiry(account).isExpired && (
+                                <div className="mt-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg flex items-start">
+                                    <AlertCircle className="w-5 h-5 text-red-600 mr-2 flex-shrink-0 mt-0.5" />
+                                    <div>
+                                        <p className="text-sm text-red-800 dark:text-red-200 font-medium">
+                                            Token Expired
+                                        </p>
+                                        <p className="text-xs text-red-700 dark:text-red-300 mt-0.5">
+                                            Your access token has expired. Please reconnect to continue.
+                                        </p>
+                                        <button
+                                            onClick={handleConnectWithMeta}
+                                            className="mt-2 text-sm text-red-700 dark:text-red-300 font-medium hover:underline"
+                                        >
+                                            Reconnect Now →
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    ))}
+                </div>
+            ) : (
+                /* Empty State */
+                <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-12 text-center">
+                    <div className="w-16 h-16 bg-gray-100 dark:bg-gray-700 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <Smartphone className="w-8 h-8 text-gray-400" />
+                    </div>
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+                        No WhatsApp Accounts Connected
+                    </h3>
+                    <p className="text-gray-500 dark:text-gray-400 mb-6 max-w-md mx-auto">
+                        Connect your WhatsApp Business Account to start sending messages,
+                        managing campaigns, and engaging with your customers.
+                    </p>
+
+                    <button
+                        onClick={handleConnectWithMeta}
+                        disabled={connecting}
+                        className="px-8 py-3 bg-green-600 text-white rounded-xl font-semibold hover:bg-green-700 transition-colors inline-flex items-center shadow-lg shadow-green-600/25"
+                    >
+                        {connecting ? (
+                            <>
+                                <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                                Connecting...
+                            </>
+                        ) : (
+                            <>
+                                <Zap className="w-5 h-5 mr-2" />
+                                Connect with Meta
+                            </>
+                        )}
+                    </button>
+
+                    {/* Info Box */}
+                    <div className="mt-8 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-xl max-w-md mx-auto">
+                        <h4 className="text-sm font-medium text-blue-800 dark:text-blue-200 mb-2">
+                            What you'll need:
+                        </h4>
+                        <ul className="text-xs text-blue-700 dark:text-blue-300 space-y-1 text-left">
+                            <li className="flex items-center">
+                                <CheckCircle className="w-3 h-3 mr-2" />
+                                Facebook Business Account
+                            </li>
+                            <li className="flex items-center">
+                                <CheckCircle className="w-3 h-3 mr-2" />
+                                WhatsApp Business API access
+                            </li>
+                            <li className="flex items-center">
+                                <CheckCircle className="w-3 h-3 mr-2" />
+                                Phone number for WhatsApp Business
+                            </li>
+                        </ul>
                     </div>
                 </div>
             )}
+
+            {/* Help Section */}
+            <div className="bg-gray-50 dark:bg-gray-800/50 rounded-xl p-6 border border-gray-200 dark:border-gray-700">
+                <h4 className="font-medium text-gray-900 dark:text-white mb-3">
+                    Need Help?
+                </h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <a
+                        href="https://business.facebook.com/latest/settings/whatsapp_account"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center p-3 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 hover:border-blue-300 dark:hover:border-blue-600 transition-colors"
+                    >
+                        <Settings className="w-5 h-5 text-blue-600 mr-3" />
+                        <div>
+                            <p className="text-sm font-medium text-gray-900 dark:text-white">
+                                Meta Business Settings
+                            </p>
+                            <p className="text-xs text-gray-500 dark:text-gray-400">
+                                Manage your WhatsApp Business Account
+                            </p>
+                        </div>
+                        <ExternalLink className="w-4 h-4 text-gray-400 ml-auto" />
+                    </a>
+
+                    <a
+                        href="https://developers.facebook.com/docs/whatsapp/cloud-api"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center p-3 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 hover:border-blue-300 dark:hover:border-blue-600 transition-colors"
+                    >
+                        <ExternalLink className="w-5 h-5 text-blue-600 mr-3" />
+                        <div>
+                            <p className="text-sm font-medium text-gray-900 dark:text-white">
+                                WhatsApp API Docs
+                            </p>
+                            <p className="text-xs text-gray-500 dark:text-gray-400">
+                                Learn about WhatsApp Cloud API
+                            </p>
+                        </div>
+                        <ExternalLink className="w-4 h-4 text-gray-400 ml-auto" />
+                    </a>
+                </div>
+            </div>
         </div>
     );
-}
+};
+
+export default WhatsAppSettings;

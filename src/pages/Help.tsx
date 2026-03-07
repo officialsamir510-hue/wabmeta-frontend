@@ -61,24 +61,24 @@ const Help: React.FC = () => {
       id: '2',
       title: 'How to Connect Meta Business Account',
       description: 'Step-by-step guide to connect your Meta Business account',
-      youtubeId: 'YOUR_YOUTUBE_VIDEO_ID_2',
-      duration: '8:45',
+      youtubeId: 'OJ620JsrfXo',
+      duration: '1:36',
       category: 'getting-started',
     },
     {
       id: '3',
       title: 'Creating Your First Campaign',
       description: 'Learn how to create and send bulk WhatsApp campaigns',
-      youtubeId: 'YOUR_YOUTUBE_VIDEO_ID_3',
-      duration: '12:20',
+      youtubeId: 'jyHmlO8cUcw',
+      duration: '1:09',
       category: 'features',
     },
     {
       id: '4',
       title: 'WhatsApp Template Management',
       description: 'How to create, edit and get approval for message templates',
-      youtubeId: 'YOUR_YOUTUBE_VIDEO_ID_4',
-      duration: '10:15',
+      youtubeId: 'urKw3mscCSc',
+      duration: '1:01',
       category: 'features',
     },
     {
@@ -386,8 +386,8 @@ const Help: React.FC = () => {
               key={category.id}
               onClick={() => setActiveCategory(category.id)}
               className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all ${activeCategory === category.id
-                  ? 'bg-green-500 text-white shadow-lg'
-                  : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700 hover:border-green-500'
+                ? 'bg-green-500 text-white shadow-lg'
+                : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700 hover:border-green-500'
                 }`}
             >
               <category.icon className="w-4 h-4" />
