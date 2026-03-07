@@ -40,10 +40,20 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             organizationId = localStorage.getItem('currentOrganizationId');
         }
 
-        // ✅ FIXED: Hardcode the correct URL - no fancy parsing
-        const SOCKET_URL = import.meta.env.PROD
+        // Resolve Socket URL from environment or predefined defaults
+        let socketBase = import.meta.env.PROD
             ? 'https://wabmeta-api.onrender.com'
             : 'http://localhost:10000';
+            
+        if (import.meta.env.VITE_API_URL) {
+            // Strip any trailing /api or /v1
+            socketBase = import.meta.env.VITE_API_URL.replace(/\/api\/v1\/?$/, '')
+                                                     .replace(/\/api\/?$/, '')
+                                                     .replace(/\/v1\/?$/, '')
+                                                     .replace(/\/$/, '');
+        }
+
+        const SOCKET_URL = socketBase;
 
         console.log('🔌 Connecting to socket:', SOCKET_URL, 'Org:', organizationId);
 

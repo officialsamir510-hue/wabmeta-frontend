@@ -34,8 +34,7 @@ const WindowStatus: React.FC<WindowStatusProps> = ({
     // Force closed if no time remaining, even if isWindowOpen is true
     const isOpen = isWindowOpen && !!timeRemaining;
 
-    // Debugging (remove later if needed)
-    console.log('Window Status:', { isOpen, timeRemaining, expires: windowExpiresAt });
+    // Window closed checks are based on timestamp boundaries.
 
     if (isOpen) {
         return (
