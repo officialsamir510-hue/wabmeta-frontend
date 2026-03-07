@@ -1,7 +1,7 @@
 // src/hooks/useChatbot.ts
 
 import { useState, useEffect, useCallback } from 'react';
-import { chatbot as chatbotApi } from '../services/api';
+import { chatbots as chatbotApi } from '../services/api';
 import type { Chatbot, FlowData } from '../types/chatbot';
 
 interface UseChatbotListReturn {
@@ -13,7 +13,7 @@ interface UseChatbotListReturn {
   deleteChatbot: (id: string) => Promise<void>;
   activateChatbot: (id: string) => Promise<void>;
   deactivateChatbot: (id: string) => Promise<void>;
-  duplicateChatbot: (id: string) => Promise<Chatbot>;
+  duplicateChatbot: (id: string, name: string) => Promise<Chatbot>;
 }
 
 export const useChatbotList = (): UseChatbotListReturn => {
@@ -63,8 +63,8 @@ export const useChatbotList = (): UseChatbotListReturn => {
     setChatbots(prev => prev.map(c => c.id === id ? updatedChatbot : c));
   };
 
-  const duplicateChatbot = async (id: string): Promise<Chatbot> => {
-    const response = await chatbotApi.duplicate(id);
+  const duplicateChatbot = async (id: string, name: string): Promise<Chatbot> => {
+    const response = await chatbotApi.duplicate(id, name);
     const newChatbot = response.data.data;
     setChatbots(prev => [newChatbot, ...prev]);
     return newChatbot;

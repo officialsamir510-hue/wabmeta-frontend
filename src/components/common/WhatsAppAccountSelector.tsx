@@ -5,12 +5,11 @@ import {
   Phone,
   ChevronDown,
   Check,
-  AlertCircle,
   RefreshCw,
   Plus,
   Settings,
 } from 'lucide-react';
-import { WhatsAppAccount } from '../../types/meta';
+import type { WhatsAppAccount } from '../../types/meta';
 
 interface WhatsAppAccountSelectorProps {
   accounts: WhatsAppAccount[];
@@ -29,7 +28,6 @@ export const WhatsAppAccountSelector: React.FC<WhatsAppAccountSelectorProps> = (
   onRefresh,
   onAddNew,
   onSettings,
-  isLoading,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [refreshingId, setRefreshingId] = useState<string | null>(null);
@@ -49,10 +47,8 @@ export const WhatsAppAccountSelector: React.FC<WhatsAppAccountSelectorProps> = (
   };
 
   const getStatusColor = (account: WhatsAppAccount) => {
-    if (account.connectionStatus === 'CONNECTED' && account.status === 'ACTIVE') {
+    if (account.status === 'ACTIVE') {
       return 'bg-green-500';
-    } else if (account.connectionStatus === 'RECONNECTING') {
-      return 'bg-yellow-500';
     } else {
       return 'bg-red-500';
     }
@@ -105,10 +101,10 @@ export const WhatsAppAccountSelector: React.FC<WhatsAppAccountSelectorProps> = (
           {selectedAccount ? (
             <>
               <p className="text-sm font-medium text-gray-900 truncate">
-                {selectedAccount.displayPhoneNumber || selectedAccount.phoneNumber}
+                {selectedAccount.phoneNumber}
               </p>
               <p className="text-xs text-gray-500 truncate">
-                {selectedAccount.verifiedName || 'WhatsApp Business'}
+                {selectedAccount.displayName || 'WhatsApp Business'}
               </p>
             </>
           ) : (
@@ -158,7 +154,7 @@ export const WhatsAppAccountSelector: React.FC<WhatsAppAccountSelectorProps> = (
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       <p className="text-sm font-medium text-gray-900 truncate">
-                        {account.displayPhoneNumber || account.phoneNumber}
+                        {account.phoneNumber}
                       </p>
                       {account.isDefault && (
                         <span className="px-1.5 py-0.5 text-[10px] font-medium bg-green-100 text-green-700 rounded">
@@ -173,7 +169,7 @@ export const WhatsAppAccountSelector: React.FC<WhatsAppAccountSelectorProps> = (
                         )}`}
                       />
                       <p className="text-xs text-gray-500 truncate">
-                        {account.verifiedName || 'WhatsApp Business'}
+                        {account.displayName || 'WhatsApp Business'}
                       </p>
                     </div>
                   </div>

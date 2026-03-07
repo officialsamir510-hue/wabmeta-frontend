@@ -1,28 +1,29 @@
 import React, { useState } from 'react';
 import { X, Zap, ArrowRight, Save } from 'lucide-react';
-import type { AutomationRule, TriggerType, ActionType } from '../../types/automation';
+import type { Automation, AutomationTrigger, AutomationAction } from '../../types/automation';
 
 interface CreateRuleModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (rule: Omit<AutomationRule, 'id' | 'executionCount'>) => void;
+  onSave: (rule: Partial<Automation>) => void;
 }
 
 const CreateRuleModal: React.FC<CreateRuleModalProps> = ({ isOpen, onClose, onSave }) => {
   const [name, setName] = useState('');
-  const [triggerType, setTriggerType] = useState<TriggerType>('keyword_match');
+  const [triggerType, setTriggerType] = useState<AutomationTrigger>('KEYWORD');
   const [triggerValue, setTriggerValue] = useState('');
-  const [actionType, setActionType] = useState<ActionType>('send_message');
+  const [actionType, setActionType] = useState<AutomationAction['type']>('send_message');
   const [actionValue, setActionValue] = useState('');
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     onSave({
       name,
-      status: 'active',
-      trigger: { type: triggerType, value: triggerValue },
-      action: { type: actionType, value: actionValue }
-    });
+      trigger: triggerType,
+      triggerConfig: { value: triggerValue },
+      actions: [{ id: Date.now().toString(), type: actionType, config: { value: actionValue } }],
+      isActive: true,
+    } as any);
     onClose();
   };
 
@@ -65,15 +66,15 @@ const CreateRuleModal: React.FC<CreateRuleModalProps> = ({ isOpen, onClose, onSa
               <div className="space-y-3">
                 <select
                   value={triggerType}
-                  onChange={(e) => setTriggerType(e.target.value as TriggerType)}
+                  onChange={(e) => setTriggerType(e.target.value as AutomationTrigger)}
                   className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm"
                 >
-                  <option value="keyword_match">Incoming Message Matches</option>
-                  <option value="new_contact">New Contact Added</option>
-                  <option value="tag_added">Tag Applied</option>
+                  <option value="KEYWORD">Incoming Message Matches</option>
+                  <option value="NEW_CONTACT">New Contact Added</option>
+                  <option value="WEBHOOK">Webhook Received</option>
                 </select>
 
-                {triggerType === 'keyword_match' && (
+                {triggerType === 'KEYWORD' && (
                   <input
                     type="text"
                     placeholder="Enter keywords (comma separated)"
@@ -97,7 +98,7 @@ const CreateRuleModal: React.FC<CreateRuleModalProps> = ({ isOpen, onClose, onSa
               <div className="space-y-3">
                 <select
                   value={actionType}
-                  onChange={(e) => setActionType(e.target.value as ActionType)}
+                  onChange={(e) => setActionType(e.target.value as AutomationAction['type'])}
                   className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm"
                 >
                   <option value="send_message">Send Message</option>

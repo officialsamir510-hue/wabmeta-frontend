@@ -15,10 +15,9 @@ import {
   RefreshCw,
   LogOut,
   Smartphone,
-  Monitor,
-  Trash2
+  Monitor
 } from 'lucide-react';
-import { auth, settings } from '../services/api';
+import { auth, users } from '../services/api';
 
 interface UserProfile {
   id: string;
@@ -68,7 +67,7 @@ const Profile: React.FC = () => {
 
     try {
       // Use /users/profile endpoint
-      const response = await settings.getProfile();
+      const response = await users.getProfile();
       console.log('📥 Profile Response:', response.data);
 
       // Handle different response structures
@@ -95,13 +94,10 @@ const Profile: React.FC = () => {
         const fallbackResponse = await auth.me();
         console.log('📥 Auth/Me Response:', fallbackResponse.data);
         
-        const userData = fallbackResponse.data?.data?.user || 
-                        fallbackResponse.data?.data || 
-                        fallbackResponse.data?.user || 
-                        fallbackResponse.data;
+        const userData = fallbackResponse.data.data;
 
         if (userData && userData.id) {
-          setProfile(userData);
+          setProfile(userData as any);
           setFormData({
             firstName: userData.firstName || '',
             lastName: userData.lastName || '',
@@ -159,11 +155,11 @@ const Profile: React.FC = () => {
     setSuccess(false);
 
     try {
-      const response = await settings.updateProfile({
+      const response = await users.updateProfile({
         firstName: formData.firstName,
-        lastName: formData.lastName || null,
-        phone: formData.phone || null,
-        avatar: formData.avatar || null,
+        lastName: formData.lastName || undefined,
+        phone: formData.phone || undefined,
+        avatar: formData.avatar || undefined,
       });
       
       console.log('✅ Profile Updated:', response.data);

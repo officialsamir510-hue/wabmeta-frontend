@@ -1,0 +1,28 @@
+src/components/automation/CreateRuleModal.tsx(3,15): error TS2724: '"../../types/automation"' has no exported member named 'AutomationRule'. Did you mean 'Automation'?
+src/components/automation/CreateRuleModal.tsx(3,31): error TS2305: Module '"../../types/automation"' has no exported member 'TriggerType'.
+src/components/automation/CreateRuleModal.tsx(3,44): error TS2305: Module '"../../types/automation"' has no exported member 'ActionType'.
+src/components/billing/PaymentMethods.tsx(100,24): error TS6133: 'brand' is declared but its value is never read.
+src/components/common/NoWhatsAppConnected.tsx(95,9): error TS2322: Type '(account: any) => void' is not assignable to type '() => void'.
+  Target signature provides too few arguments. Expected 1 or more, but got 0.
+src/components/common/NoWhatsAppConnected.tsx(95,23): error TS6133: 'account' is declared but its value is never read.
+src/components/common/NoWhatsAppConnected.tsx(95,23): error TS7006: Parameter 'account' implicitly has an 'any' type.
+src/components/common/WhatsAppAccountSelector.tsx(8,3): error TS6133: 'AlertCircle' is declared but its value is never read.
+src/components/common/WhatsAppAccountSelector.tsx(13,10): error TS1484: 'WhatsAppAccount' is a type and must be imported using a type-only import when 'verbatimModuleSyntax' is enabled.
+src/components/common/WhatsAppAccountSelector.tsx(32,3): error TS6133: 'isLoading' is declared but its value is never read.
+src/components/common/WhatsAppAccountSelector.tsx(52,17): error TS2339: Property 'connectionStatus' does not exist on type 'WhatsAppAccount'.
+src/components/common/WhatsAppAccountSelector.tsx(54,24): error TS2339: Property 'connectionStatus' does not exist on type 'WhatsAppAccount'.
+src/components/common/WhatsAppAccountSelector.tsx(108,34): error TS2339: Property 'displayPhoneNumber' does not exist on type 'WhatsAppAccount'.
+src/components/common/WhatsAppAccountSelector.tsx(161,34): error TS2339: Property 'displayPhoneNumber' does not exist on type 'WhatsAppAccount'.
+src/components/contacts/SimpleBulkPasteModal.tsx(1,8): error TS6133: 'React' is declared but its value is never read.
+src/components/dashboard/ChartCard.tsx(17,10): error TS6133: 'TrendingUp' is declared but its value is never read.
+src/components/dashboard/ChartCard.tsx(17,33): error TS6133: 'Activity' is declared but its value is never read.
+src/hooks/useChatbot.ts(4,10): error TS2724: '"../services/api"' has no exported member named 'chatbot'. Did you mean 'chatbots'?
+src/pages/ContactDetails.tsx(42,31): error TS2339: Property 'contact' does not exist on type 'ApiResponse<any>'.
+src/pages/ContactDetails.tsx(47,36): error TS2339: Property 'contacts' does not exist on type 'ApiResponse<any>'.
+src/pages/Dashboard.tsx(20,8): error TS6133: 'api' is declared but its value is never read.
+src/pages/Notifications.tsx(19,3): error TS6133: 'MoreHorizontal' is declared but its value is never read.
+src/pages/Profile.tsx(19,3): error TS6133: 'Trash2' is declared but its value is never read.
+src/pages/Profile.tsx(71,39): error TS2339: Property 'getProfile' does not exist on type '{ getAll: () => Promise<AxiosResponse<ApiResponse<any>, any, {}>>; update: (data: any) => Promise<AxiosResponse<ApiResponse<any>, any, {}>>; ... 5 more ...; revokeApiKey: (id: string) => Promise<...>; }'.
+src/pages/Profile.tsx(98,55): error TS2339: Property 'user' does not exist on type 'AuthUser'.
+src/pages/Profile.tsx(100,48): error TS2339: Property 'user' does not exist on type 'ApiResponse<AuthUser>'.
+src/pages/Profile.tsx(162,39): error TS2339: Property 'updateProfile' does not exist on type '{ getAll: () => Promise<AxiosResponse<ApiResponse<any>, any, {}>>; update: (data: any) => Promise<AxiosResponse<ApiResponse<any>, any, {}>>; ... 5 more ...; revokeApiKey: (id: string) => Promise<...>; }'.

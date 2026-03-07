@@ -611,6 +611,29 @@ export const campaigns = {
     api.get<ApiResponse>(`/campaigns/${id}/analytics`),
 
   stats: () => api.get<ApiResponse>('/campaigns/stats'),
+
+  // Get failed contacts
+  getFailedContacts: (campaignId: string, page = 1, limit = 100) =>
+    api.get<ApiResponse>(`/campaigns/${campaignId}/failed`, { params: { page, limit } }),
+
+  // Export failed contacts as CSV
+  exportFailedContacts: (campaignId: string) =>
+    api.get(`/campaigns/${campaignId}/failed/export`, { responseType: 'blob' }),
+
+  // Retry failed contacts
+  retryFailed: (campaignId: string, contactIds?: string[]) =>
+    api.post<ApiResponse>(`/campaigns/${campaignId}/retry-failed`, { contactIds }),
+
+  // Get all recipients with status
+  getRecipients: (campaignId: string, params?: { page?: number; limit?: number; status?: string; search?: string }) =>
+    api.get<ApiResponse>(`/campaigns/${campaignId}/recipients`, { params }),
+
+  // Export recipients as CSV
+  exportRecipients: (campaignId: string, status?: string) =>
+    api.get(`/campaigns/${campaignId}/recipients/export`, {
+      params: { status },
+      responseType: 'blob',
+    }),
 };
 
 // ---------- ANALYTICS ----------
@@ -773,14 +796,54 @@ export const inbox = {
 };
 
 // ---------- CHATBOT ----------
-export const chatbot = {
-  getAll: (params?: any) => api.get<ApiResponse>('/chatbot', { params }),
-  create: (data: any) => api.post<ApiResponse>('/chatbot', data),
-  getById: (id: string) => api.get<ApiResponse>(`/chatbot/${id}`),
-  update: (id: string, data: any) => api.put<ApiResponse>(`/chatbot/${id}`, data),
-  delete: (id: string) => api.delete<ApiResponse>(`/chatbot/${id}`),
-  activate: (id: string) => api.post<ApiResponse>(`/chatbot/${id}/activate`),
-  deactivate: (id: string) => api.post<ApiResponse>(`/chatbot/${id}/deactivate`),
+export const chatbots = {
+  getAll: () => api.get<ApiResponse>('/chatbots'),
+  getById: (id: string) => api.get<ApiResponse>(`/chatbots/${id}`),
+  create: (data: any) => api.post<ApiResponse>('/chatbots', data),
+  update: (id: string, data: any) => api.put<ApiResponse>(`/chatbots/${id}`, data),
+  delete: (id: string) => api.delete<ApiResponse>(`/chatbots/${id}`),
+  activate: (id: string) => api.post<ApiResponse>(`/chatbots/${id}/activate`),
+  deactivate: (id: string) => api.post<ApiResponse>(`/chatbots/${id}/deactivate`),
+  duplicate: (id: string, name: string) => api.post<ApiResponse>(`/chatbots/${id}/duplicate`, { name }),
+};
+
+// ---------- CRM ----------
+export const crm = {
+  // Stats
+  getStats: () => api.get<ApiResponse>('/crm/stats'),
+
+  // Pipelines
+  getPipelines: () => api.get<ApiResponse>('/crm/pipelines'),
+  createPipeline: (data: any) => api.post<ApiResponse>('/crm/pipelines', data),
+
+  // Leads
+  getLeads: (params?: any) => api.get<ApiResponse>('/crm/leads', { params }),
+  getLeadById: (id: string) => api.get<ApiResponse>(`/crm/leads/${id}`),
+  createLead: (data: any) => api.post<ApiResponse>('/crm/leads', data),
+  updateLead: (id: string, data: any) => api.put<ApiResponse>(`/crm/leads/${id}`, data),
+  deleteLead: (id: string) => api.delete<ApiResponse>(`/crm/leads/${id}`),
+
+  // Lead Notes
+  getLeadNotes: (leadId: string) => api.get<ApiResponse>(`/crm/leads/${leadId}/notes`),
+  addLeadNote: (leadId: string, content: string) => api.post<ApiResponse>(`/crm/leads/${leadId}/notes`, { content }),
+
+  // Lead Tasks
+  addLeadTask: (leadId: string, data: any) => api.post<ApiResponse>(`/crm/leads/${leadId}/tasks`, data),
+  completeTask: (taskId: string) => api.put<ApiResponse>(`/crm/tasks/${taskId}/complete`),
+
+  // Contact Notes
+  getContactNotes: (contactId: string) => api.get<ApiResponse>(`/crm/contacts/${contactId}/notes`),
+  addContactNote: (contactId: string, content: string) => api.post<ApiResponse>(`/crm/contacts/${contactId}/notes`, { content }),
+};
+
+// ---------- AUTOMATIONS ----------
+export const automations = {
+  getAll: () => api.get<ApiResponse>('/automations'),
+  getById: (id: string) => api.get<ApiResponse>(`/automations/${id}`),
+  create: (data: any) => api.post<ApiResponse>('/automations', data),
+  update: (id: string, data: any) => api.put<ApiResponse>(`/automations/${id}`, data),
+  delete: (id: string) => api.delete<ApiResponse>(`/automations/${id}`),
+  toggle: (id: string) => api.post<ApiResponse>(`/automations/${id}/toggle`),
 };
 
 // ---------- BILLING ----------

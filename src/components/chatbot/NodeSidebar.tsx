@@ -1,14 +1,14 @@
 import React from 'react';
-import { 
-  MessageSquare, 
-  MousePointer2, 
-  GitFork, 
-  Zap,
-  Image,
-  Clock,
-  User,
-  GripVertical
-} from 'lucide-react';
+import { MessageSquare, MousePointer, GitBranch, Clock, Zap, StopCircle } from 'lucide-react';
+
+const nodeTypes = [
+  { type: 'message', label: 'Message', icon: MessageSquare, color: 'bg-blue-500' },
+  { type: 'button', label: 'Buttons', icon: MousePointer, color: 'bg-purple-500' },
+  { type: 'condition', label: 'Condition', icon: GitBranch, color: 'bg-yellow-500' },
+  { type: 'delay', label: 'Delay', icon: Clock, color: 'bg-orange-500' },
+  { type: 'action', label: 'Action', icon: Zap, color: 'bg-pink-500' },
+  { type: 'end', label: 'End', icon: StopCircle, color: 'bg-red-500' },
+];
 
 const NodeSidebar: React.FC = () => {
   const onDragStart = (event: React.DragEvent, nodeType: string) => {
@@ -16,44 +16,23 @@ const NodeSidebar: React.FC = () => {
     event.dataTransfer.effectAllowed = 'move';
   };
 
-  const nodes = [
-    { type: 'message', label: 'Send Message', icon: MessageSquare, color: 'text-primary-600', bg: 'bg-primary-50' },
-    { type: 'button', label: 'Buttons', icon: MousePointer2, color: 'text-blue-600', bg: 'bg-blue-50' },
-    { type: 'condition', label: 'Condition', icon: GitFork, color: 'text-orange-600', bg: 'bg-orange-50' },
-    { type: 'action', label: 'Action', icon: Zap, color: 'text-purple-600', bg: 'bg-purple-50' },
-    { type: 'media', label: 'Media', icon: Image, color: 'text-pink-600', bg: 'bg-pink-50' },
-    { type: 'delay', label: 'Delay', icon: Clock, color: 'text-yellow-600', bg: 'bg-yellow-50' },
-    { type: 'input', label: 'User Input', icon: User, color: 'text-green-600', bg: 'bg-green-50' },
-  ];
-
   return (
-    <div className="w-64 bg-white border-r border-gray-200 p-4 flex flex-col h-full">
-      <h3 className="font-semibold text-gray-900 mb-4">Components</h3>
-      <p className="text-xs text-gray-500 mb-4">Drag and drop nodes to the canvas</p>
-      
-      <div className="space-y-3 flex-1 overflow-y-auto">
-        {nodes.map((node) => (
+    <div className="w-56 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 p-4">
+      <h3 className="text-sm font-medium text-gray-500 mb-3">DRAG TO ADD</h3>
+      <div className="space-y-2">
+        {nodeTypes.map(({ type, label, icon: Icon, color }) => (
           <div
-            key={node.type}
-            onDragStart={(event) => onDragStart(event, node.type)}
+            key={type}
             draggable
-            className="flex items-center p-3 bg-white border border-gray-200 rounded-xl cursor-grab hover:border-primary-500 hover:shadow-sm transition-all group"
+            onDragStart={(e) => onDragStart(e, type)}
+            className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-700 rounded-lg cursor-move hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
           >
-            <GripVertical className="w-4 h-4 text-gray-400 mr-2 opacity-0 group-hover:opacity-100 transition-opacity" />
-            <div className={`w-8 h-8 ${node.bg} rounded-lg flex items-center justify-center mr-3`}>
-              <node.icon className={`w-4 h-4 ${node.color}`} />
+            <div className={`w-8 h-8 ${color} rounded-lg flex items-center justify-center`}>
+              <Icon className="w-4 h-4 text-white" />
             </div>
-            <span className="text-sm font-medium text-gray-700">{node.label}</span>
+            <span className="font-medium text-gray-700 dark:text-gray-300">{label}</span>
           </div>
         ))}
-      </div>
-
-      <div className="pt-4 border-t border-gray-200">
-        <div className="bg-blue-50 p-3 rounded-xl">
-          <p className="text-xs text-blue-800">
-            <strong>Tip:</strong> You can connect nodes by dragging from handles.
-          </p>
-        </div>
       </div>
     </div>
   );

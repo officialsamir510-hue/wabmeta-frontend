@@ -92,7 +92,7 @@ export const NoWhatsAppConnected: React.FC<NoWhatsAppConnectedProps> = ({
         isOpen={showModal}
         onClose={() => setShowModal(false)}
         organizationId={organizationId}
-        onConnected={(account) => {
+        onConnected={() => {
           setShowModal(false);
           onConnected?.();
         }}

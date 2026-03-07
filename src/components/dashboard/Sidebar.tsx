@@ -36,6 +36,7 @@ interface NavItem {
   badge?: string | number;
   badgeColor?: string;
   featureKey?: string;
+  subItems?: { name: string; href: string }[];
 }
 
 interface NavGroup {
@@ -81,10 +82,18 @@ const prefetchRouteChunk = (href: string) => {
       import("../../pages/Reports");
       break;
     case "/dashboard/chatbot":
+    case "/dashboard/chatbots":
       import("../../pages/ChatbotList");
       break;
     case "/dashboard/automation":
+    case "/dashboard/automations":
       import("../../pages/Automation");
+      break;
+    case "/dashboard/crm":
+      import("../../pages/CRM");
+      break;
+    case "/dashboard/crm/leads":
+      import("../../pages/LeadsList");
       break;
     default:
       // no-op
@@ -163,12 +172,26 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, setCollapsed }) => {
       ],
     },
     {
+      title: "CRM",
+      items: [
+        {
+          name: "CRM",
+          href: "/dashboard/crm",
+          icon: Users,
+          subItems: [
+            { name: "Dashboard", href: "/dashboard/crm" },
+            { name: "Leads", href: "/dashboard/crm/leads" },
+          ],
+        },
+      ],
+    },
+    {
       title: "Messaging",
       items: [
         { name: "Campaigns", href: "/dashboard/campaigns", icon: Send },
         { name: "Templates", href: "/dashboard/templates", icon: FileText },
-        { name: "Chatbot", href: "/dashboard/chatbot", icon: Bot, featureKey: "chatbot" },
-        { name: "Automation", href: "/dashboard/automation", icon: Zap, featureKey: "automation" },
+        { name: "Chatbots", href: "/dashboard/chatbots", icon: Bot, featureKey: "chatbot" },
+        { name: "Automations", href: "/dashboard/automations", icon: Zap, featureKey: "automation" },
       ],
     },
     {
@@ -287,6 +310,27 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, setCollapsed }) => {
                           </>
                         )}
                       </Link>
+
+                      {/* Sub-items rendering */}
+                      {!collapsed && item.subItems && active && (
+                        <div className="ml-9 mt-1 space-y-1">
+                          {item.subItems.map((sub) => {
+                            const subActive = location.pathname === sub.href;
+                            return (
+                              <Link
+                                key={sub.name}
+                                to={sub.href}
+                                className={`block px-3 py-2 text-sm rounded-lg transition-colors ${subActive
+                                  ? "text-primary-600 dark:text-primary-400 font-semibold"
+                                  : "text-gray-500 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-50 dark:hover:bg-slate-800"
+                                  }`}
+                              >
+                                {sub.name}
+                              </Link>
+                            );
+                          })}
+                        </div>
+                      )}
 
                       {/* Tooltip (Collapsed Sidebar) */}
                       {collapsed && hoveredItem === item.name && (

@@ -53,7 +53,11 @@ const CreateCampaign = lazy(() => import('./pages/CreateCampaign'));
 const CampaignDetails = lazy(() => import('./pages/CampaignDetails'));
 const ChatbotList = lazy(() => import('./pages/ChatbotList'));
 const ChatbotBuilder = lazy(() => import('./pages/ChatbotBuilder'));
-const Automation = lazy(() => import('./pages/Automation'));
+const AutomationPage = lazy(() => import('./pages/Automation'));
+const CreateAutomation = lazy(() => import('./pages/CreateAutomation'));
+const CRM = lazy(() => import('./pages/CRM'));
+const LeadsList = lazy(() => import('./pages/LeadsList'));
+const LeadDetail = lazy(() => import('./pages/LeadDetail'));
 const Reports = lazy(() => import('./pages/Reports'));
 const Help = lazy(() => import('./pages/Help'));
 
@@ -314,13 +318,25 @@ const AppRoutes: React.FC = () => {
           <Route path="/dashboard/campaigns/create" element={<CreateCampaign />} />
           <Route path="/dashboard/campaigns/:id" element={<CampaignDetails />} />
 
-          {/* Chatbot */}
-          <Route path="/dashboard/chatbot" element={<ChatbotList />} />
-          <Route path="/dashboard/chatbot/create" element={<ChatbotBuilder />} />
-          <Route path="/dashboard/chatbot/:id" element={<ChatbotBuilder />} />
+          {/* CRM */}
+          <Route path="/dashboard/crm" element={<CRM />} />
+          <Route path="/dashboard/crm/leads" element={<LeadsList />} />
+          <Route path="/dashboard/crm/leads/new" element={<LeadDetail />} />
+          <Route path="/dashboard/crm/leads/:id" element={<LeadDetail />} />
 
-          {/* Automation & Reports */}
-          <Route path="/dashboard/automation" element={<Automation />} />
+          {/* Chatbot */}
+          <Route path="/dashboard/chatbots" element={<ChatbotList />} />
+          <Route path="/dashboard/chatbot" element={<Navigate to="/dashboard/chatbots" replace />} />
+          <Route path="/dashboard/chatbots/new" element={<ChatbotBuilder />} />
+          <Route path="/dashboard/chatbots/:id" element={<ChatbotBuilder />} />
+
+          {/* Automation */}
+          <Route path="/dashboard/automations" element={<AutomationPage />} />
+          <Route path="/dashboard/automation" element={<Navigate to="/dashboard/automations" replace />} />
+          <Route path="/dashboard/automations/new" element={<CreateAutomation />} />
+          <Route path="/dashboard/automations/:id" element={<CreateAutomation />} />
+
+          {/* Reports */}
           <Route path="/dashboard/reports" element={<Reports />} />
 
           {/* Settings */}

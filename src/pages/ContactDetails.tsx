@@ -38,14 +38,13 @@ const ContactDetails: React.FC = () => {
 
         try {
           // If your backend supports GET /contacts/:id
-          const { data } = await contactApi.getById(id!);
-          foundContact = data.contact || data;
+          const res = await contactApi.getById(id!);
+          foundContact = res.data.data;
         } catch (e) {
           // Fallback: Fetch all and find
           console.warn("getById failed, fetching all contacts to find match");
-          const { data } = await contactApi.getAll();
-          const allContacts = data.contacts || data || [];
-          foundContact = allContacts.find((c: any) => c._id === id || c.id === id);
+          const res = await contactApi.getAll();
+          foundContact = (res.data.data as any[] || []).find((c: any) => c._id === id || c.id === id);
         }
 
         if (foundContact) {
