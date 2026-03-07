@@ -327,13 +327,11 @@ const AppRoutes: React.FC = () => {
           {/* Chatbot */}
           <Route path="/dashboard/chatbots" element={<ChatbotList />} />
           <Route path="/dashboard/chatbot" element={<Navigate to="/dashboard/chatbots" replace />} />
-          <Route path="/dashboard/chatbots/new" element={<ChatbotBuilder />} />
           <Route path="/dashboard/chatbots/:id" element={<ChatbotBuilder />} />
 
           {/* Automation */}
           <Route path="/dashboard/automations" element={<AutomationPage />} />
           <Route path="/dashboard/automation" element={<Navigate to="/dashboard/automations" replace />} />
-          <Route path="/dashboard/automations/new" element={<CreateAutomation />} />
           <Route path="/dashboard/automations/:id" element={<CreateAutomation />} />
 
           {/* Reports */}

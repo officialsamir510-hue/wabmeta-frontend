@@ -1,0 +1,6 @@
+src/components/billing/PaymentMethods.tsx(100,24): error TS6133: 'brand' is declared but its value is never read.
+src/components/contacts/SimpleBulkPasteModal.tsx(1,8): error TS6133: 'React' is declared but its value is never read.
+src/components/dashboard/ChartCard.tsx(17,10): error TS6133: 'TrendingUp' is declared but its value is never read.
+src/components/dashboard/ChartCard.tsx(17,33): error TS6133: 'Activity' is declared but its value is never read.
+src/pages/Dashboard.tsx(20,8): error TS6133: 'api' is declared but its value is never read.
+src/pages/Notifications.tsx(19,3): error TS6133: 'MoreHorizontal' is declared but its value is never read.

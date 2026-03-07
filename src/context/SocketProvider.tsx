@@ -32,16 +32,20 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             if (orgData) {
                 organizationId = JSON.parse(orgData)?.id || null;
             }
+            if (!organizationId) {
+                organizationId = localStorage.getItem('currentOrganizationId');
+            }
         } catch (e) {
             console.warn('Could not parse org data');
+            organizationId = localStorage.getItem('currentOrganizationId');
         }
 
         // ✅ FIXED: Hardcode the correct URL - no fancy parsing
         const SOCKET_URL = import.meta.env.PROD
             ? 'https://wabmeta-api.onrender.com'
-            : 'http://localhost:5000';
+            : 'http://localhost:10000';
 
-        console.log('🔌 Connecting to socket:', SOCKET_URL);
+        console.log('🔌 Connecting to socket:', SOCKET_URL, 'Org:', organizationId);
 
         // ✅ FIXED: Simple connection without namespace issues
         const newSocket = io(SOCKET_URL, {

@@ -141,8 +141,19 @@ const SendTemplateModal: React.FC<SendTemplateModalProps> = ({
                 return;
             }
 
-            // Prepare params array
-            const params = vars.map(v => variableValues[v]);
+            // Prepare params array according to Meta API spec
+            let formattedParams: any[] = [];
+            if (vars.length > 0) {
+                formattedParams = [
+                    {
+                        type: 'body',
+                        parameters: vars.map(v => ({
+                            type: 'text',
+                            text: variableValues[v] || ' ', // fallback to space if empty
+                        }))
+                    }
+                ];
+            }
 
             // Send template message
             const response = await whatsapp.sendTemplate({
@@ -150,7 +161,7 @@ const SendTemplateModal: React.FC<SendTemplateModalProps> = ({
                 to: contactPhone,
                 templateName: selectedTemplate.name,
                 language: selectedTemplate.language,
-                parameters: params,
+                parameters: formattedParams,
                 conversationId,
             });
 
